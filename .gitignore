@@ -1,0 +1,5 @@
+*.zip
+env
+db.sqlite3
+deploy
+fish-farming-frontend/*.zipfish-farming-frontend/frontend.zip

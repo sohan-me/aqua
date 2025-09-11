@@ -1,0 +1,141 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: #f9fafb !important; /* bg-gray-50 */
+  color: #111827 !important; /* text-gray-900 */
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Ensure input fields are always visible */
+input, textarea, select {
+  color: #111827 !important; /* text-gray-900 */
+  background-color: #ffffff !important; /* bg-white */
+}
+
+input::placeholder, textarea::placeholder {
+  color: #6b7280 !important; /* placeholder-gray-500 */
+}
+
+/* Ensure all text content is visible */
+.text-gray-900, .text-gray-800, .text-gray-700, .text-gray-600, .text-gray-500 {
+  color: inherit !important;
+}
+
+/* Override dark mode for main content areas */
+.bg-white {
+  background-color: #ffffff !important;
+  color: #111827 !important; /* text-gray-900 */
+}
+
+/* Ensure proper text contrast on white backgrounds */
+.bg-white * {
+  color: #111827 !important; /* text-gray-900 */
+}
+
+/* Specific overrides for common text elements */
+.bg-white h1, .bg-white h2, .bg-white h3, .bg-white h4, .bg-white h5, .bg-white h6 {
+  color: #111827 !important; /* text-gray-900 */
+}
+
+.bg-white p, .bg-white span, .bg-white div {
+  color: #111827 !important; /* text-gray-900 */
+}
+
+/* Ensure labels and form text are visible */
+.bg-white label {
+  color: #374151 !important; /* text-gray-700 */
+}
+
+/* Ensure secondary text is visible but lighter */
+.bg-white .text-gray-500 {
+  color: #6b7280 !important; /* text-gray-500 */
+}
+
+.bg-white .text-gray-600 {
+  color: #4b5563 !important; /* text-gray-600 */
+}
+
+/* Ensure all main content areas have proper text visibility */
+main, .main-content {
+  background-color: #f9fafb !important; /* bg-gray-50 */
+  color: #111827 !important; /* text-gray-900 */
+}
+
+/* Ensure proper contrast for all text elements */
+* {
+  color: inherit;
+}
+
+/* Ensure sidebar text remains white */
+.bg-black {
+  background-color: #000000 !important;
+}
+
+.bg-black * {
+  color: #ffffff !important; /* text-white */
+}
+
+.bg-black .text-white {
+  color: #ffffff !important;
+}
+
+.bg-black .text-gray-300 {
+  color: #d1d5db !important; /* text-gray-300 */
+}
+
+.bg-black .text-gray-400 {
+  color: #9ca3af !important; /* text-gray-400 */
+}
+
+.bg-black .text-blue-400 {
+  color: #60a5fa !important; /* text-blue-400 */
+}
+
+.bg-black .text-gray-300:hover {
+  color: #ffffff !important; /* text-white on hover */
+}
+
+/* Override any potential dark mode issues */
+@media (prefers-color-scheme: dark) {
+  body {
+    background: #f9fafb !important; /* bg-gray-50 */
+    color: #111827 !important; /* text-gray-900 */
+  }
+  
+  .bg-white {
+    background-color: #ffffff !important;
+    color: #111827 !important; /* text-gray-900 */
+  }
+  
+  .bg-white * {
+    color: #111827 !important; /* text-gray-900 */
+  }
+  
+  /* Ensure sidebar remains dark with white text in dark mode */
+  .bg-black {
+    background-color: #000000 !important;
+  }
+  
+  .bg-black * {
+    color: #ffffff !important; /* text-white */
+  }
+}
