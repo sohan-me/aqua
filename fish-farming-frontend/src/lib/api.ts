@@ -33,6 +33,7 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('authToken');
+      localStorage.removeItem('userData');
       window.location.href = '/login';
     }
     return Promise.reject(error);
@@ -68,7 +69,7 @@ export interface Stocking {
   date: string;
   pcs: number;
   line_pcs_per_kg: string;
-  initial_avg_g: string;
+  initial_avg_weight_kg: string;
   notes: string;
   created_at: string;
   pond_name: string;
@@ -117,7 +118,9 @@ export interface Feed {
   date: string;
   amount_kg: string;
   feeding_time: string;
+  packet_size_kg: string | null;
   cost_per_packet: string | null;
+  cost_per_kg: string | null;
   total_cost: string | null;
   consumption_rate_kg_per_day: string | null;
   biomass_at_feeding_kg: string | null;
@@ -259,18 +262,21 @@ export interface Alert {
 export interface FishSampling {
   id: number;
   pond: number;
+  species: number | null;
   user: number;
   date: string;
   sample_size: number;
   total_weight_kg: string;
-  average_weight_g: string;
+  average_weight_kg: string;
   fish_per_kg: string;
-  growth_rate_g_per_day: string | null;
+  growth_rate_kg_per_day: string | null;
+  biomass_difference_kg: string | null;
   condition_factor: string | null;
   notes: string;
   created_at: string;
   updated_at: string;
   pond_name: string;
+  species_name: string | null;
   user_username: string;
 }
 
@@ -280,7 +286,7 @@ export interface FeedingAdvice {
   user: number;
   date: string;
   estimated_fish_count: number;
-  average_fish_weight_g: string;
+  average_fish_weight_kg: string;
   total_biomass_kg: string;
   recommended_feed_kg: string;
   feeding_rate_percent: string;
@@ -298,6 +304,166 @@ export interface FeedingAdvice {
   pond_name: string;
   user_username: string;
   feed_type_name: string | null;
+  analysis_data?: {
+    fish_count_analysis: {
+      total_stocked: number;
+      total_mortality: number;
+      recent_mortality_30d: number;
+      total_harvested: number;
+      current_count: number;
+      survival_rate: number;
+      mortality_trend: string;
+    };
+    water_quality_analysis: {
+      temperature: number | null;
+      ph: number | null;
+      dissolved_oxygen: number | null;
+      turbidity: number | null;
+      ammonia: number | null;
+      nitrite: number | null;
+      quality_score: number;
+      quality_status: string;
+    };
+    mortality_analysis: {
+      total_recent_deaths: number;
+      mortality_events: number;
+      avg_deaths_per_event: number;
+      mortality_trend: string;
+      risk_factors: string[];
+      causes: Array<{
+        cause: string;
+        total_deaths: number;
+        event_count: number;
+      }>;
+    };
+    feeding_analysis: {
+      total_feed_30d: number;
+      avg_daily_feed: number;
+      feeding_consistency: string;
+      feed_efficiency: number;
+      cost_analysis: Record<string, any>;
+      feed_types_used: Array<{
+        feed_type__name: string;
+        total_amount: number;
+        usage_count: number;
+      }>;
+    };
+    environmental_analysis: {
+      season: string;
+      temperature_trend: string;
+      weather_conditions: string;
+      seasonal_factors: string[];
+    };
+    growth_analysis: {
+      growth_rate_kg_per_day: number;
+      growth_trend: string;
+      weight_gain_90d: number;
+      growth_consistency: string;
+      growth_quality: string;
+    };
+    feeding_recommendations: {
+      base_rate: number;
+      final_rate: number;
+      recommended_feed_kg: number;
+      feeding_frequency: number;
+      protein_requirement: number;
+      pellet_size: string;
+      feeding_stage: string;
+      pcs_per_kg: number;
+      feeding_times: string;
+      feeding_split: string;
+      adjustments: {
+        water_quality: number;
+        temperature: number;
+        mortality: number;
+        growth: number;
+        seasonal: number;
+        feeding_consistency: number;
+        total_adjustment: number;
+      };
+      total_biomass_kg: number;
+      base_daily_feed_kg: number;
+    };
+  };
+}
+
+export interface BiomassAnalysis {
+  summary: {
+    total_biomass_gain_kg: number;
+    total_biomass_loss_kg: number;
+    net_biomass_change_kg: number;
+    total_current_biomass_kg: number;
+    total_samplings: number;
+    samplings_with_biomass_data: number;
+  };
+  pond_summary: Record<string, {
+    total_gain: number;
+    total_loss: number;
+    net_change: number;
+    sampling_count: number;
+  }>;
+  species_summary: Record<string, {
+    total_gain: number;
+    total_loss: number;
+    net_change: number;
+    sampling_count: number;
+  }>;
+  biomass_changes: Array<{
+    id: number;
+    pond_name: string;
+    species_name: string;
+    date: string;
+    biomass_difference_kg: number;
+    growth_rate_kg_per_day: number | null;
+    average_weight_kg: number;
+    sample_size: number;
+  }>;
+  pond_species_biomass: Record<string, {
+    initial_biomass: number;
+    growth_biomass: number;
+    current_biomass: number;
+  }>;
+  filters_applied: {
+    pond_id: string | null;
+    species_id: string | null;
+    start_date: string | null;
+    end_date: string | null;
+  };
+}
+
+export interface FcrAnalysis {
+  summary: {
+    total_feed_kg: number;
+    total_weight_gain_kg: number;
+    overall_fcr: number;
+    fcr_status: 'Excellent' | 'Good' | 'Needs Improvement' | 'Poor';
+    total_combinations: number;
+    date_range: {
+      start_date: string;
+      end_date: string;
+    };
+  };
+  fcr_data: Array<{
+    pond_id: number;
+    pond_name: string;
+    species_id: number;
+    species_name: string;
+    start_date: string;
+    end_date: string;
+    days: number;
+    estimated_fish_count: number;
+    initial_weight_kg: number;
+    final_weight_kg: number;
+    weight_gain_per_fish_kg: number;
+    total_weight_gain_kg: number;
+    total_feed_kg: number;
+    avg_daily_feed_kg: number;
+    avg_daily_weight_gain_kg: number;
+    fcr: number;
+    fcr_status: 'Excellent' | 'Good' | 'Needs Improvement' | 'Poor';
+    sampling_count: number;
+    feeding_days: number;
+  }>;
 }
 
 export interface DailyLog {
@@ -497,11 +663,24 @@ export const apiService = {
   createFishSampling: (data: Partial<FishSampling>) => api.post<FishSampling>('/fish-sampling/', data),
   updateFishSampling: (id: number, data: Partial<FishSampling>) => api.put<FishSampling>(`/fish-sampling/${id}/`, data),
   deleteFishSampling: (id: number) => api.delete(`/fish-sampling/${id}/`),
+  getBiomassAnalysis: (params?: { pond?: number; species?: number; start_date?: string; end_date?: string }) => 
+    api.get<BiomassAnalysis>('/fish-sampling/biomass_analysis/', { params }),
+  getFcrAnalysis: (params?: { pond?: number; species?: number; start_date?: string; end_date?: string }) => {
+    console.log('API getFcrAnalysis called with params:', params);
+    return api.get<FcrAnalysis>('/fish-sampling/fcr_analysis/', { params });
+  },
 
   // Feeding Advice
   getFeedingAdvice: () => api.get<FeedingAdvice[]>('/feeding-advice/'),
   getFeedingAdviceById: (id: number) => api.get<FeedingAdvice>(`/feeding-advice/${id}/`),
   createFeedingAdvice: (data: Partial<FeedingAdvice>) => api.post<FeedingAdvice>('/feeding-advice/', data),
+  generateFeedingAdvice: (data: { pond_id: number }) => api.post<FeedingAdvice>('/feeding-advice/generate_advice/', data),
+  autoGenerateFeedingAdvice: (data: { pond: number }) => {
+    console.log('API Debug - Sending request to:', '/feeding-advice/auto_generate/');
+    console.log('API Debug - Request data:', data);
+    console.log('API Debug - Full URL:', `${API_BASE_URL}/feeding-advice/auto_generate/`);
+    return api.post<{ message: string; advice: FeedingAdvice[]; warnings?: { species_without_sampling?: string[]; failed_species?: string[] } }>('/feeding-advice/auto_generate/', data);
+  },
   updateFeedingAdvice: (id: number, data: Partial<FeedingAdvice>) => api.put<FeedingAdvice>(`/feeding-advice/${id}/`, data),
   deleteFeedingAdvice: (id: number) => api.delete(`/feeding-advice/${id}/`),
   applyFeedingAdvice: (id: number) => api.post(`/feeding-advice/${id}/apply_advice/`),

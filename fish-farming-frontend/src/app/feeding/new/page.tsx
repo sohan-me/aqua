@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useCreateFeed, usePonds, useFeedTypes } from '@/hooks/useApi';
+import { useCreateFeed, usePonds, useFeedTypes, useBiomassAnalysis } from '@/hooks/useApi';
 import { ArrowLeft, Save, X, Fish, Clock, Package } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -21,8 +21,9 @@ export default function NewFeedingPage() {
     date: new Date().toISOString().split('T')[0],
     amount_kg: '',
     feeding_time: '',
+    packet_size_kg: '25',
     cost_per_packet: '',
-    biomass_at_feeding_kg: '',
+    cost_per_kg: '',
     notes: ''
   });
 
@@ -30,6 +31,18 @@ export default function NewFeedingPage() {
   const [packetCount, setPacketCount] = useState('');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Get biomass data from the API
+  const { data: biomassData } = useBiomassAnalysis({ 
+    pond: formData.pond ? parseInt(formData.pond) : undefined 
+  });
+
+  // Calculate estimated biomass from actual fish sampling data
+  const calculateEstimatedBiomass = () => {
+    if (!biomassData?.data?.summary?.total_current_biomass_kg) return null;
+    
+    return biomassData.data.summary.total_current_biomass_kg;
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -43,9 +56,9 @@ export default function NewFeedingPage() {
     const value = e.target.value;
     setPacketCount(value);
     
-    // Calculate kg from packets (25kg per packet)
-    if (value && !isNaN(parseFloat(value))) {
-      const kg = parseFloat(value) * 25;
+    // Calculate kg from packets using dynamic packet size
+    if (value && !isNaN(parseFloat(value)) && formData.packet_size_kg) {
+      const kg = parseFloat(value) * parseFloat(formData.packet_size_kg);
       setFormData(prev => ({
         ...prev,
         amount_kg: kg.toString()
@@ -65,9 +78,9 @@ export default function NewFeedingPage() {
       amount_kg: value
     }));
     
-    // Calculate packets from kg (25kg per packet)
-    if (value && !isNaN(parseFloat(value))) {
-      const packets = parseFloat(value) / 25;
+    // Calculate packets from kg using dynamic packet size
+    if (value && !isNaN(parseFloat(value)) && formData.packet_size_kg) {
+      const packets = parseFloat(value) / parseFloat(formData.packet_size_kg);
       setPacketCount(packets.toString());
     } else {
       setPacketCount('');
@@ -85,8 +98,9 @@ export default function NewFeedingPage() {
         date: formData.date,
         amount_kg: parseFloat(formData.amount_kg),
         feeding_time: formData.feeding_time || null,
-        cost_per_packet: formData.cost_per_packet ? parseFloat(formData.cost_per_packet) : null,
-        biomass_at_feeding_kg: formData.biomass_at_feeding_kg ? parseFloat(formData.biomass_at_feeding_kg) : null,
+        packet_size_kg: formData.packet_size_kg ? parseFloat(formData.packet_size_kg) : null,
+        cost_per_packet: inputMode === 'packets' && formData.cost_per_packet ? parseFloat(formData.cost_per_packet) : null,
+        cost_per_kg: inputMode === 'kg' && formData.cost_per_kg ? parseFloat(formData.cost_per_kg) : null,
         notes: formData.notes
       };
 
@@ -211,7 +225,7 @@ export default function NewFeedingPage() {
                     onChange={(e) => setInputMode(e.target.value as 'packets' | 'kg')}
                     className="mr-2"
                   />
-                  <span className="text-sm text-gray-700">Packets (25kg per packet)</span>
+                  <span className="text-sm text-gray-700">Packets</span>
                 </label>
                 <label className="flex items-center">
                   <input
@@ -229,28 +243,42 @@ export default function NewFeedingPage() {
 
             {/* Packet Input */}
             {inputMode === 'packets' && (
-              <div>
-                <label htmlFor="packetCount" className="block text-sm font-medium text-gray-700 mb-2">
-                  Number of Packets *
-                </label>
-                <input
-                  type="number"
-                  id="packetCount"
-                  name="packetCount"
-                  required
-                  min="0.01"
-                  step="0.01"
-                  value={packetCount}
-                  onChange={handlePacketCountChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
-                  placeholder="e.g., 2"
-                />
-                {packetCount && !isNaN(parseFloat(packetCount)) && (
-                  <p className="text-sm text-gray-600 mt-1">
-                    = {parseFloat(packetCount) * 25} kg
-                  </p>
-                )}
-              </div>
+              <>
+                <div>
+                  <label htmlFor="packetCount" className="block text-sm font-medium text-gray-700 mb-2">
+                    Number of Packets *
+                  </label>
+                  <input
+                    type="number"
+                    id="packetCount"
+                    name="packetCount"
+                    required
+                    min="0.01"
+                    step="0.01"
+                    value={packetCount}
+                    onChange={handlePacketCountChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
+                    placeholder="e.g., 2"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="packet_size_kg" className="block text-sm font-medium text-gray-700 mb-2">
+                    Packet Size (kg) *
+                  </label>
+                  <input
+                    type="number"
+                    id="packet_size_kg"
+                    name="packet_size_kg"
+                    required
+                    min="0.01"
+                    step="0.01"
+                    value={formData.packet_size_kg}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
+                    placeholder="e.g., 15, 25, 50"
+                  />
+                </div>
+              </>
             )}
 
             {/* Direct kg Input */}
@@ -271,11 +299,6 @@ export default function NewFeedingPage() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
                   placeholder="e.g., 2.5"
                 />
-                {formData.amount_kg && !isNaN(parseFloat(formData.amount_kg)) && (
-                  <p className="text-sm text-gray-600 mt-1">
-                    = {parseFloat(formData.amount_kg) / 25} packets
-                  </p>
-                )}
               </div>
             )}
 
@@ -296,59 +319,72 @@ export default function NewFeedingPage() {
 
           {/* Cost and Biomass Information */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-            <div>
-              <label htmlFor="cost_per_packet" className="block text-sm font-medium text-gray-700 mb-2">
-                Cost per Packet (৳)
-              </label>
-              <input
-                type="number"
-                id="cost_per_packet"
-                name="cost_per_packet"
-                min="0"
-                step="0.01"
-                value={formData.cost_per_packet}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
-                placeholder="e.g., 1125.00"
-              />
-              <p className="text-xs text-gray-500 mt-1">Enter the cost per packet (25kg) of this feed type</p>
-            </div>
+            {inputMode === 'packets' ? (
+              <div>
+                <label htmlFor="cost_per_packet" className="block text-sm font-medium text-gray-700 mb-2">
+                  Cost per Packet (৳)
+                </label>
+                <input
+                  type="number"
+                  id="cost_per_packet"
+                  name="cost_per_packet"
+                  min="0"
+                  step="0.01"
+                  value={formData.cost_per_packet}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
+                  placeholder="e.g., 1125.00"
+                />
+                <p className="text-xs text-gray-500 mt-1">Enter the cost per packet of this feed type</p>
+              </div>
+            ) : (
+              <div>
+                <label htmlFor="cost_per_kg" className="block text-sm font-medium text-gray-700 mb-2">
+                  Cost per kg (৳)
+                </label>
+                <input
+                  type="number"
+                  id="cost_per_kg"
+                  name="cost_per_kg"
+                  min="0"
+                  step="0.01"
+                  value={formData.cost_per_kg}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
+                  placeholder="e.g., 45.00"
+                />
+                <p className="text-xs text-gray-500 mt-1">Enter the cost per kg of this feed type</p>
+              </div>
+            )}
 
-            <div>
-              <label htmlFor="biomass_at_feeding_kg" className="block text-sm font-medium text-gray-700 mb-2">
-                Estimated Fish Biomass (kg)
-              </label>
-              <input
-                type="number"
-                id="biomass_at_feeding_kg"
-                name="biomass_at_feeding_kg"
-                min="0"
-                step="0.1"
-                value={formData.biomass_at_feeding_kg}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
-                placeholder="e.g., 150.5"
-              />
-              <p className="text-xs text-gray-500 mt-1">Estimated total fish weight in pond</p>
-            </div>
           </div>
 
           {/* Cost Calculation Preview */}
-          {formData.cost_per_packet && formData.amount_kg && (
+          {((inputMode === 'packets' && formData.cost_per_packet && packetCount) || 
+            (inputMode === 'kg' && formData.cost_per_kg && formData.amount_kg)) && (
             <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
               <h3 className="text-sm font-semibold text-blue-900 mb-2">Cost Calculation Preview</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                 <div>
                   <span className="text-blue-700">Total Feed Cost:</span>
                   <span className="ml-2 font-semibold text-blue-900">
-                    ৳{((parseFloat(formData.amount_kg) / 25) * parseFloat(formData.cost_per_packet)).toFixed(2)}
+                    ৳{inputMode === 'packets' 
+                      ? (parseFloat(packetCount) * parseFloat(formData.cost_per_packet)).toFixed(2)
+                      : (parseFloat(formData.amount_kg) * parseFloat(formData.cost_per_kg)).toFixed(2)
+                    }
                   </span>
                 </div>
-                {formData.biomass_at_feeding_kg && (
+                <div>
+                  <span className="text-blue-700">Estimated Biomass:</span>
+                  <span className="ml-2 font-semibold text-blue-900">
+                    {calculateEstimatedBiomass() ? `${calculateEstimatedBiomass()!.toFixed(1)} kg` : 'N/A'}
+                  </span>
+                </div>
+                {calculateEstimatedBiomass() && formData.amount_kg && (
                   <div>
                     <span className="text-blue-700">Feeding Rate:</span>
                     <span className="ml-2 font-semibold text-blue-900">
-                      {((parseFloat(formData.amount_kg) / parseFloat(formData.biomass_at_feeding_kg)) * 100).toFixed(1)}%
+                      {((parseFloat(formData.amount_kg) / calculateEstimatedBiomass()!) * 100).toFixed(1)}%
                     </span>
                   </div>
                 )}
@@ -362,7 +398,7 @@ export default function NewFeedingPage() {
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Additional Notes</h2>
           <div>
             <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-2">
-              Notes
+              Notes (Optional)
             </label>
             <textarea
               id="notes"
@@ -390,6 +426,7 @@ export default function NewFeedingPage() {
             type="submit"
             disabled={isSubmitting}
             className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ color: 'white !important' }}
           >
             <Save className="h-4 w-4 mr-2" />
             {isSubmitting ? 'Creating...' : 'Create Feeding Record'}

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useCreateIncome, usePonds, useIncomeTypes } from '@/hooks/useApi';
+import { useCreateIncome, usePonds, useIncomeTypes, useSpecies } from '@/hooks/useApi';
 import { ArrowLeft, Save, X, DollarSign, Receipt, Users } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -11,12 +11,15 @@ export default function NewIncomePage() {
   const createIncome = useCreateIncome();
   const { data: pondsData } = usePonds();
   const { data: incomeTypesData } = useIncomeTypes();
+  const { data: speciesData } = useSpecies();
   
   const ponds = pondsData?.data || [];
   const incomeTypes = incomeTypesData?.data || [];
+  const species = speciesData?.data || [];
 
   const [formData, setFormData] = useState({
     pond: '',
+    species: '',
     income_type: '',
     date: new Date().toISOString().split('T')[0],
     amount: '',
@@ -43,6 +46,7 @@ export default function NewIncomePage() {
     try {
       const submitData = {
         pond: formData.pond ? parseInt(formData.pond) : null,
+        species: formData.species ? parseInt(formData.species) : null,
         income_type: parseInt(formData.income_type),
         date: formData.date,
         amount: parseFloat(formData.amount),
@@ -127,6 +131,26 @@ export default function NewIncomePage() {
                 {ponds.map((pond) => (
                   <option key={pond.id} value={pond.id}>
                     {pond.name} ({pond.area_decimal} decimal)
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="species" className="block text-sm font-medium text-gray-700 mb-2">
+                Species (Optional)
+              </label>
+              <select
+                id="species"
+                name="species"
+                value={formData.species}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
+              >
+                <option value="">Select a species (optional)</option>
+                {species.map((spec) => (
+                  <option key={spec.id} value={spec.id}>
+                    {spec.name} ({spec.scientific_name})
                   </option>
                 ))}
               </select>
@@ -265,6 +289,7 @@ export default function NewIncomePage() {
             type="submit"
             disabled={isSubmitting}
             className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ color: 'white !important' }}
           >
             <Save className="h-4 w-4 mr-2" />
             {isSubmitting ? 'Creating...' : 'Create Income Record'}

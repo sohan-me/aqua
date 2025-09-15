@@ -103,7 +103,7 @@ export default function StockingDetailsPage() {
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Total Weight</p>
-              <p className="text-2xl font-semibold text-gray-900">{formatNumber(parseFloat(stocking.data.total_weight_kg), 2)} kg</p>
+              <p className="text-2xl font-semibold text-gray-900">{formatNumber(parseFloat(stocking.data.total_weight_kg), 3)} kg</p>
             </div>
           </div>
         </div>
@@ -115,7 +115,7 @@ export default function StockingDetailsPage() {
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Avg Weight</p>
-              <p className="text-2xl font-semibold text-gray-900">{formatNumber(parseFloat(stocking.data.initial_avg_g), 3)} g</p>
+              <p className="text-2xl font-semibold text-gray-900">{formatNumber(parseFloat(stocking.data.initial_avg_weight_kg), 4)} kg</p>
             </div>
           </div>
         </div>
@@ -154,7 +154,7 @@ export default function StockingDetailsPage() {
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-gray-500">Total Weight:</span>
-              <span className="text-sm font-medium">{formatNumber(parseFloat(stocking.data.total_weight_kg), 2)} kg</span>
+              <span className="text-sm font-medium">{formatNumber(parseFloat(stocking.data.total_weight_kg), 3)} kg</span>
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-gray-500">Pieces per kg:</span>
@@ -162,7 +162,7 @@ export default function StockingDetailsPage() {
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-gray-500">Initial Avg Weight:</span>
-              <span className="text-sm font-medium">{formatNumber(parseFloat(stocking.data.initial_avg_g), 3)} g</span>
+              <span className="text-sm font-medium">{formatNumber(parseFloat(stocking.data.initial_avg_weight_kg), 4)} kg</span>
             </div>
           </div>
         </div>

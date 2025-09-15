@@ -1,6 +1,6 @@
 'use client';
 
-import { usePonds, useCreateFishSampling } from '@/hooks/useApi';
+import { usePonds, useSpecies, useCreateFishSampling } from '@/hooks/useApi';
 import { Scale, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -10,11 +10,14 @@ import { toast } from 'sonner';
 export default function NewFishSamplingPage() {
   const router = useRouter();
   const { data: pondsData } = usePonds();
+  const { data: speciesData } = useSpecies();
   const createSampling = useCreateFishSampling();
   const ponds = pondsData?.data || [];
+  const species = speciesData?.data || [];
   
   const [formData, setFormData] = useState({
     pond: '',
+    species: '',
     date: new Date().toISOString().split('T')[0],
     sample_size: '',
     total_weight_kg: '',
@@ -37,6 +40,7 @@ export default function NewFishSamplingPage() {
     try {
       await createSampling.mutateAsync({
         pond: parseInt(formData.pond),
+        species: formData.species ? parseInt(formData.species) : null,
         date: formData.date,
         sample_size: parseInt(formData.sample_size),
         total_weight_kg: parseFloat(formData.total_weight_kg),
@@ -85,6 +89,26 @@ export default function NewFishSamplingPage() {
                 {ponds.map((pond) => (
                   <option key={pond.id} value={pond.id}>
                     {pond.name} ({pond.area_decimal} decimal)
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="species" className="block text-sm font-medium text-gray-700 mb-2">
+                Species
+              </label>
+              <select
+                id="species"
+                name="species"
+                value={formData.species}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
+              >
+                <option value="">Select a species (optional)</option>
+                {species.map((spec) => (
+                  <option key={spec.id} value={spec.id}>
+                    {spec.name} ({spec.scientific_name})
                   </option>
                 ))}
               </select>
@@ -144,7 +168,7 @@ export default function NewFishSamplingPage() {
 
             <div>
               <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-2">
-                Notes
+                Notes (Optional)
               </label>
               <textarea
                 id="notes"
@@ -170,7 +194,7 @@ export default function NewFishSamplingPage() {
               <div>
                 <p className="text-sm text-blue-700">Average Weight per Fish</p>
                 <p className="text-xl font-semibold text-blue-900">
-                  {((parseFloat(formData.total_weight_kg) * 1000) / parseInt(formData.sample_size)).toFixed(1)} g
+                  {(parseFloat(formData.total_weight_kg) / parseInt(formData.sample_size)).toFixed(3)} kg
                 </p>
               </div>
               <div>
@@ -182,7 +206,7 @@ export default function NewFishSamplingPage() {
               <div>
                 <p className="text-sm text-blue-700">Condition Factor</p>
                 <p className="text-xl font-semibold text-blue-900">
-                  {(((parseFloat(formData.total_weight_kg) * 1000) / parseInt(formData.sample_size)) / 100).toFixed(3)}
+                  {((parseFloat(formData.total_weight_kg) / parseInt(formData.sample_size)) * 1000).toFixed(3)}
                 </p>
               </div>
             </div>

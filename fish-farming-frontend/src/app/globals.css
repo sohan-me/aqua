@@ -35,9 +35,9 @@ input::placeholder, textarea::placeholder {
   color: #6b7280 !important; /* placeholder-gray-500 */
 }
 
-/* Ensure all text content is visible */
+/* Ensure all text content is visible - removed color: inherit to fix button text */
 .text-gray-900, .text-gray-800, .text-gray-700, .text-gray-600, .text-gray-500 {
-  color: inherit !important;
+  /* Removed color: inherit !important to prevent button text color issues */
 }
 
 /* Override dark mode for main content areas */
@@ -46,17 +46,57 @@ input::placeholder, textarea::placeholder {
   color: #111827 !important; /* text-gray-900 */
 }
 
-/* Ensure proper text contrast on white backgrounds */
-.bg-white * {
+/* Force white text on all colored buttons */
+button[type="submit"].bg-blue-600,
+button[type="submit"].bg-blue-700,
+button.bg-blue-600,
+button.bg-blue-700,
+button.bg-green-600,
+button.bg-green-700,
+button.bg-red-600,
+button.bg-red-700,
+a.bg-blue-600,
+a.bg-blue-700,
+a.bg-green-600,
+a.bg-green-700,
+a.bg-red-600,
+a.bg-red-700,
+.bg-blue-600,
+.bg-blue-700,
+.bg-green-600,
+.bg-green-700,
+.bg-red-600,
+.bg-red-700 {
+  color: white !important;
+}
+
+/* Ensure button text and icons are always white on colored buttons */
+button.bg-blue-600 *,
+button.bg-blue-700 *,
+button.bg-green-600 *,
+button.bg-green-700 *,
+button.bg-red-600 *,
+button.bg-red-700 *,
+a.bg-blue-600 *,
+a.bg-blue-700 *,
+a.bg-green-600 *,
+a.bg-green-700 *,
+a.bg-red-600 *,
+a.bg-red-700 * {
+  color: white !important;
+}
+
+/* Ensure proper text contrast on white backgrounds - but exclude buttons */
+.bg-white *:not(button):not(button *) {
   color: #111827 !important; /* text-gray-900 */
 }
 
-/* Specific overrides for common text elements */
-.bg-white h1, .bg-white h2, .bg-white h3, .bg-white h4, .bg-white h5, .bg-white h6 {
+/* Specific overrides for common text elements - but exclude buttons */
+.bg-white h1:not(button h1), .bg-white h2:not(button h2), .bg-white h3:not(button h3), .bg-white h4:not(button h4), .bg-white h5:not(button h5), .bg-white h6:not(button h6) {
   color: #111827 !important; /* text-gray-900 */
 }
 
-.bg-white p, .bg-white span, .bg-white div {
+.bg-white p:not(button p), .bg-white span:not(button span), .bg-white div:not(button div) {
   color: #111827 !important; /* text-gray-900 */
 }
 
@@ -81,9 +121,7 @@ main, .main-content {
 }
 
 /* Ensure proper contrast for all text elements */
-* {
-  color: inherit;
-}
+/* Removed global color: inherit rule to prevent button text color issues */
 
 /* Ensure sidebar text remains white */
 .bg-black {
@@ -126,7 +164,7 @@ main, .main-content {
     color: #111827 !important; /* text-gray-900 */
   }
   
-  .bg-white * {
+  .bg-white *:not(button):not(button *) {
     color: #111827 !important; /* text-gray-900 */
   }
   

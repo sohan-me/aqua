@@ -23,17 +23,19 @@ export function Header({ onMenuClick }: HeaderProps) {
 
   // Search suggestions data - memoized to prevent infinite re-renders
   const searchSuggestions = useMemo(() => [
+    { name: 'Analytics Dashboard', href: '/analytics', description: 'View analytics dashboard', keywords: ['analytics', 'dashboard', 'statistics', 'stats', 'home'] },
     { name: 'Ponds', href: '/ponds', description: 'Manage fish ponds', keywords: ['pond', 'ponds', 'tank', 'tanks'] },
     { name: 'Stocking', href: '/stocking', description: 'View stocking records', keywords: ['stock', 'stocking', 'fish', 'fry', 'fingerling'] },
     { name: 'Feeding', href: '/feeding', description: 'Manage feeding records', keywords: ['feed', 'feeding', 'food', 'nutrition'] },
     { name: 'Harvest', href: '/harvest', description: 'View harvest records', keywords: ['harvest', 'harvesting', 'catch', 'production'] },
     { name: 'Water Quality', href: '/water-quality', description: 'Monitor water quality', keywords: ['water', 'quality', 'ph', 'temperature', 'oxygen'] },
+    { name: 'Accounts', href: '/accounts', description: 'Manage financial records', keywords: ['accounts', 'financial', 'money', 'finance', 'accounting'] },
     { name: 'Expenses', href: '/expenses', description: 'Track expenses', keywords: ['expense', 'expenses', 'cost', 'costs', 'spending'] },
     { name: 'Income', href: '/income', description: 'Track income', keywords: ['income', 'revenue', 'earnings', 'money'] },
+    { name: 'Feeding Advice', href: '/feeding-advice', description: 'AI-powered feeding recommendations', keywords: ['feeding', 'advice', 'recommendations', 'ai', 'suggestions'] },
     { name: 'Alerts', href: '/alerts', description: 'View system alerts', keywords: ['alert', 'alerts', 'warning', 'warnings', 'notification'] },
-    { name: 'Reports', href: '/reports', description: 'Generate reports', keywords: ['report', 'reports', 'analytics', 'analysis'] },
+    { name: 'Reports & Analysis', href: '/reports', description: 'Generate reports and analysis', keywords: ['report', 'reports', 'analytics', 'analysis', 'analysis'] },
     { name: 'Daily Logs', href: '/daily-logs', description: 'Record daily activities', keywords: ['daily', 'log', 'logs', 'activity', 'activities'] },
-    { name: 'Analytics', href: '/analytics', description: 'View analytics dashboard', keywords: ['analytics', 'dashboard', 'statistics', 'stats'] },
   ], []);
 
   // Filter suggestions based on search query
@@ -96,17 +98,19 @@ export function Header({ onMenuClick }: HeaderProps) {
   };
 
   return (
-    <header className="bg-white shadow-sm border-b border-gray-200">
+    <header className="bg-white/80 backdrop-blur-md shadow-lg border-b border-gray-200/50">
       <div className="flex h-16 items-center justify-between px-6">
         <div className="flex items-center space-x-4">
           <button 
             onClick={onMenuClick}
-            className="lg:hidden"
+            className="lg:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
           >
             <Menu className="h-6 w-6 text-gray-600" />
           </button>
           <div className="hidden lg:block">
-            <h1 className="text-2xl font-semibold text-gray-900">Fish Farming Dashboard</h1>
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">
+              AquaFarm Pro
+            </h1>
           </div>
         </div>
         
@@ -119,7 +123,7 @@ export function Header({ onMenuClick }: HeaderProps) {
                 placeholder="Search pages..."
                 value={searchQuery}
                 onChange={handleSearchInputChange}
-                className="w-full md:w-64 rounded-md border border-gray-300 bg-white py-2 pl-10 pr-4 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-900 placeholder-gray-500"
+                className="w-full md:w-64 rounded-xl border border-gray-200 bg-white/50 backdrop-blur-sm py-2 pl-10 pr-4 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-gray-900 placeholder-gray-500 transition-all duration-200"
               />
             </form>
             
@@ -151,10 +155,10 @@ export function Header({ onMenuClick }: HeaderProps) {
           
           <div className="relative">
             <Link href="/alerts">
-            <button className="relative rounded-full bg-white p-2 text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+            <button className="relative rounded-full bg-white/50 backdrop-blur-sm p-2 text-gray-400 hover:text-gray-500 hover:bg-white/80 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:ring-offset-2 transition-all duration-200">
               <Bell className="h-6 w-6" />
               {activeAlerts.length > 0 && (
-                <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-medium text-white">
+                <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-r from-red-500 to-pink-500 text-xs font-medium text-white shadow-lg">
                   {activeAlerts.length}
                 </span>
               )}
@@ -165,9 +169,9 @@ export function Header({ onMenuClick }: HeaderProps) {
           <div className="relative">
             <button
               onClick={() => setShowUserMenu(!showUserMenu)}
-              className="flex items-center space-x-3 hover:bg-gray-50 rounded-lg p-2"
+              className="flex items-center space-x-3 hover:bg-white/50 backdrop-blur-sm rounded-xl p-2 transition-all duration-200"
             >
-              <div className="h-8 w-8 rounded-full bg-blue-500 flex items-center justify-center">
+              <div className="h-8 w-8 rounded-full bg-gradient-to-r from-blue-500 to-cyan-500 flex items-center justify-center shadow-lg">
                 <User className="h-4 w-4 text-white" />
               </div>
               <div className="hidden md:block text-left">
@@ -179,7 +183,7 @@ export function Header({ onMenuClick }: HeaderProps) {
             </button>
             
             {showUserMenu && (
-              <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 border border-gray-200">
+              <div className="absolute right-0 mt-2 w-48 bg-white/90 backdrop-blur-md rounded-xl shadow-xl py-1 z-50 border border-gray-200/50">
                 <div className="px-4 py-2 border-b border-gray-100">
                   <p className="text-sm font-medium text-gray-900">
                     {user?.first_name} {user?.last_name}
@@ -188,7 +192,7 @@ export function Header({ onMenuClick }: HeaderProps) {
                 </div>
                 <button
                   onClick={logout}
-                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100/50 transition-colors duration-200"
                 >
                   <LogOut className="h-4 w-4 mr-2" />
                   Sign out

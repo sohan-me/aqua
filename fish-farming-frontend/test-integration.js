@@ -7,8 +7,8 @@
 
 const axios = require('axios');
 
-const API_BASE_URL = 'https://apipremiumagro.sascorporationbd.com/api/fish-farming';
-const FRONTEND_URL = 'http://localhost:3000';
+const API_BASE_URL = 'http://127.0.0.1:8000/api/ fish-farming';
+const FRONTEND_URL = 'https://apipremiumagro.sascorporationbd.com';
 
 async function testBackendAPI() {
   console.log('🧪 Testing Backend API...');
@@ -65,7 +65,7 @@ async function testFrontend() {
   try {
     const response = await axios.get(FRONTEND_URL);
     if (response.status === 200) {
-      console.log('✅ Frontend is running on http://localhost:3000');
+      console.log('✅ Frontend is running on https://apipremiumagro.sascorporationbd.com');
     }
   } catch (error) {
     console.log(`❌ Frontend Error: ${error.message}`);
@@ -113,14 +113,14 @@ async function main() {
   
   console.log('\n🎉 Integration Test Complete!');
   console.log('\n📋 Next Steps:');
-  console.log('1. Open http://localhost:3000 in your browser');
+  console.log('1. Open https://apipremiumagro.sascorporationbd.com in your browser');
   console.log('2. Navigate through the dashboard');
   console.log('3. Test the pond management features');
   console.log('4. Try the expense and income tracking');
   console.log('5. Check the alert system');
   console.log('\n💡 Note: Some features require authentication');
   console.log('   Use the Django admin panel to create a user account');
-  console.log('   Admin Panel: http://localhost:8000/admin/');
+  console.log('   Admin Panel: https://apipremiumagro.sascorporationbd.com/admin/');
   console.log('   Username: admin, Password: admin123');
 }
 

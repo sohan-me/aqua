@@ -195,7 +195,7 @@ export default function EditFishSamplingPage({ params }: PageProps) {
 
             <div>
               <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-2">
-                Notes
+                Notes (Optional)
               </label>
               <textarea
                 id="notes"

@@ -126,10 +126,10 @@ export default function StockingPage() {
                       {formatNumber(stocking.pcs, 0)} pieces
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {formatNumber(parseFloat(stocking.initial_avg_g), 3)} g
+                      {formatNumber(parseFloat(stocking.initial_avg_weight_kg), 4)} kg
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600">
-                      {formatNumber(parseFloat(stocking.total_weight_kg), 2)} kg
+                      {formatNumber(parseFloat(stocking.total_weight_kg), 3)} kg
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex space-x-2">

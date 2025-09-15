@@ -149,7 +149,7 @@ export default function FishSamplingDetailPage({ params }: PageProps) {
               <div className="bg-green-50 rounded-lg p-4">
                 <h3 className="text-sm font-medium text-green-700 mb-2">Average Weight</h3>
                 <p className="text-2xl font-bold text-green-900">
-                  {parseFloat(sampling.data.average_weight_g).toFixed(1)} g
+                  {parseFloat(sampling.data.average_weight_kg).toFixed(1)} kg
                 </p>
               </div>
             </div>
@@ -169,7 +169,7 @@ export default function FishSamplingDetailPage({ params }: PageProps) {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Growth Metrics</h2>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
               <h3 className="text-sm font-medium text-gray-500 mb-2">Condition Factor</h3>
               <p className="text-lg font-semibold text-gray-900">
@@ -183,14 +183,65 @@ export default function FishSamplingDetailPage({ params }: PageProps) {
             <div>
               <h3 className="text-sm font-medium text-gray-500 mb-2">Growth Rate</h3>
               <p className="text-lg font-semibold text-gray-900">
-                {sampling.data.growth_rate_g_per_day ? `${parseFloat(sampling.data.growth_rate_g_per_day).toFixed(2)} g/day` : 'N/A'}
+                {sampling.data.growth_rate_kg_per_day ? `${parseFloat(sampling.data.growth_rate_kg_per_day).toFixed(3)} kg/day` : 'N/A'}
               </p>
               <p className="text-xs text-gray-500 mt-1">
-                Daily growth rate in grams (requires previous sampling data)
+                Daily growth rate in kg (requires previous sampling data)
+              </p>
+            </div>
+            
+            <div>
+              <h3 className="text-sm font-medium text-gray-500 mb-2">Biomass Difference</h3>
+              <p className="text-lg font-semibold text-gray-900">
+                {sampling.data.biomass_difference_kg ? `${parseFloat(sampling.data.biomass_difference_kg).toFixed(1)} kg` : 'N/A'}
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                Total biomass change in pond since last sampling
               </p>
             </div>
           </div>
         </div>
+
+        {/* Biomass Analysis */}
+        {sampling.data.biomass_difference_kg && (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Biomass Analysis</h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <h3 className="text-sm font-medium text-gray-500 mb-2">Current Biomass</h3>
+                <p className="text-lg font-semibold text-gray-900">
+                  {parseFloat(sampling.data.biomass_difference_kg || '0') > 0 ? '+' : ''}{parseFloat(sampling.data.biomass_difference_kg || '0').toFixed(1)} kg
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Change from previous sampling
+                </p>
+              </div>
+              
+              <div>
+                <h3 className="text-sm font-medium text-gray-500 mb-2">Growth Trend</h3>
+                <div className="flex items-center">
+                  {parseFloat(sampling.data.biomass_difference_kg || '0') > 0 ? (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      ↗️ Positive Growth
+                    </span>
+                  ) : parseFloat(sampling.data.biomass_difference_kg || '0') < 0 ? (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                      ↘️ Negative Growth
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                      ➡️ No Change
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Biomass change indicator
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Notes */}
         {sampling.data.notes && (

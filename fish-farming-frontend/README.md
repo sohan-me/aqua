@@ -38,8 +38,8 @@ A modern Next.js frontend for the Fish Farming Management System, built with Typ
 3. **Set up environment variables**
    Create a `.env.local` file in the root directory:
    ```env
-   NEXT_PUBLIC_API_URL=https://apipremiumagro.sascorporationbd.com/api/fish-farming
-   NEXT_PUBLIC_AUTH_URL=http://localhost:8000/api-auth
+   NEXT_PUBLIC_API_URL=http://127.0.0.1:8000/api/ fish-farming
+   NEXT_PUBLIC_AUTH_URL=http://127.0.0.1:8000/api/ auth
    ```
 
 4. **Start the development server**
@@ -195,7 +195,7 @@ This project is part of the Fish Farming Management System.
 ## 🆘 Support
 
 For support and questions:
-- Check the API documentation at `https://apipremiumagro.sascorporationbd.com/api/docs/`
+- Check the API documentation at `http://127.0.0.1:8000/api/ docs/`
 - Review the backend README for API details
 - Open an issue for bugs or feature requests
 

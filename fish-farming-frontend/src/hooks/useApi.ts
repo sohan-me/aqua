@@ -12,11 +12,37 @@ export function  useApiQuery<T>(
     refetchInterval?: number;
   }
 ) {
-  return useQuery({
+  const result = useQuery({
     queryKey,
-    queryFn,
+    queryFn: async () => {
+      const response = await queryFn();
+      console.log('useApiQuery raw response:', response);
+      
+      // Extract data from Axios response if needed
+      if (response && typeof response === 'object' && 'data' in response) {
+        console.log('useApiQuery extracted data:', response.data);
+        return { data: response.data };
+      }
+      console.log('useApiQuery returning response as-is:', response);
+      return response;
+    },
     ...options,
   });
+  
+  // Debug logging for FCR analysis
+  if (queryKey[0] === 'fcr-analysis') {
+    console.log('useApiQuery FCR Debug:', {
+      queryKey,
+      isLoading: result.isLoading,
+      error: result.error,
+      data: result.data,
+      status: result.status,
+      isError: result.isError,
+      isSuccess: result.isSuccess
+    });
+  }
+  
+  return result;
 }
 
 // Generic hook for mutations
@@ -925,12 +951,74 @@ export function useFeedingAdviceById(id: number) {
   );
 }
 
+export function useGenerateFeedingAdvice() {
+  const queryClient = useQueryClient();
+  return useApiMutation(
+    (data: { pond_id: number }) => apiService.generateFeedingAdvice(data),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['feeding-advice'] });
+        toast.success('Feeding advice generated successfully!');
+      },
+      onError: (error: any) => {
+        toast.error(error.response?.data?.error || 'Failed to generate feeding advice');
+      }
+    }
+  );
+}
+
 export function useCreateFeedingAdvice() {
   return useApiMutation(
     (data: any) => apiService.createFeedingAdvice(data),
     {
       onSuccess: () => {
         toast.success('Feeding advice generated successfully');
+      },
+      invalidateQueries: [['feeding-advice']],
+    }
+  );
+}
+
+export function useAutoGenerateFeedingAdvice() {
+  return useApiMutation(
+    (data: { pond: number }) => apiService.autoGenerateFeedingAdvice(data),
+    {
+      onSuccess: (data) => {
+        if (data.warnings) {
+          // Show success with warnings
+          toast.success(`Generated feeding advice for ${data.advice?.length || 1} species`);
+          
+          // Show warnings for species without sampling data
+          if (data.warnings.species_without_sampling && data.warnings.species_without_sampling.length > 0) {
+            toast.warning(`Some species need fish sampling data: ${data.warnings.species_without_sampling.join(', ')}`);
+          }
+          
+          // Show warnings for failed species
+          if (data.warnings.failed_species && data.warnings.failed_species.length > 0) {
+            toast.warning(`Some species had issues: ${data.warnings.failed_species.join(', ')}`);
+          }
+        } else {
+          toast.success(`Generated feeding advice for ${data.advice?.length || 1} species`);
+        }
+      },
+      onError: (error: any) => {
+        // Handle detailed error messages from backend
+        if (error.response?.data?.error) {
+          toast.error(error.response.data.error);
+          
+          // Show additional details if available
+          if (error.response.data.details) {
+            const details = error.response.data.details;
+            if (details.species_without_sampling?.length > 0) {
+              toast.error(`Missing fish sampling data for: ${details.species_without_sampling.join(', ')}`);
+            }
+            if (details.failed_species?.length > 0) {
+              toast.error(`Failed species: ${details.failed_species.join(', ')}`);
+            }
+          }
+        } else {
+          toast.error('Failed to generate feeding advice. Please try again.');
+        }
       },
       invalidateQueries: [['feeding-advice']],
     }
@@ -971,4 +1059,31 @@ export function useApplyFeedingAdvice() {
       invalidateQueries: [['feeding-advice']],
     }
   );
+}
+
+// Biomass Analysis
+export function useBiomassAnalysis(params?: { pond?: number; species?: number; start_date?: string; end_date?: string }) {
+  return useApiQuery(
+    ['biomass-analysis', JSON.stringify(params || {})],
+    () => apiService.getBiomassAnalysis(params)
+  );
+}
+
+// FCR Analysis
+export function useFcrAnalysis(params?: { pond?: number; species?: number; start_date?: string; end_date?: string }) {
+  const result = useApiQuery(
+    ['fcr-analysis', JSON.stringify(params || {})],
+    () => apiService.getFcrAnalysis(params)
+  );
+  
+  // Debug logging
+  console.log('useFcrAnalysis Debug:', {
+    params,
+    isLoading: result.isLoading,
+    error: result.error,
+    data: result.data,
+    status: result.status
+  });
+  
+  return result;
 }

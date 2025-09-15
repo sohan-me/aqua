@@ -26,8 +26,6 @@ export default function EditStockingPage() {
     date: '',
     pcs: '',
     total_weight_kg: '',
-    line_pcs_per_kg: '',
-    initial_avg_g: '',
     notes: ''
   });
 
@@ -42,8 +40,6 @@ export default function EditStockingPage() {
         date: stocking.data.date || '',
         pcs: stocking.data.pcs?.toString() || '',
         total_weight_kg: stocking.data.total_weight_kg?.toString() || '',
-        line_pcs_per_kg: stocking.data.line_pcs_per_kg || '',
-        initial_avg_g: stocking.data.initial_avg_g || '',
         notes: stocking.data.notes || ''
       });
     }
@@ -55,34 +51,6 @@ export default function EditStockingPage() {
       ...prev,
       [name]: value
     }));
-
-    // Auto-calculate initial_avg_g when total_weight_kg and pcs change
-    if (name === 'total_weight_kg' || name === 'pcs') {
-      const weight = parseFloat(name === 'total_weight_kg' ? value : formData.total_weight_kg);
-      const pieces = parseFloat(name === 'pcs' ? value : formData.pcs);
-      
-      if (weight && pieces && pieces > 0) {
-        const avgWeight = (weight * 1000) / pieces; // Convert kg to g
-        setFormData(prev => ({
-          ...prev,
-          initial_avg_g: avgWeight.toFixed(3)
-        }));
-      }
-    }
-
-    // Auto-calculate line_pcs_per_kg when pcs and total_weight_kg change
-    if (name === 'pcs' || name === 'total_weight_kg') {
-      const pieces = parseFloat(name === 'pcs' ? value : formData.pcs);
-      const weight = parseFloat(name === 'total_weight_kg' ? value : formData.total_weight_kg);
-      
-      if (pieces && weight && weight > 0) {
-        const pcsPerKg = pieces / weight;
-        setFormData(prev => ({
-          ...prev,
-          line_pcs_per_kg: pcsPerKg.toFixed(2)
-        }));
-      }
-    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -96,8 +64,6 @@ export default function EditStockingPage() {
         date: formData.date,
         pcs: parseInt(formData.pcs),
         total_weight_kg: parseFloat(formData.total_weight_kg),
-        line_pcs_per_kg: formData.line_pcs_per_kg,
-        initial_avg_g: formData.initial_avg_g,
         notes: formData.notes
       };
 
@@ -267,46 +233,11 @@ export default function EditStockingPage() {
               />
             </div>
 
-            <div>
-              <label htmlFor="line_pcs_per_kg" className="block text-sm font-medium text-gray-700 mb-2">
-                Pieces per kg
-              </label>
-              <input
-                type="number"
-                id="line_pcs_per_kg"
-                name="line_pcs_per_kg"
-                min="0"
-                step="0.01"
-                value={formData.line_pcs_per_kg}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
-                placeholder="Auto-calculated"
-                readOnly
-              />
-            </div>
-
-            <div>
-              <label htmlFor="initial_avg_g" className="block text-sm font-medium text-gray-700 mb-2">
-                Initial Average Weight (g)
-              </label>
-              <input
-                type="number"
-                id="initial_avg_g"
-                name="initial_avg_g"
-                min="0"
-                step="0.001"
-                value={formData.initial_avg_g}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
-                placeholder="Auto-calculated"
-                readOnly
-              />
-            </div>
           </div>
 
           <div className="mt-6">
             <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-2">
-              Notes
+              Notes (Optional)
             </label>
             <textarea
               id="notes"
@@ -320,27 +251,36 @@ export default function EditStockingPage() {
           </div>
         </div>
 
-        {/* Calculated Values Display */}
+        {/* Calculation Preview */}
         {(formData.pcs && formData.total_weight_kg) && (
           <div className="bg-blue-50 rounded-lg border border-blue-200 p-6">
             <h3 className="text-lg font-semibold text-blue-900 mb-4 flex items-center">
               <Calculator className="h-5 w-5 mr-2" />
-              Calculated Values
+              Calculation Preview
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-white rounded-md p-4 border border-blue-200">
+                <p className="text-sm font-medium text-blue-700">Total Weight</p>
+                <p className="text-2xl font-bold text-blue-900">
+                  {parseFloat(formData.total_weight_kg).toFixed(4)} kg
+                </p>
+              </div>
+              <div className="bg-white rounded-md p-4 border border-blue-200">
+                <p className="text-sm font-medium text-blue-700">Pieces per kg</p>
+                <p className="text-2xl font-bold text-blue-900">
+                  {(parseInt(formData.pcs) / parseFloat(formData.total_weight_kg)).toFixed(4)} pcs/kg
+                </p>
+              </div>
               <div className="bg-white rounded-md p-4 border border-blue-200">
                 <p className="text-sm font-medium text-blue-700">Average Weight per Fish</p>
                 <p className="text-2xl font-bold text-blue-900">
-                  {formData.initial_avg_g ? `${formData.initial_avg_g} g` : 'N/A'}
-                </p>
-              </div>
-              <div className="bg-white rounded-md p-4 border border-blue-200">
-                <p className="text-sm font-medium text-blue-700">Pieces per Kilogram</p>
-                <p className="text-2xl font-bold text-blue-900">
-                  {formData.line_pcs_per_kg ? `${formData.line_pcs_per_kg} pcs/kg` : 'N/A'}
+                  {(parseFloat(formData.total_weight_kg) / parseInt(formData.pcs)).toFixed(4)} kg
                 </p>
               </div>
             </div>
+            <p className="text-xs text-blue-600 mt-3">
+              * These values will be automatically calculated and saved
+            </p>
           </div>
         )}
 
@@ -358,6 +298,7 @@ export default function EditStockingPage() {
             type="submit"
             disabled={isSubmitting}
             className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ color: 'white !important' }}
           >
             <Save className="h-4 w-4 mr-2" />
             {isSubmitting ? 'Updating...' : 'Update Stocking'}

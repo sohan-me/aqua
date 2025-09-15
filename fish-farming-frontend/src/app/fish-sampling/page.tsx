@@ -2,21 +2,46 @@
 
 import { useFishSampling, useDeleteFishSampling } from '@/hooks/useApi';
 import { formatDate } from '@/lib/utils';
-import { Scale, Plus, Eye, Edit, Trash2, Calendar } from 'lucide-react';
+import { Scale, Plus, Eye, Edit, Trash2, Calendar, BarChart3 } from 'lucide-react';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 
 export default function FishSamplingPage() {
   const { data: samplingData, isLoading } = useFishSampling();
   const deleteSampling = useDeleteFishSampling();
   const [filterPond, setFilterPond] = useState('all');
+  const [biomassSummary, setBiomassSummary] = useState<any>(null);
   
   const samplings = samplingData?.data || [];
   
   const filteredSamplings = filterPond === 'all' 
     ? samplings 
     : samplings.filter(sampling => sampling.pond.toString() === filterPond);
+
+  // Fetch biomass summary
+  useEffect(() => {
+    const fetchBiomassSummary = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch('/api/fish-farming/fish-sampling/biomass_analysis/', {
+          headers: {
+            'Authorization': `Token ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          setBiomassSummary(data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch biomass summary:', error);
+      }
+    };
+
+    fetchBiomassSummary();
+  }, [samplings]);
 
   const handleDelete = async (id: number) => {
     if (window.confirm('Are you sure you want to delete this fish sampling record?')) {
@@ -71,6 +96,83 @@ export default function FishSamplingPage() {
         </div>
       </div>
 
+      {/* Biomass Summary */}
+      {biomassSummary && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center mb-4">
+            <BarChart3 className="h-6 w-6 text-indigo-600 mr-2" />
+            <h2 className="text-lg font-semibold text-gray-900">Current Biomass Summary</h2>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-indigo-50 rounded-lg p-4">
+              <div className="flex items-center">
+                <Scale className="h-8 w-8 text-indigo-600" />
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-indigo-600">Total Current Biomass</h3>
+                  <p className="text-2xl font-bold text-indigo-900">
+                    {biomassSummary.summary?.total_current_biomass_kg?.toFixed(1) || '0.0'} kg
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-green-50 rounded-lg p-4">
+              <div className="flex items-center">
+                <BarChart3 className="h-8 w-8 text-green-600" />
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-green-600">Total Growth</h3>
+                  <p className="text-2xl font-bold text-green-900">
+                    {biomassSummary.summary?.total_biomass_gain_kg?.toFixed(1) || '0.0'} kg
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-blue-50 rounded-lg p-4">
+              <div className="flex items-center">
+                <Calendar className="h-8 w-8 text-blue-600" />
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-blue-600">Total Samplings</h3>
+                  <p className="text-2xl font-bold text-blue-900">
+                    {biomassSummary.summary?.total_samplings || 0}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Detailed breakdown */}
+          {biomassSummary.pond_species_biomass && Object.keys(biomassSummary.pond_species_biomass).length > 0 && (
+            <div className="mt-6">
+              <h3 className="text-md font-semibold text-gray-900 mb-3">Biomass by Pond & Species</h3>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pond - Species</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Initial (kg)</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Growth (kg)</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Total (kg)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {Object.entries(biomassSummary.pond_species_biomass).map(([pondSpecies, data]: [string, any]) => (
+                      <tr key={pondSpecies}>
+                        <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{pondSpecies}</td>
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600">{data.initial_biomass.toFixed(1)}</td>
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-green-600">{data.growth_biomass.toFixed(1)}</td>
+                        <td className="px-4 py-2 whitespace-nowrap text-sm font-bold text-indigo-600">{data.current_biomass.toFixed(1)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Sampling Records */}
       {filteredSamplings.length === 0 ? (
         <div className="text-center py-12">
@@ -103,7 +205,7 @@ export default function FishSamplingPage() {
                     </span>
                   </div>
                   
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-4">
                     <div>
                       <p className="text-sm text-gray-500">Total Weight</p>
                       <p className="text-lg font-semibold text-gray-900">
@@ -113,13 +215,25 @@ export default function FishSamplingPage() {
                     <div>
                       <p className="text-sm text-gray-500">Average Weight</p>
                       <p className="text-lg font-semibold text-gray-900">
-                        {parseFloat(sampling.average_weight_g).toFixed(1)} g
+                        {parseFloat(sampling.average_weight_kg).toFixed(1)} kg
                       </p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-500">Fish per kg</p>
                       <p className="text-lg font-semibold text-gray-900">
                         {parseFloat(sampling.fish_per_kg).toFixed(1)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Growth Rate</p>
+                      <p className="text-lg font-semibold text-gray-900">
+                        {sampling.growth_rate_kg_per_day ? `${parseFloat(sampling.growth_rate_kg_per_day).toFixed(3)} kg/day` : 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Biomass Change</p>
+                      <p className="text-lg font-semibold text-gray-900">
+                        {sampling.biomass_difference_kg ? `${parseFloat(sampling.biomass_difference_kg).toFixed(1)} kg` : 'N/A'}
                       </p>
                     </div>
                     <div>

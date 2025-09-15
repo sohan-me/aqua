@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useCreateMortality, usePonds } from '@/hooks/useApi';
+import { useCreateMortality, usePonds, useSpecies } from '@/hooks/useApi';
 import { ArrowLeft, Save, X, Fish, TrendingDown, AlertTriangle, Weight } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -10,14 +10,16 @@ export default function NewMortalityPage() {
   const router = useRouter();
   const createMortality = useCreateMortality();
   const { data: pondsData } = usePonds();
+  const { data: speciesData } = useSpecies();
   
   const ponds = pondsData?.data || [];
+  const species = speciesData?.data || [];
 
   const [formData, setFormData] = useState({
     pond: '',
+    species: '',
     date: new Date().toISOString().split('T')[0],
     count: '',
-    avg_weight_kg: '',
     cause: '',
     notes: ''
   });
@@ -39,11 +41,11 @@ export default function NewMortalityPage() {
     try {
       const submitData = {
         pond: parseInt(formData.pond),
+        species: formData.species ? parseInt(formData.species) : null,
         date: formData.date,
         count: parseInt(formData.count),
-        avg_weight_g: formData.avg_weight_kg ? parseFloat(formData.avg_weight_kg) * 1000 : null,
         cause: formData.cause || null,
-        notes: formData.notes || null
+        notes: formData.notes || ''
       };
 
       await createMortality.mutateAsync(submitData);
@@ -116,6 +118,26 @@ export default function NewMortalityPage() {
               </div>
 
               <div>
+                <label htmlFor="species" className="block text-sm font-medium text-gray-700 mb-2">
+                  Species
+                </label>
+                <select
+                  id="species"
+                  name="species"
+                  value={formData.species}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
+                >
+                  <option value="">Select a species (optional)</option>
+                  {species.map((spec) => (
+                    <option key={spec.id} value={spec.id}>
+                      {spec.name} ({spec.scientific_name})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
                 <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-2">
                   Date *
                 </label>
@@ -157,22 +179,6 @@ export default function NewMortalityPage() {
                 />
               </div>
 
-              <div>
-                <label htmlFor="avg_weight_kg" className="block text-sm font-medium text-gray-700 mb-2">
-                  Average Weight (kg)
-                </label>
-                <input
-                  type="number"
-                  id="avg_weight_kg"
-                  name="avg_weight_kg"
-                  min="0"
-                  step="0.001"
-                  value={formData.avg_weight_kg}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
-                  placeholder="Average weight in kg"
-                />
-              </div>
             </div>
           </div>
 
@@ -206,7 +212,7 @@ export default function NewMortalityPage() {
 
               <div>
                 <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-2">
-                  Additional Notes
+                  Additional Notes (Optional)
                 </label>
                 <textarea
                   id="notes"

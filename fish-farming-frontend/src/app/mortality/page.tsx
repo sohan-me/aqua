@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useMortalities, usePonds, useDeleteMortality, useStocking } from '@/hooks/useApi';
-import { formatDate, formatNumber } from '@/lib/utils';
+import { formatDate, formatNumber, formatWeight } from '@/lib/utils';
 import { 
   Fish, 
   Plus, 
@@ -262,7 +262,7 @@ export default function MortalityPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {mortality.avg_weight_g ? `${(parseFloat(mortality.avg_weight_g) / 1000).toFixed(3)} kg` : 'N/A'}
+                      {mortality.avg_weight_g ? `${formatWeight(parseFloat(mortality.avg_weight_g) / 1000)} kg` : 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {mortality.cause || 'Not specified'}

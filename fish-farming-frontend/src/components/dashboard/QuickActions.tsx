@@ -57,8 +57,10 @@ const quickActions = [
 
 export function QuickActions() {
   return (
-    <div className="rounded-lg bg-white p-6 shadow-sm border border-gray-200">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+    <div className="rounded-xl bg-white/80 backdrop-blur-sm p-6 shadow-lg border border-gray-200/50">
+      <h3 className="text-lg font-bold text-gray-900 mb-6 bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">
+        Quick Actions
+      </h3>
       <div className="grid md:grid-cols-2 gap-4">
         {quickActions.map((action) => {
           const Icon = action.icon;
@@ -66,13 +68,15 @@ export function QuickActions() {
             <Link
               key={action.title}
               href={action.href}
-              className="flex items-center space-x-3 rounded-lg border border-gray-200 p-4 hover:bg-gray-50 transition-colors"
+              className="group flex items-center space-x-3 rounded-xl border border-gray-200/50 p-4 hover:bg-white/80 hover:shadow-lg transition-all duration-300 hover:scale-105 backdrop-blur-sm"
             >
-              <div className={`rounded-full p-2 text-white ${action.color}`}>
+              <div className={`rounded-xl p-3 text-white shadow-lg group-hover:scale-110 transition-transform duration-200 ${action.color}`}>
                 <Icon className="h-5 w-5" />
               </div>
               <div className="flex-1">
-                <p className="text-sm font-medium text-gray-900">{action.title}</p>
+                <p className="text-sm font-semibold text-gray-900 group-hover:text-blue-600 transition-colors duration-200">
+                  {action.title}
+                </p>
                 <p className="text-xs text-gray-500">{action.description}</p>
               </div>
             </Link>

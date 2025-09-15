@@ -1,21 +1,23 @@
 'use client';
 
 import { useFeedingAdviceById, useDeleteFeedingAdvice, useApplyFeedingAdvice } from '@/hooks/useApi';
-import { formatDate } from '@/lib/utils';
+import { formatDate, formatWeight } from '@/lib/utils';
 import { Lightbulb, ArrowLeft, Edit, Trash2, Calendar, User, CheckCircle, Clock, Thermometer, Droplets } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { use } from 'react';
 
 interface PageProps {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 export default function FeedingAdviceDetailPage({ params }: PageProps) {
   const router = useRouter();
-  const adviceId = parseInt(params.id as string);
+  const resolvedParams = use(params);
+  const adviceId = parseInt(resolvedParams.id);
   
   const { data: advice, isLoading } = useFeedingAdviceById(adviceId);
   const deleteAdvice = useDeleteFeedingAdvice();
@@ -187,7 +189,7 @@ export default function FeedingAdviceDetailPage({ params }: PageProps) {
               <div className="bg-green-50 rounded-lg p-4">
                 <h3 className="text-sm font-medium text-green-700 mb-2">Average Weight</h3>
                 <p className="text-2xl font-bold text-green-900">
-                  {parseFloat(advice.data.average_fish_weight_g).toFixed(1)} g
+                  {formatWeight(advice.data.average_fish_weight_kg)} kg
                 </p>
               </div>
             </div>
@@ -196,7 +198,7 @@ export default function FeedingAdviceDetailPage({ params }: PageProps) {
               <div className="bg-purple-50 rounded-lg p-4">
                 <h3 className="text-sm font-medium text-purple-700 mb-2">Total Biomass</h3>
                 <p className="text-2xl font-bold text-purple-900">
-                  {parseFloat(advice.data.total_biomass_kg).toFixed(1)} kg
+                  {formatWeight(advice.data.total_biomass_kg)} kg
                 </p>
               </div>
             </div>
@@ -237,7 +239,7 @@ export default function FeedingAdviceDetailPage({ params }: PageProps) {
               <div>
                 <h3 className="text-sm font-medium text-gray-500 mb-2">Recommended Daily Feed</h3>
                 <p className="text-2xl font-bold text-gray-900">
-                  {parseFloat(advice.data.recommended_feed_kg).toFixed(2)} kg/day
+                  {formatWeight(advice.data.recommended_feed_kg)} kg/day
                 </p>
               </div>
               
@@ -254,6 +256,20 @@ export default function FeedingAdviceDetailPage({ params }: PageProps) {
                   {advice.data.feeding_frequency} times per day
                 </p>
               </div>
+              
+              <div>
+                <h3 className="text-sm font-medium text-gray-500 mb-2">Feed Amount Per Session</h3>
+                <p className="text-lg font-semibold text-gray-900">
+                  {(() => {
+                    // @ts-expect-error TypeScript strict mode issue with parseFloat division
+                    const feedPerSession = parseFloat(advice.data.recommended_feed_kg) / parseFloat(advice.data.feeding_frequency);
+                    return formatWeight(feedPerSession.toString());
+                  })()} kg per session
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {formatWeight(advice.data.recommended_feed_kg)} kg ÷ {advice.data.feeding_frequency} sessions
+                </p>
+              </div>
             </div>
             
             <div className="space-y-4">
@@ -268,7 +284,7 @@ export default function FeedingAdviceDetailPage({ params }: PageProps) {
                 <div>
                   <h3 className="text-sm font-medium text-gray-500 mb-2">Daily Feed Cost</h3>
                   <p className="text-2xl font-bold text-gray-900">
-                    ${parseFloat(advice.data.daily_feed_cost).toFixed(2)}
+                    ৳{parseFloat(advice.data.daily_feed_cost).toFixed(2)}
                   </p>
                 </div>
               )}
@@ -277,7 +293,7 @@ export default function FeedingAdviceDetailPage({ params }: PageProps) {
                 <div>
                   <h3 className="text-sm font-medium text-gray-500 mb-2">Feed Cost per kg</h3>
                   <p className="text-lg font-semibold text-gray-900">
-                    ${parseFloat(advice.data.feed_cost_per_kg).toFixed(2)}
+                    ৳{parseFloat(advice.data.feed_cost_per_kg).toFixed(2)}
                   </p>
                 </div>
               )}
@@ -285,10 +301,132 @@ export default function FeedingAdviceDetailPage({ params }: PageProps) {
           </div>
         </div>
 
+        {/* Scientific Feeding Information */}
+        {advice.data.analysis_data?.feeding_recommendations && (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">🧬 Scientific Feeding Analysis</h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {/* Feeding Stage */}
+              <div className="bg-blue-50 rounded-lg p-4">
+                <h3 className="text-sm font-medium text-blue-900 mb-2">📊 Scientific Feeding Stage</h3>
+                <div className="space-y-1 text-sm text-blue-700">
+                  <p>Stage: <span className="font-semibold">{advice.data.analysis_data.feeding_recommendations.feeding_stage || 'Unknown'}</span></p>
+                  <p>Pieces/kg: <span className="font-semibold">{advice.data.analysis_data.feeding_recommendations.pcs_per_kg || 'N/A'}</span></p>
+                  <p>Protein: <span className="font-semibold">{advice.data.analysis_data.feeding_recommendations.protein_requirement || 'N/A'}%</span></p>
+                  <p>Pellet Size: <span className="font-semibold text-xs">{advice.data.analysis_data.feeding_recommendations.pellet_size || 'N/A'}</span></p>
+                  <p>Frequency: <span className="font-semibold">{advice.data.analysis_data.feeding_recommendations.feeding_frequency || 'N/A'}x/day</span></p>
+                  <p>Times: <span className="font-semibold text-xs">{advice.data.analysis_data.feeding_recommendations.feeding_times || 'N/A'}</span></p>
+                  <p>Split: <span className="font-semibold text-xs">{advice.data.analysis_data.feeding_recommendations.feeding_split || 'N/A'}</span></p>
+                </div>
+              </div>
+
+              {/* Daily Feeding Calculation */}
+              <div className="bg-green-50 rounded-lg p-4">
+                <h3 className="text-sm font-medium text-green-900 mb-2">🧮 Daily Feeding Formula</h3>
+                <div className="space-y-1 text-sm text-green-700">
+                  <p>Formula: <span className="font-semibold text-xs">(Fish × Weight(g) ÷ 1000) × (%BW/day ÷ 100)</span></p>
+                  <p>Base %BW/day: <span className="font-semibold">{advice.data.analysis_data.feeding_recommendations.base_rate || 0}%</span></p>
+                  <p>Final %BW/day: <span className="font-semibold">{advice.data.analysis_data.feeding_recommendations.final_rate || 0}%</span></p>
+                  <p>Base Daily Feed: <span className="font-semibold">{advice.data.analysis_data.feeding_recommendations.base_daily_feed_kg || 0} kg</span></p>
+                  <p>Final Daily Feed: <span className="font-semibold">{advice.data.analysis_data.feeding_recommendations.recommended_feed_kg || 0} kg</span></p>
+                </div>
+              </div>
+
+              {/* Feeding Adjustments */}
+              <div className="bg-orange-50 rounded-lg p-4">
+                <h3 className="text-sm font-medium text-orange-900 mb-2">⚖️ Feeding Adjustments</h3>
+                <div className="space-y-1 text-sm text-orange-700">
+                  <p>Water Quality: <span className="font-semibold">{advice.data.analysis_data.feeding_recommendations.adjustments?.water_quality || 0 > 0 ? '+' : ''}{advice.data.analysis_data.feeding_recommendations.adjustments?.water_quality || 0}%</span></p>
+                  <p>Temperature: <span className="font-semibold">{advice.data.analysis_data.feeding_recommendations.adjustments?.temperature || 0 > 0 ? '+' : ''}{advice.data.analysis_data.feeding_recommendations.adjustments?.temperature || 0}%</span></p>
+                  <p>Mortality: <span className="font-semibold">{advice.data.analysis_data.feeding_recommendations.adjustments?.mortality || 0 > 0 ? '+' : ''}{advice.data.analysis_data.feeding_recommendations.adjustments?.mortality || 0}%</span></p>
+                  <p>Growth: <span className="font-semibold">{advice.data.analysis_data.feeding_recommendations.adjustments?.growth || 0 > 0 ? '+' : ''}{advice.data.analysis_data.feeding_recommendations.adjustments?.growth || 0}%</span></p>
+                  <p>Seasonal: <span className="font-semibold">{advice.data.analysis_data.feeding_recommendations.adjustments?.seasonal || 0 > 0 ? '+' : ''}{advice.data.analysis_data.feeding_recommendations.adjustments?.seasonal || 0}%</span></p>
+                  <p className="font-semibold text-orange-900">Total: {advice.data.analysis_data.feeding_recommendations.adjustments?.total_adjustment || 0 > 0 ? '+' : ''}{advice.data.analysis_data.feeding_recommendations.adjustments?.total_adjustment || 0}%</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Comprehensive Analysis */}
+        {advice.data.analysis_data && (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Comprehensive Analysis</h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {/* Water Quality Analysis */}
+              <div className="bg-blue-50 rounded-lg p-4">
+                <h3 className="text-sm font-medium text-blue-900 mb-2">Water Quality</h3>
+                <div className="space-y-1 text-sm text-blue-700">
+                  <p>Status: <span className="font-semibold capitalize">{advice.data.analysis_data.water_quality_analysis?.quality_status || 'Unknown'}</span></p>
+                  <p>Score: <span className="font-semibold">{advice.data.analysis_data.water_quality_analysis?.quality_score || 0}/100</span></p>
+                  {advice.data.analysis_data.water_quality_analysis?.temperature && (
+                    <p>Temp: <span className="font-semibold">{advice.data.analysis_data.water_quality_analysis.temperature}°C</span></p>
+                  )}
+                  {advice.data.analysis_data.water_quality_analysis?.ph && (
+                    <p>pH: <span className="font-semibold">{advice.data.analysis_data.water_quality_analysis.ph}</span></p>
+                  )}
+                </div>
+              </div>
+
+              {/* Mortality Analysis */}
+              <div className="bg-red-50 rounded-lg p-4">
+                <h3 className="text-sm font-medium text-red-900 mb-2">Mortality Analysis</h3>
+                <div className="space-y-1 text-sm text-red-700">
+                  <p>Recent Deaths: <span className="font-semibold">{advice.data.analysis_data.mortality_analysis?.total_recent_deaths || 0}</span></p>
+                  <p>Events: <span className="font-semibold">{advice.data.analysis_data.mortality_analysis?.mortality_events || 0}</span></p>
+                  <p>Risk Factors: <span className="font-semibold">{advice.data.analysis_data.mortality_analysis?.risk_factors?.length || 0}</span></p>
+                </div>
+              </div>
+
+              {/* Growth Analysis */}
+              <div className="bg-green-50 rounded-lg p-4">
+                <h3 className="text-sm font-medium text-green-900 mb-2">Growth Analysis</h3>
+                <div className="space-y-1 text-sm text-green-700">
+                  <p>Rate: <span className="font-semibold">{(advice.data.analysis_data.growth_analysis?.growth_rate_kg_per_day || 0).toFixed(4)} kg/day</span></p>
+                  <p>Trend: <span className="font-semibold capitalize">{advice.data.analysis_data.growth_analysis?.growth_trend || 'Unknown'}</span></p>
+                  <p>Quality: <span className="font-semibold capitalize">{advice.data.analysis_data.growth_analysis?.growth_quality || 'Unknown'}</span></p>
+                </div>
+              </div>
+
+              {/* Feeding Pattern Analysis */}
+              <div className="bg-yellow-50 rounded-lg p-4">
+                <h3 className="text-sm font-medium text-yellow-900 mb-2">Feeding Patterns</h3>
+                <div className="space-y-1 text-sm text-yellow-700">
+                  <p>Avg Daily: <span className="font-semibold">{(advice.data.analysis_data.feeding_analysis?.avg_daily_feed || 0).toFixed(2)} kg</span></p>
+                  <p>Consistency: <span className="font-semibold capitalize">{advice.data.analysis_data.feeding_analysis?.feeding_consistency || 'Unknown'}</span></p>
+                  <p>Feed Types: <span className="font-semibold">{advice.data.analysis_data.feeding_analysis?.feed_types_used?.length || 0}</span></p>
+                </div>
+              </div>
+
+              {/* Environmental Factors */}
+              <div className="bg-purple-50 rounded-lg p-4">
+                <h3 className="text-sm font-medium text-purple-900 mb-2">Environmental</h3>
+                <div className="space-y-1 text-sm text-purple-700">
+                  <p>Season: <span className="font-semibold capitalize">{advice.data.analysis_data.environmental_analysis?.season || 'Unknown'}</span></p>
+                  <p>Temp Trend: <span className="font-semibold capitalize">{advice.data.analysis_data.environmental_analysis?.temperature_trend || 'Unknown'}</span></p>
+                  <p>Factors: <span className="font-semibold">{advice.data.analysis_data.environmental_analysis?.seasonal_factors?.length || 0}</span></p>
+                </div>
+              </div>
+
+              {/* Fish Population */}
+              <div className="bg-indigo-50 rounded-lg p-4">
+                <h3 className="text-sm font-medium text-indigo-900 mb-2">Fish Population</h3>
+                <div className="space-y-1 text-sm text-indigo-700">
+                  <p>Current Count: <span className="font-semibold">{advice.data.analysis_data.fish_count_analysis?.current_count?.toLocaleString() || 0}</span></p>
+                  <p>Survival Rate: <span className="font-semibold">{(advice.data.analysis_data.fish_count_analysis?.survival_rate || 0).toFixed(1)}%</span></p>
+                  <p>Mortality Trend: <span className="font-semibold capitalize">{advice.data.analysis_data.fish_count_analysis?.mortality_trend || 'Unknown'}</span></p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Notes */}
         {advice.data.notes && (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Notes & Observations</h2>
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Detailed Analysis & Recommendations</h2>
             <p className="text-gray-700 whitespace-pre-wrap">{advice.data.notes}</p>
           </div>
         )}

@@ -29,19 +29,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check for existing token on app load
+    // Check for existing token and user data on app load
     const savedToken = localStorage.getItem('authToken');
-    if (savedToken) {
+    const savedUser = localStorage.getItem('userData');
+    
+    if (savedToken && savedUser) {
       setToken(savedToken);
-      // You could also fetch user details here if needed
-      // For now, we'll just set a basic user object
-      setUser({
-        id: 1,
-        username: 'admin',
-        email: 'admin@example.com',
-        first_name: 'Admin',
-        last_name: 'User'
-      });
+      try {
+        const userData = JSON.parse(savedUser);
+        setUser(userData);
+      } catch (error) {
+        console.error('Error parsing saved user data:', error);
+        // Clear invalid data
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('userData');
+      }
     }
     setIsLoading(false);
   }, []);
@@ -57,13 +59,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem('authToken', authToken);
         
         // Set user data
-        setUser({
+        const userData = {
           id: response.user?.id || 1,
           username: response.user?.username || username,
           email: response.user?.email || `${username}@example.com`,
           first_name: response.user?.first_name || username,
           last_name: response.user?.last_name || ''
-        });
+        };
+        setUser(userData);
+        localStorage.setItem('userData', JSON.stringify(userData));
         
         toast.success('Login successful!');
         return true;
@@ -85,6 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null);
     setUser(null);
     localStorage.removeItem('authToken');
+    localStorage.removeItem('userData');
     toast.success('Logged out successfully');
   };
 

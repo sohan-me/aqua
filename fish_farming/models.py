@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.db.models import Sum
 from decimal import Decimal
 
 
@@ -78,8 +79,9 @@ class Stocking(models.Model):
     species = models.ForeignKey(Species, on_delete=models.CASCADE, related_name='stockings')
     date = models.DateField()
     pcs = models.PositiveIntegerField(help_text="Number of pieces stocked")
-    line_pcs_per_kg = models.DecimalField(max_digits=10, decimal_places=2, help_text="Pieces per kg")
-    initial_avg_g = models.DecimalField(max_digits=10, decimal_places=3, help_text="Initial average weight in grams")
+    pieces_per_kg = models.DecimalField(max_digits=15, decimal_places=10, null=True, blank=True, help_text="Pieces per kg")
+    total_weight_kg = models.DecimalField(max_digits=15, decimal_places=10, default=0, help_text="Total weight in kg")
+    initial_avg_weight_kg = models.DecimalField(max_digits=15, decimal_places=10, default=0, help_text="Initial average weight in kg")
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     
@@ -90,10 +92,21 @@ class Stocking(models.Model):
     def __str__(self):
         return f"{self.pond.name} - {self.species.name} ({self.date})"
     
-    @property
-    def total_weight_kg(self):
-        """Calculate total weight in kg"""
-        return (self.pcs * self.initial_avg_g) / 1000
+    def save(self, *args, **kwargs):
+        # Auto-calculate pieces_per_kg if pcs and total_weight_kg are provided and pieces_per_kg is not already set
+        if self.pcs and self.total_weight_kg and self.total_weight_kg > 0 and not self.pieces_per_kg:
+            self.pieces_per_kg = self.pcs / self.total_weight_kg
+        
+        # Auto-calculate initial_avg_weight_kg if we have both pcs and total_weight_kg
+        if self.pcs and self.total_weight_kg and self.total_weight_kg > 0:
+            self.initial_avg_weight_kg = self.total_weight_kg / self.pcs
+        
+        # Auto-calculate total_weight_kg and initial_avg_weight_kg if pieces_per_kg is provided but total_weight_kg is not
+        elif self.pcs and self.pieces_per_kg and (not self.total_weight_kg or self.total_weight_kg == 0):
+            self.total_weight_kg = self.pcs / self.pieces_per_kg
+            self.initial_avg_weight_kg = self.total_weight_kg / self.pcs
+        
+        super().save(*args, **kwargs)
 
 
 class DailyLog(models.Model):
@@ -140,7 +153,9 @@ class Feed(models.Model):
     feeding_time = models.TimeField(null=True, blank=True)
     
     # Feed consumption tracking
-    cost_per_packet = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True, help_text="Cost per packet (25kg) of feed")
+    packet_size_kg = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True, help_text="Size of each packet in kg (e.g., 15kg, 25kg)")
+    cost_per_packet = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True, help_text="Cost per packet of feed")
+    cost_per_kg = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True, help_text="Cost per kg of feed")
     total_cost = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total cost for this feeding")
     consumption_rate_kg_per_day = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True, help_text="Daily consumption rate in kg")
     biomass_at_feeding_kg = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Estimated fish biomass at time of feeding")
@@ -156,9 +171,9 @@ class Feed(models.Model):
         return f"{self.pond.name} - {self.feed_type.name} ({self.date})"
     
     def save(self, *args, **kwargs):
-        # Auto-calculate total cost if cost_per_packet is provided
-        if self.cost_per_packet and not self.total_cost:
-            # Calculate packets used (25kg per packet)
+        # Auto-calculate total cost based on input method
+        if self.cost_per_packet and self.packet_size_kg and not self.total_cost:
+            # Calculate cost when using packets
             if isinstance(self.amount_kg, (int, float)):
                 amount_kg_decimal = Decimal(str(self.amount_kg))
             else:
@@ -167,8 +182,25 @@ class Feed(models.Model):
                 cost_per_packet_decimal = Decimal(str(self.cost_per_packet))
             else:
                 cost_per_packet_decimal = self.cost_per_packet
-            packets_used = amount_kg_decimal / Decimal('25')
+            if isinstance(self.packet_size_kg, (int, float)):
+                packet_size_decimal = Decimal(str(self.packet_size_kg))
+            else:
+                packet_size_decimal = self.packet_size_kg
+            
+            packets_used = amount_kg_decimal / packet_size_decimal
             self.total_cost = packets_used * cost_per_packet_decimal
+        elif self.cost_per_kg and not self.total_cost:
+            # Calculate cost when using kg directly
+            if isinstance(self.amount_kg, (int, float)):
+                amount_kg_decimal = Decimal(str(self.amount_kg))
+            else:
+                amount_kg_decimal = self.amount_kg
+            if isinstance(self.cost_per_kg, (int, float)):
+                cost_per_kg_decimal = Decimal(str(self.cost_per_kg))
+            else:
+                cost_per_kg_decimal = self.cost_per_kg
+            
+            self.total_cost = cost_per_kg_decimal * amount_kg_decimal
         
         # Auto-calculate feeding rate if biomass is provided
         if self.biomass_at_feeding_kg and self.amount_kg:
@@ -232,9 +264,11 @@ class Sampling(models.Model):
 class Mortality(models.Model):
     """Mortality tracking"""
     pond = models.ForeignKey(Pond, on_delete=models.CASCADE, related_name='mortalities')
+    species = models.ForeignKey(Species, on_delete=models.CASCADE, related_name='mortalities', null=True, blank=True)
     date = models.DateField()
     count = models.PositiveIntegerField()
-    avg_weight_g = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    avg_weight_kg = models.DecimalField(max_digits=15, decimal_places=10, null=True, blank=True)
+    total_weight_kg = models.DecimalField(max_digits=15, decimal_places=10, null=True, blank=True)
     cause = models.CharField(max_length=200, blank=True)
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -244,17 +278,47 @@ class Mortality(models.Model):
         verbose_name_plural = 'Mortalities'
     
     def __str__(self):
-        return f"{self.pond.name} - {self.count} fish ({self.date})"
+        species_name = self.species.name if self.species else "Mixed"
+        return f"{self.pond.name} - {species_name} - {self.count} fish ({self.date})"
+    
+    def save(self, *args, **kwargs):
+        # Auto-calculate avg_weight_kg from latest fish sampling data if not provided
+        if not self.avg_weight_kg and self.pond and self.species:
+            # Get latest fish sampling data for this pond and species
+            latest_sampling = FishSampling.objects.filter(
+                pond=self.pond, 
+                species=self.species
+            ).order_by('-date').first()
+            
+            if latest_sampling and latest_sampling.average_weight_kg:
+                self.avg_weight_kg = latest_sampling.average_weight_kg
+            else:
+                # Fallback: get from latest stocking data
+                latest_stocking = Stocking.objects.filter(
+                    pond=self.pond, 
+                    species=self.species
+                ).order_by('-date').first()
+                
+                if latest_stocking and latest_stocking.initial_avg_weight_kg:
+                    self.avg_weight_kg = latest_stocking.initial_avg_weight_kg
+        
+        # Auto-calculate total_weight_kg
+        if self.count and self.avg_weight_kg:
+            self.total_weight_kg = self.count * self.avg_weight_kg
+        
+        super().save(*args, **kwargs)
 
 
 class Harvest(models.Model):
     """Harvest records"""
     pond = models.ForeignKey(Pond, on_delete=models.CASCADE, related_name='harvests')
+    species = models.ForeignKey(Species, on_delete=models.CASCADE, related_name='harvests', null=True, blank=True)
     date = models.DateField()
-    total_weight_kg = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
-    total_count = models.PositiveIntegerField()
-    avg_weight_g = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    total_weight_kg = models.DecimalField(max_digits=15, decimal_places=10, validators=[MinValueValidator(Decimal('0.01'))])
+    pieces_per_kg = models.DecimalField(max_digits=15, decimal_places=10, null=True, blank=True, help_text="Pieces per kg")
     price_per_kg = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    avg_weight_kg = models.DecimalField(max_digits=15, decimal_places=10, default=0)
+    total_count = models.PositiveIntegerField(null=True, blank=True)
     total_revenue = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -263,9 +327,20 @@ class Harvest(models.Model):
         ordering = ['-date']
     
     def __str__(self):
-        return f"{self.pond.name} - {self.total_weight_kg}kg ({self.date})"
+        species_name = self.species.name if self.species else "Mixed"
+        return f"{self.pond.name} - {species_name} - {self.total_weight_kg}kg ({self.date})"
     
     def save(self, *args, **kwargs):
+        # Auto-calculate pieces_per_kg if total_count and total_weight_kg are provided
+        if self.total_count and self.total_weight_kg and self.total_weight_kg > 0 and not self.pieces_per_kg:
+            self.pieces_per_kg = self.total_count / self.total_weight_kg
+        
+        # Auto-calculate avg_weight_kg and total_count if pieces_per_kg is provided
+        if self.total_weight_kg and self.pieces_per_kg:
+            self.avg_weight_kg = Decimal('1') / self.pieces_per_kg
+            if not self.total_count:
+                self.total_count = int(self.total_weight_kg * self.pieces_per_kg)
+        
         # Auto-calculate revenue if price is provided
         if self.price_per_kg and not self.total_revenue:
             self.total_revenue = self.total_weight_kg * self.price_per_kg
@@ -319,6 +394,7 @@ class Expense(models.Model):
     """Expense tracking"""
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='expenses')
     pond = models.ForeignKey(Pond, on_delete=models.CASCADE, related_name='expenses', null=True, blank=True)
+    species = models.ForeignKey(Species, on_delete=models.CASCADE, related_name='expenses', null=True, blank=True)
     expense_type = models.ForeignKey(ExpenseType, on_delete=models.CASCADE, related_name='expenses')
     date = models.DateField()
     amount = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
@@ -339,6 +415,7 @@ class Income(models.Model):
     """Income tracking"""
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='incomes')
     pond = models.ForeignKey(Pond, on_delete=models.CASCADE, related_name='incomes', null=True, blank=True)
+    species = models.ForeignKey(Species, on_delete=models.CASCADE, related_name='incomes', null=True, blank=True)
     income_type = models.ForeignKey(IncomeType, on_delete=models.CASCADE, related_name='incomes')
     date = models.DateField()
     amount = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
@@ -520,17 +597,19 @@ class KPIDashboard(models.Model):
 class FishSampling(models.Model):
     """Fish sampling for growth monitoring"""
     pond = models.ForeignKey(Pond, on_delete=models.CASCADE, related_name='fish_samplings')
+    species = models.ForeignKey(Species, on_delete=models.CASCADE, related_name='fish_samplings', null=True, blank=True)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='fish_samplings')
     date = models.DateField()
     
     # Sampling data
     sample_size = models.PositiveIntegerField(help_text="Number of fish sampled")
-    total_weight_kg = models.DecimalField(max_digits=8, decimal_places=3, help_text="Total weight of sampled fish in kg")
-    average_weight_g = models.DecimalField(max_digits=8, decimal_places=2, help_text="Average weight per fish in grams")
-    fish_per_kg = models.DecimalField(max_digits=8, decimal_places=2, help_text="Number of fish per kg")
+    total_weight_kg = models.DecimalField(max_digits=15, decimal_places=10, help_text="Total weight of sampled fish in kg")
+    average_weight_kg = models.DecimalField(max_digits=15, decimal_places=10, default=0, help_text="Average weight per fish in kg")
+    fish_per_kg = models.DecimalField(max_digits=15, decimal_places=10, help_text="Number of fish per kg")
     
     # Growth metrics
-    growth_rate_g_per_day = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True, help_text="Daily growth rate in grams")
+    growth_rate_kg_per_day = models.DecimalField(max_digits=15, decimal_places=10, null=True, blank=True, help_text="Daily growth rate in kg")
+    biomass_difference_kg = models.DecimalField(max_digits=15, decimal_places=10, null=True, blank=True, help_text="Total biomass difference from previous sampling in kg")
     condition_factor = models.DecimalField(max_digits=8, decimal_places=3, null=True, blank=True, help_text="Fish condition factor")
     
     # Notes and observations
@@ -540,39 +619,178 @@ class FishSampling(models.Model):
     
     class Meta:
         ordering = ['-date', '-created_at']
-        unique_together = ['pond', 'date']
+        unique_together = ['pond', 'species', 'date']
     
     def __str__(self):
-        return f"{self.pond.name} - Sampling ({self.date})"
+        species_name = self.species.name if self.species else "Mixed"
+        return f"{self.pond.name} - {species_name} Sampling ({self.date})"
     
     def save(self, *args, **kwargs):
         # Auto-calculate derived metrics
         if self.total_weight_kg and self.sample_size:
-            # Calculate average weight in grams
-            self.average_weight_g = (self.total_weight_kg * 1000) / self.sample_size
+            # Calculate average weight in kg
+            self.average_weight_kg = self.total_weight_kg / self.sample_size
             
             # Calculate fish per kg
             self.fish_per_kg = self.sample_size / self.total_weight_kg
             
-            # Calculate condition factor (K = 100 * W / L^3, simplified for weight-based)
-            # This is a simplified version - in practice you'd need length measurements
-            if self.average_weight_g:
-                # Using a simplified condition factor based on weight
-                self.condition_factor = self.average_weight_g / 100  # Simplified calculation
+            # Calculate condition factor (simplified version)
+            if self.average_weight_kg:
+                self.condition_factor = self.average_weight_kg * 1000  # Simplified calculation
+        
+        # Always calculate growth rate before saving
+        self.calculate_growth_rate()
         
         super().save(*args, **kwargs)
+    
+    def calculate_growth_rate(self):
+        """Calculate daily growth rate and biomass difference based on previous sampling or initial stocking"""
+        # Get the previous sampling for the same pond
+        # If species is specified, try to find same species first, otherwise any species
+        if self.species:
+            # First try to find previous sampling with same species
+            previous_sampling = FishSampling.objects.filter(
+                pond=self.pond,
+                species=self.species,
+                date__lt=self.date
+            ).order_by('-date').first()
+            
+            # If no same species found, look for any previous sampling in the same pond
+            if not previous_sampling:
+                previous_sampling = FishSampling.objects.filter(
+                    pond=self.pond,
+                    date__lt=self.date
+                ).order_by('-date').first()
+        else:
+            # If no species specified, look for any previous sampling in the same pond
+            previous_sampling = FishSampling.objects.filter(
+                pond=self.pond,
+                date__lt=self.date
+            ).order_by('-date').first()
+        
+        # If no previous sampling found, compare with initial stocking data
+        if not previous_sampling:
+            # This is the first sampling - compare with initial stocking
+            if self.species:
+                # Find the most recent stocking for this pond and species
+                latest_stocking = Stocking.objects.filter(
+                    pond=self.pond,
+                    species=self.species
+                ).order_by('-date').first()
+            else:
+                # Find the most recent stocking for this pond (any species)
+                latest_stocking = Stocking.objects.filter(
+                    pond=self.pond
+                ).order_by('-date').first()
+            
+            if latest_stocking and latest_stocking.total_weight_kg and latest_stocking.pcs:
+                # Calculate days since stocking
+                days_diff = (self.date - latest_stocking.date).days
+                
+                if days_diff > 0:
+                    # Calculate initial average weight from stocking
+                    initial_avg_weight = float(latest_stocking.total_weight_kg) / float(latest_stocking.pcs)
+                    
+                    # Calculate weight difference per fish
+                    weight_diff = float(self.average_weight_kg) - initial_avg_weight
+                    
+                    # Calculate daily growth rate (can be positive or negative)
+                    growth_rate_value = weight_diff / days_diff
+                    self.growth_rate_kg_per_day = Decimal(str(growth_rate_value))
+                    
+                    # Calculate total biomass difference
+                    # Use current fish count (stocked - mortality - harvested)
+                    total_fish_count = self.estimate_total_fish_count()
+                    if total_fish_count:
+                        self.biomass_difference_kg = Decimal(str(weight_diff * total_fish_count))
+                    else:
+                        self.biomass_difference_kg = None
+                else:
+                    self.growth_rate_kg_per_day = None
+                    self.biomass_difference_kg = None
+            else:
+                self.growth_rate_kg_per_day = None
+                self.biomass_difference_kg = None
+        else:
+            # Compare with previous sampling
+            if previous_sampling.average_weight_kg:
+                # Calculate days difference
+                days_diff = (self.date - previous_sampling.date).days
+                
+                if days_diff > 0:
+                    # Calculate weight difference per fish
+                    weight_diff = float(self.average_weight_kg) - float(previous_sampling.average_weight_kg)
+                    
+                    # Calculate daily growth rate (can be positive or negative)
+                    self.growth_rate_kg_per_day = Decimal(str(weight_diff / days_diff))
+                    
+                    # Calculate total biomass difference
+                    # Estimate total fish count in pond based on stocking and mortality data
+                    total_fish_count = self.estimate_total_fish_count()
+                    if total_fish_count:
+                        self.biomass_difference_kg = Decimal(str(weight_diff * total_fish_count))
+                    else:
+                        self.biomass_difference_kg = None
+                else:
+                    self.growth_rate_kg_per_day = None
+                    self.biomass_difference_kg = None
+            else:
+                self.growth_rate_kg_per_day = None
+                self.biomass_difference_kg = None
+    
+    def estimate_total_fish_count(self):
+        """Estimate total fish count in pond based on stocking, mortality, and harvest data"""
+        try:
+            # Get total stocked fish for this species (or all species if no species specified)
+            if self.species:
+                total_stocked = Stocking.objects.filter(pond=self.pond, species=self.species).aggregate(
+                    total=models.Sum('pcs')
+                )['total'] or 0
+                
+                # Get total mortality for this species
+                total_mortality = Mortality.objects.filter(pond=self.pond, species=self.species).aggregate(
+                    total=models.Sum('count')
+                )['total'] or 0
+                
+                # Get total harvested for this species
+                total_harvested = Harvest.objects.filter(pond=self.pond, species=self.species).aggregate(
+                    total=models.Sum('total_count')
+                )['total'] or 0
+            else:
+                # If no species specified, use all species in the pond
+                total_stocked = Stocking.objects.filter(pond=self.pond).aggregate(
+                    total=models.Sum('pcs')
+                )['total'] or 0
+                
+                # Get total mortality
+                total_mortality = Mortality.objects.filter(pond=self.pond).aggregate(
+                    total=models.Sum('count')
+                )['total'] or 0
+                
+                # Get total harvested
+                total_harvested = Harvest.objects.filter(pond=self.pond).aggregate(
+                    total=models.Sum('total_count')
+                )['total'] or 0
+            
+            # Calculate current alive fish
+            current_alive = total_stocked - total_mortality - total_harvested
+            
+            return max(0, current_alive)
+        except Exception:
+            return None
 
 
 class FeedingAdvice(models.Model):
     """AI-powered feeding advice based on fish growth and conditions"""
     pond = models.ForeignKey(Pond, on_delete=models.CASCADE, related_name='feeding_advice')
+    species = models.ForeignKey(Species, on_delete=models.CASCADE, related_name='feeding_advice', null=True, blank=True)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='feeding_advice')
     date = models.DateField()
     
     # Fish data
     estimated_fish_count = models.PositiveIntegerField(help_text="Estimated number of fish in pond")
-    average_fish_weight_g = models.DecimalField(max_digits=8, decimal_places=2, help_text="Average fish weight in grams")
-    total_biomass_kg = models.DecimalField(max_digits=10, decimal_places=2, help_text="Total fish biomass in kg")
+    average_fish_weight_kg = models.DecimalField(max_digits=15, decimal_places=10, default=0, help_text="Average fish weight in kg")
+    total_biomass_kg = models.DecimalField(max_digits=15, decimal_places=10, help_text="Total fish biomass in kg")
     
     # Feeding recommendations
     recommended_feed_kg = models.DecimalField(max_digits=8, decimal_places=2, help_text="Recommended daily feed amount in kg")
@@ -605,18 +823,34 @@ class FeedingAdvice(models.Model):
         ordering = ['-date', '-created_at']
     
     def __str__(self):
-        return f"{self.pond.name} - Feeding Advice ({self.date})"
+        species_name = self.species.name if self.species else "Mixed"
+        return f"{self.pond.name} - {species_name} Feeding Advice ({self.date})"
     
     def save(self, *args, **kwargs):
         # Auto-calculate derived metrics
-        if self.estimated_fish_count and self.average_fish_weight_g:
+        if self.estimated_fish_count and self.average_fish_weight_kg:
             # Calculate total biomass
-            self.total_biomass_kg = (self.estimated_fish_count * self.average_fish_weight_g) / 1000
+            self.total_biomass_kg = self.estimated_fish_count * self.average_fish_weight_kg
             
-            # Calculate recommended feed based on biomass (typically 2-5% of biomass)
+            # Calculate recommended feed based on feeding bands
             if self.total_biomass_kg:
-                # Adjust feeding rate based on season and temperature
-                base_rate = Decimal('3.0')  # 3% of biomass as base rate
+                # Get the appropriate feeding band based on average fish weight
+                avg_weight_g = float(self.average_fish_weight_kg) * 1000  # Convert kg to grams
+                
+                # Find the appropriate feeding band
+                feeding_band = FeedingBand.objects.filter(
+                    min_weight_g__lte=avg_weight_g,
+                    max_weight_g__gte=avg_weight_g
+                ).first()
+                
+                if feeding_band:
+                    # Use the feeding band's rate
+                    base_rate = feeding_band.feeding_rate_percent
+                    self.feeding_frequency = feeding_band.frequency_per_day
+                else:
+                    # Fallback to default rate if no band found
+                    base_rate = Decimal('3.0')  # 3% of biomass as base rate
+                    self.feeding_frequency = 2
                 
                 # Temperature adjustment
                 if self.water_temp_c:
@@ -637,5 +871,46 @@ class FeedingAdvice(models.Model):
                 # Calculate daily feed cost
                 if self.feed_cost_per_kg:
                     self.daily_feed_cost = self.recommended_feed_kg * self.feed_cost_per_kg
+        
+        super().save(*args, **kwargs)
+
+
+class SurvivalRate(models.Model):
+    """Survival rate tracking for ponds and species"""
+    pond = models.ForeignKey(Pond, on_delete=models.CASCADE, related_name='survival_rates')
+    species = models.ForeignKey(Species, on_delete=models.CASCADE, related_name='survival_rates', null=True, blank=True)
+    date = models.DateField()
+    
+    # Stocking data
+    initial_stocked = models.PositiveIntegerField(help_text="Initial number of fish stocked")
+    current_alive = models.PositiveIntegerField(help_text="Current number of alive fish")
+    
+    # Mortality data
+    total_mortality = models.PositiveIntegerField(default=0, help_text="Total mortality count")
+    total_harvested = models.PositiveIntegerField(default=0, help_text="Total harvested count")
+    
+    # Calculated metrics
+    survival_rate_percent = models.DecimalField(max_digits=5, decimal_places=2, help_text="Survival rate percentage")
+    total_survival_kg = models.DecimalField(max_digits=10, decimal_places=2, help_text="Total survival weight in kg")
+    
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-date']
+        unique_together = ['pond', 'species', 'date']
+    
+    def __str__(self):
+        species_name = self.species.name if self.species else "Mixed"
+        return f"{self.pond.name} - {species_name} Survival Rate ({self.date})"
+    
+    def save(self, *args, **kwargs):
+        # Calculate survival rate
+        if self.initial_stocked > 0:
+            self.survival_rate_percent = (self.current_alive / self.initial_stocked) * 100
+        
+        # Calculate total mortality and harvested
+        self.total_mortality = self.initial_stocked - self.current_alive - self.total_harvested
         
         super().save(*args, **kwargs)

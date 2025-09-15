@@ -27,19 +27,19 @@ export function StatsCard({
   }[changeType];
 
   return (
-    <div className="rounded-lg bg-white p-6 shadow-sm border border-gray-200">
+    <div className="rounded-xl bg-white/80 backdrop-blur-sm p-6 shadow-lg border border-gray-200/50 hover:shadow-xl transition-all duration-300 hover:scale-105">
       <div className="flex items-center justify-between">
         <div className="flex-1">
-          <p className="text-sm font-medium text-gray-600">{title}</p>
-          <p className="text-2xl font-semibold text-gray-900">{value}</p>
+          <p className="text-sm font-medium text-gray-600 mb-1">{title}</p>
+          <p className="text-3xl font-bold text-gray-900 mb-2">{value}</p>
           {change && (
-            <p className={cn('text-sm', changeColor)}>
+            <p className={cn('text-sm font-medium', changeColor)}>
               {change}
             </p>
           )}
         </div>
-        <div className={cn('rounded-full bg-gray-50 p-3', iconColor)}>
-          <Icon className="h-6 w-6" />
+        <div className={cn('rounded-xl bg-gradient-to-br from-blue-50 to-cyan-50 p-4 shadow-lg', iconColor)}>
+          <Icon className="h-7 w-7" />
         </div>
       </div>
     </div>

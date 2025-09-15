@@ -3,7 +3,7 @@ from .models import (
     Pond, Species, Stocking, DailyLog, FeedType, Feed, SampleType, Sampling, 
     Mortality, Harvest, ExpenseType, IncomeType, Expense, Income, 
     InventoryFeed, Treatment, Alert, Setting, FeedingBand, 
-    EnvAdjustment, KPIDashboard, FishSampling, FeedingAdvice
+    EnvAdjustment, KPIDashboard, FishSampling, FeedingAdvice, SurvivalRate
 )
 
 
@@ -24,14 +24,10 @@ class SpeciesAdmin(admin.ModelAdmin):
 
 @admin.register(Stocking)
 class StockingAdmin(admin.ModelAdmin):
-    list_display = ['stocking_id', 'pond', 'species', 'date', 'pcs', 'initial_avg_g', 'total_weight_kg']
+    list_display = ['stocking_id', 'pond', 'species', 'date', 'pcs', 'initial_avg_weight_kg', 'total_weight_kg']
     list_filter = ['date', 'species', 'pond__user']
     search_fields = ['pond__name', 'species__name', 'notes']
-    readonly_fields = ['stocking_id', 'total_weight_kg', 'created_at']
-    
-    def total_weight_kg(self, obj):
-        return obj.total_weight_kg
-    total_weight_kg.short_description = 'Total Weight (kg)'
+    readonly_fields = ['stocking_id', 'total_weight_kg', 'initial_avg_weight_kg', 'created_at']
 
 
 @admin.register(DailyLog)
@@ -75,18 +71,18 @@ class SamplingAdmin(admin.ModelAdmin):
 
 @admin.register(Mortality)
 class MortalityAdmin(admin.ModelAdmin):
-    list_display = ['pond', 'date', 'count', 'avg_weight_g', 'cause']
-    list_filter = ['date', 'pond__user']
-    search_fields = ['pond__name', 'cause', 'notes']
-    readonly_fields = ['created_at']
+    list_display = ['pond', 'species', 'date', 'count', 'avg_weight_kg', 'total_weight_kg', 'cause']
+    list_filter = ['date', 'species', 'pond__user']
+    search_fields = ['pond__name', 'species__name', 'cause', 'notes']
+    readonly_fields = ['total_weight_kg', 'created_at']
 
 
 @admin.register(Harvest)
 class HarvestAdmin(admin.ModelAdmin):
-    list_display = ['pond', 'date', 'total_weight_kg', 'total_count', 'price_per_kg', 'total_revenue']
-    list_filter = ['date', 'pond__user']
-    search_fields = ['pond__name', 'notes']
-    readonly_fields = ['total_revenue', 'created_at']
+    list_display = ['pond', 'species', 'date', 'total_weight_kg', 'pieces_per_kg', 'avg_weight_kg', 'total_count', 'price_per_kg', 'total_revenue']
+    list_filter = ['date', 'species', 'pond__user']
+    search_fields = ['pond__name', 'species__name', 'notes']
+    readonly_fields = ['avg_weight_kg', 'total_count', 'total_revenue', 'created_at']
 
 
 @admin.register(ExpenseType)
@@ -107,17 +103,17 @@ class IncomeTypeAdmin(admin.ModelAdmin):
 
 @admin.register(Expense)
 class ExpenseAdmin(admin.ModelAdmin):
-    list_display = ['expense_type', 'user', 'pond', 'date', 'amount', 'supplier']
-    list_filter = ['date', 'expense_type__category', 'user']
-    search_fields = ['expense_type__name', 'user__username', 'pond__name', 'supplier', 'notes']
+    list_display = ['expense_type', 'user', 'pond', 'species', 'date', 'amount', 'supplier']
+    list_filter = ['date', 'expense_type__category', 'user', 'species']
+    search_fields = ['expense_type__name', 'user__username', 'pond__name', 'species__name', 'supplier', 'notes']
     readonly_fields = ['created_at']
 
 
 @admin.register(Income)
 class IncomeAdmin(admin.ModelAdmin):
-    list_display = ['income_type', 'user', 'pond', 'date', 'amount', 'customer']
-    list_filter = ['date', 'income_type__category', 'user']
-    search_fields = ['income_type__name', 'user__username', 'pond__name', 'customer', 'notes']
+    list_display = ['income_type', 'user', 'pond', 'species', 'date', 'amount', 'customer']
+    list_filter = ['date', 'income_type__category', 'user', 'species']
+    search_fields = ['income_type__name', 'user__username', 'pond__name', 'species__name', 'customer', 'notes']
     readonly_fields = ['created_at']
 
 
@@ -178,19 +174,19 @@ class KPIDashboardAdmin(admin.ModelAdmin):
 
 @admin.register(FishSampling)
 class FishSamplingAdmin(admin.ModelAdmin):
-    list_display = ['pond', 'date', 'sample_size', 'total_weight_kg', 'average_weight_g', 'fish_per_kg', 'created_at']
-    list_filter = ['date', 'pond__user', 'created_at']
-    search_fields = ['pond__name', 'notes']
-    readonly_fields = ['average_weight_g', 'fish_per_kg', 'condition_factor', 'created_at', 'updated_at']
+    list_display = ['pond', 'species', 'date', 'sample_size', 'total_weight_kg', 'average_weight_kg', 'fish_per_kg', 'biomass_difference_kg', 'created_at']
+    list_filter = ['date', 'species', 'pond__user', 'created_at']
+    search_fields = ['pond__name', 'species__name', 'notes']
+    readonly_fields = ['average_weight_kg', 'fish_per_kg', 'condition_factor', 'growth_rate_kg_per_day', 'biomass_difference_kg', 'created_at', 'updated_at']
     fieldsets = (
         ('Basic Information', {
-            'fields': ('pond', 'user', 'date')
+            'fields': ('pond', 'species', 'user', 'date')
         }),
         ('Sampling Data', {
             'fields': ('sample_size', 'total_weight_kg')
         }),
         ('Calculated Metrics', {
-            'fields': ('average_weight_g', 'fish_per_kg', 'growth_rate_g_per_day', 'condition_factor'),
+            'fields': ('average_weight_kg', 'fish_per_kg', 'growth_rate_kg_per_day', 'biomass_difference_kg', 'condition_factor'),
             'classes': ('collapse',)
         }),
         ('Additional Information', {
@@ -202,16 +198,16 @@ class FishSamplingAdmin(admin.ModelAdmin):
 
 @admin.register(FeedingAdvice)
 class FeedingAdviceAdmin(admin.ModelAdmin):
-    list_display = ['pond', 'date', 'estimated_fish_count', 'total_biomass_kg', 'recommended_feed_kg', 'feeding_rate_percent', 'is_applied']
-    list_filter = ['date', 'pond__user', 'season', 'is_applied', 'created_at']
-    search_fields = ['pond__name', 'notes']
+    list_display = ['pond', 'species', 'date', 'estimated_fish_count', 'total_biomass_kg', 'recommended_feed_kg', 'feeding_rate_percent', 'is_applied']
+    list_filter = ['date', 'species', 'pond__user', 'season', 'is_applied', 'created_at']
+    search_fields = ['pond__name', 'species__name', 'notes']
     readonly_fields = ['total_biomass_kg', 'recommended_feed_kg', 'feeding_rate_percent', 'daily_feed_cost', 'created_at', 'updated_at']
     fieldsets = (
         ('Basic Information', {
-            'fields': ('pond', 'user', 'date')
+            'fields': ('pond', 'species', 'user', 'date')
         }),
         ('Fish Data', {
-            'fields': ('estimated_fish_count', 'average_fish_weight_g')
+            'fields': ('estimated_fish_count', 'average_fish_weight_kg')
         }),
         ('Environmental Factors', {
             'fields': ('water_temp_c', 'season')
@@ -231,3 +227,11 @@ class FeedingAdviceAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
     )
+
+
+@admin.register(SurvivalRate)
+class SurvivalRateAdmin(admin.ModelAdmin):
+    list_display = ['pond', 'species', 'date', 'initial_stocked', 'current_alive', 'survival_rate_percent', 'total_mortality', 'total_harvested']
+    list_filter = ['date', 'species', 'pond__user']
+    search_fields = ['pond__name', 'species__name', 'notes']
+    readonly_fields = ['survival_rate_percent', 'total_mortality', 'total_survival_kg', 'created_at', 'updated_at']

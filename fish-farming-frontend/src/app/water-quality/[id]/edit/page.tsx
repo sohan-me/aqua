@@ -428,7 +428,7 @@ export default function EditWaterQualityPage() {
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Additional Notes</h2>
           <div>
             <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-2">
-              Notes
+              Notes (Optional)
             </label>
             <textarea
               id="notes"

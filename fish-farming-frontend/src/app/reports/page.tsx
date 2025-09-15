@@ -100,8 +100,8 @@ export default function ReportsPage() {
 
   // Calculate feed consumption metrics
   const totalFeedCost = filteredFeeds.reduce((sum, feed) => sum + toNumber(feed.total_cost || 0), 0);
-  const avgFeedCostPerPacket = filteredFeeds.length > 0 
-    ? filteredFeeds.reduce((sum, feed) => sum + toNumber(feed.cost_per_packet || 0), 0) / filteredFeeds.length 
+  const avgFeedCostPerKg = filteredFeeds.length > 0 
+    ? filteredFeeds.reduce((sum, feed) => sum + toNumber(feed.cost_per_kg || 0), 0) / filteredFeeds.length 
     : 0;
   const avgFeedingRate = filteredFeeds.length > 0 
     ? filteredFeeds.reduce((sum, feed) => sum + toNumber(feed.feeding_rate_percent || 0), 0) / filteredFeeds.length 
@@ -173,7 +173,7 @@ export default function ReportsPage() {
       csvContent += `Metric,Value\n`;
       csvContent += `Feed Conversion Ratio,${fcr.toFixed(2)}\n`;
       csvContent += `Total Feed Cost,${formatCurrencyForCSV(totalFeedCost)}\n`;
-      csvContent += `Average Feed Cost per Packet,${formatCurrencyForCSV(avgFeedCostPerPacket)}\n`;
+      csvContent += `Average Feed Cost per KG,${formatCurrencyForCSV(avgFeedCostPerKg)}\n`;
       csvContent += `Daily Feed Consumption,${dailyFeedConsumption.toFixed(1)} kg\n`;
       csvContent += `Average Feeding Rate,${avgFeedingRate.toFixed(1)}%\n\n`;
 
@@ -277,8 +277,22 @@ export default function ReportsPage() {
     <div className="space-y-6">
       <div className="md:flex space-y-3 md:space-y-0 items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Profit & Loss Reports</h1>
-          <p className="text-gray-600">Comprehensive financial analysis of your fish farming operations</p>
+          <h1 className="text-3xl font-bold text-gray-900">Reports & Analysis</h1>
+          <p className="text-gray-600">Comprehensive analysis of your fish farming operations</p>
+          <div className="mt-2 flex space-x-4">
+            <a 
+              href="/reports/fcr" 
+              className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+            >
+              📊 FCR Analysis
+            </a>
+            <a 
+              href="/reports/biomass" 
+              className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+            >
+              🐟 Biomass Analysis
+            </a>
+          </div>
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 space-x-4">
@@ -472,9 +486,9 @@ export default function ReportsPage() {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Avg Feed Cost/Packet</p>
-              <p className="text-2xl font-semibold text-gray-900">{formatCurrency(avgFeedCostPerPacket)}</p>
-              <p className="text-sm text-purple-600">Per packet (25kg)</p>
+              <p className="text-sm font-medium text-gray-600">Avg Feed Cost per KG</p>
+              <p className="text-2xl font-semibold text-gray-900">{formatCurrency(avgFeedCostPerKg)}</p>
+              <p className="text-sm text-purple-600">Per kg</p>
             </div>
             <div className="rounded-full bg-purple-100 p-3">
               <TrendingUp className="h-6 w-6 text-purple-600" />

@@ -1,7 +1,7 @@
 'use client';
 
-import { useFeedingAdvice, useDeleteFeedingAdvice, useApplyFeedingAdvice } from '@/hooks/useApi';
-import { formatDate } from '@/lib/utils';
+import { useFeedingAdvice, useDeleteFeedingAdvice, useApplyFeedingAdvice, useGenerateFeedingAdvice, usePonds } from '@/hooks/useApi';
+import { formatDate, formatWeight } from '@/lib/utils';
 import { Lightbulb, Plus, Eye, Edit, Trash2, Calendar, CheckCircle, Clock } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -9,10 +9,13 @@ import { toast } from 'sonner';
 
 export default function FeedingAdvicePage() {
   const { data: adviceData, isLoading } = useFeedingAdvice();
+  const { data: pondsData } = usePonds();
   const deleteAdvice = useDeleteFeedingAdvice();
   const applyAdvice = useApplyFeedingAdvice();
+  const generateAdvice = useGenerateFeedingAdvice();
   const [filterPond, setFilterPond] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [selectedPondForGeneration, setSelectedPondForGeneration] = useState('');
   
   const advice = adviceData?.data || [];
   
@@ -42,6 +45,20 @@ export default function FeedingAdvicePage() {
     }
   };
 
+  const handleGenerateAdvice = async () => {
+    if (!selectedPondForGeneration) {
+      toast.error('Please select a pond to generate feeding advice');
+      return;
+    }
+    
+    try {
+      await generateAdvice.mutateAsync({ pond_id: parseInt(selectedPondForGeneration) });
+      setSelectedPondForGeneration('');
+    } catch (error) {
+      // Error is handled by the hook
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -55,15 +72,39 @@ export default function FeedingAdvicePage() {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Feeding Advice</h1>
-          <p className="text-gray-600">AI-powered feeding recommendations based on fish growth and conditions</p>
+          <p className="text-gray-600">AI-powered feeding recommendations based on Google Sheets rules and fish growth data</p>
         </div>
-        <Link
-          href="/feeding-advice/new"
-          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Generate Advice
-        </Link>
+        <div className="flex items-center space-x-3">
+          {/* One-Click Generation */}
+          <div className="flex items-center space-x-2">
+            <select
+              value={selectedPondForGeneration}
+              onChange={(e) => setSelectedPondForGeneration(e.target.value)}
+              className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              required
+            >
+              <option value="">Select Pond *</option>
+              {pondsData?.data?.map((pond: any) => (
+                <option key={pond.id} value={pond.id}>
+                  {pond.name}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={handleGenerateAdvice}
+              disabled={!selectedPondForGeneration || generateAdvice.isPending}
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {generateAdvice.isPending ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+              ) : (
+                <Lightbulb className="h-4 w-4 mr-2" />
+              )}
+              <span>One-Click Generate</span>
+            </button>
+          </div>
+          
+        </div>
       </div>
 
       {/* Filters */}
@@ -143,13 +184,13 @@ export default function FeedingAdvicePage() {
                     <div>
                       <p className="text-sm text-gray-500">Total Biomass</p>
                       <p className="text-lg font-semibold text-gray-900">
-                        {parseFloat(item.total_biomass_kg).toFixed(1)} kg
+                        {formatWeight(item.total_biomass_kg)} kg
                       </p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-500">Recommended Feed</p>
                       <p className="text-lg font-semibold text-gray-900">
-                        {parseFloat(item.recommended_feed_kg).toFixed(2)} kg/day
+                        {formatWeight(item.recommended_feed_kg)} kg/day
                       </p>
                     </div>
                     <div>
@@ -158,7 +199,79 @@ export default function FeedingAdvicePage() {
                         {parseFloat(item.feeding_rate_percent).toFixed(1)}%
                       </p>
                     </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Feed Per Session</p>
+                      <p className="text-lg font-semibold text-gray-900">
+                        {(() => {
+                          // @ts-expect-error TypeScript strict mode issue with parseFloat division
+                          const feedPerSession = parseFloat(item.recommended_feed_kg) / parseFloat(item.feeding_frequency);
+                          return formatWeight(feedPerSession.toString());
+                        })()} kg
+                      </p>
+                    </div>
                   </div>
+                  
+                  {/* Enhanced Analysis Summary */}
+                  {item.analysis_data && (
+                    <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
+                        <div>
+                          <p className="text-xs text-gray-500">Water Quality</p>
+                          <p className="text-sm font-semibold text-gray-900 capitalize">
+                            {item.analysis_data.water_quality_analysis?.quality_status || 'Unknown'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Growth Quality</p>
+                          <p className="text-sm font-semibold text-gray-900 capitalize">
+                            {item.analysis_data.growth_analysis?.growth_quality || 'Unknown'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Mortality Risk</p>
+                          <p className="text-sm font-semibold text-gray-900">
+                            {item.analysis_data.mortality_analysis?.risk_factors?.length || 0} factors
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Feeding Consistency</p>
+                          <p className="text-sm font-semibold text-gray-900 capitalize">
+                            {item.analysis_data.feeding_analysis?.feeding_consistency || 'Unknown'}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      {/* Scientific Feeding Information */}
+                      {item.analysis_data.feeding_recommendations && (
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-3 border-t border-gray-200">
+                          <div>
+                            <p className="text-xs text-gray-500">Feeding Stage</p>
+                            <p className="text-sm font-semibold text-blue-600">
+                              {item.analysis_data.feeding_recommendations.feeding_stage || 'Unknown'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">%BW/day</p>
+                            <p className="text-sm font-semibold text-green-600">
+                              {item.analysis_data.feeding_recommendations.final_rate || 0}%
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Protein</p>
+                            <p className="text-sm font-semibold text-purple-600">
+                              {item.analysis_data.feeding_recommendations.protein_requirement || 'N/A'}%
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Adjustment</p>
+                            <p className="text-sm font-semibold text-orange-600">
+                              {item.analysis_data.feeding_recommendations.adjustments?.total_adjustment || 0 > 0 ? '+' : ''}{item.analysis_data.feeding_recommendations.adjustments?.total_adjustment || 0}%
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   
                   <div className="flex items-center space-x-4 text-sm text-gray-600 mb-2">
                     <div className="flex items-center">
@@ -174,7 +287,7 @@ export default function FeedingAdvicePage() {
                   {item.daily_feed_cost && (
                     <div className="mb-2">
                       <span className="text-sm text-gray-600">
-                        <strong>Daily Feed Cost:</strong> ${parseFloat(item.daily_feed_cost).toFixed(2)}
+                        <strong>Daily Feed Cost:</strong> ৳{parseFloat(item.daily_feed_cost).toFixed(2)}
                       </span>
                     </div>
                   )}
@@ -210,7 +323,7 @@ export default function FeedingAdvicePage() {
                       className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50"
                     >
                       <CheckCircle className="h-4 w-4 mr-1" />
-                      Apply
+                      <span>Apply</span>
                     </button>
                   )}
                   <button

@@ -10,7 +10,8 @@ import {
   useHarvests, 
   useExpenses, 
   useIncomes,
-  useAlerts 
+  useAlerts,
+  useMortalities 
 } from '@/hooks/useApi';
 import { 
   BarChart3, 
@@ -25,6 +26,7 @@ import {
   Download
 } from 'lucide-react';
 import { downloadCSV, formatCurrencyForCSV, formatDateForCSV, sanitizeFilename } from '@/lib/exportUtils';
+import { formatWeight } from '@/lib/utils';
 import { toast } from 'sonner';
 
 export default function AnalyticsPage() {
@@ -37,6 +39,7 @@ export default function AnalyticsPage() {
   const { data: expensesData } = useExpenses();
   const { data: incomesData } = useIncomes();
   const { data: alertsData } = useAlerts();
+  const { data: mortalityData } = useMortalities();
 
   const [timeRange, setTimeRange] = useState('30d');
   const [selectedPond, setSelectedPond] = useState('all');
@@ -54,6 +57,7 @@ export default function AnalyticsPage() {
   const allExpenses = expensesData?.data || [];
   const allIncomes = incomesData?.data || [];
   const allAlerts = alertsData?.data || [];
+  const allMortality = mortalityData?.data || [];
 
   // Filter data based on selected pond
   const ponds = allPonds;
@@ -81,6 +85,9 @@ export default function AnalyticsPage() {
   const alerts = selectedPond === 'all' 
     ? allAlerts 
     : allAlerts.filter(alert => alert.pond === parseInt(selectedPond));
+  const mortality = selectedPond === 'all' 
+    ? allMortality 
+    : allMortality.filter(mortality => mortality.pond === parseInt(selectedPond));
 
   // Date filtering function
   const filterByDateRange = (data: any[], dateField: string = 'date') => {
@@ -111,6 +118,7 @@ export default function AnalyticsPage() {
   const filteredExpenses = filterByDateRange(expenses);
   const filteredIncomes = filterByDateRange(incomes);
   const filteredAlerts = filterByDateRange(alerts, 'created_at');
+  const filteredMortality = filterByDateRange(mortality);
 
   console.log(ponds, filteredStockings, filteredHarvests, filteredExpenses, filteredIncomes, filteredAlerts);
 
@@ -152,19 +160,104 @@ export default function AnalyticsPage() {
 
   // Calculate feed consumption metrics
   const totalFeedCost = filteredFeeds.reduce((sum, feed) => sum + toNumber(feed.total_cost || 0), 0);
-  const avgFeedCostPerPacket = filteredFeeds.length > 0 
-    ? filteredFeeds.reduce((sum, feed) => sum + toNumber(feed.cost_per_packet || 0), 0) / filteredFeeds.length 
+  const avgFeedCostPerKg = filteredFeeds.length > 0 
+    ? filteredFeeds.reduce((sum, feed) => sum + toNumber(feed.cost_per_kg || 0), 0) / filteredFeeds.length 
     : 0;
-  const avgFeedingRate = filteredFeeds.length > 0 
-    ? filteredFeeds.reduce((sum, feed) => sum + toNumber(feed.feeding_rate_percent || 0), 0) / filteredFeeds.length 
-    : 0;
+  // Calculate average feeding rate - use actual data or calculate from biomass if not available
+  const avgFeedingRate = (() => {
+    if (filteredFeeds.length === 0) return 0;
+    
+    let totalRate = 0;
+    let validFeeds = 0;
+    const feedDetails: Array<{
+      id: number;
+      feeding_rate_percent: string | null;
+      biomass_at_feeding_kg: string | null;
+      amount_kg: string;
+      calculated: boolean;
+      method: string;
+      calculatedRate?: number;
+    }> = [];
+    
+    // Calculate total biomass from stocking data for estimation
+    const totalBiomassFromStocking = filteredStockings.reduce((sum, stocking) => {
+      const fishCount = toNumber(stocking.pcs);
+      const avgWeight = toNumber(stocking.initial_avg_weight_kg);
+      return sum + (fishCount * avgWeight);
+    }, 0);
+    
+    filteredFeeds.forEach(feed => {
+      const feedingRate = toNumber(feed.feeding_rate_percent);
+      const biomass = toNumber(feed.biomass_at_feeding_kg);
+      const amount = toNumber(feed.amount_kg);
+      
+      feedDetails.push({
+        id: feed.id,
+        feeding_rate_percent: feed.feeding_rate_percent,
+        biomass_at_feeding_kg: feed.biomass_at_feeding_kg,
+        amount_kg: feed.amount_kg,
+        calculated: false,
+        method: 'none'
+      });
+      
+      if (feedingRate > 0) {
+        totalRate += feedingRate;
+        validFeeds++;
+        feedDetails[feedDetails.length - 1].method = 'direct';
+      } else if (biomass > 0 && amount > 0) {
+        // Calculate feeding rate from biomass and amount if not directly available
+        const calculatedRate = (amount / biomass) * 100;
+        totalRate += calculatedRate;
+        validFeeds++;
+        feedDetails[feedDetails.length - 1].calculated = true;
+        feedDetails[feedDetails.length - 1].calculatedRate = calculatedRate;
+        feedDetails[feedDetails.length - 1].method = 'biomass';
+      } else if (amount > 0 && totalBiomassFromStocking > 0) {
+        // Estimate feeding rate using total biomass from stocking data
+        const estimatedRate = (amount / totalBiomassFromStocking) * 100;
+        totalRate += estimatedRate;
+        validFeeds++;
+        feedDetails[feedDetails.length - 1].calculated = true;
+        feedDetails[feedDetails.length - 1].calculatedRate = estimatedRate;
+        feedDetails[feedDetails.length - 1].method = 'estimated';
+      }
+    });
+    
+    const result = validFeeds > 0 ? totalRate / validFeeds : 0;
+    
+    // Enhanced debug logging
+    console.log('Feeding Rate Calculation Details:', {
+      totalFeeds: filteredFeeds.length,
+      validFeeds: validFeeds,
+      totalRate: totalRate,
+      avgFeedingRate: result,
+      totalBiomassFromStocking: totalBiomassFromStocking,
+      feedDetails: feedDetails.slice(0, 5) // Show first 5 feeds for debugging
+    });
+    
+    return result;
+  })();
+  
+  // Debug feed data
+  console.log('Feed data debug:', {
+    totalFeeds: filteredFeeds.length,
+    feedSamples: filteredFeeds.slice(0, 3).map(feed => ({
+      id: feed.id,
+      feeding_rate_percent: feed.feeding_rate_percent,
+      biomass_at_feeding_kg: feed.biomass_at_feeding_kg,
+      amount_kg: feed.amount_kg,
+      total_cost: feed.total_cost
+    })),
+    avgFeedingRate: avgFeedingRate
+  });
+  
   const dailyFeedConsumption = filteredFeeds.length > 0 
     ? filteredFeeds.reduce((sum, feed) => sum + toNumber(feed.consumption_rate_kg_per_day || feed.amount_kg), 0) / filteredFeeds.length 
     : 0;
 
-  // Calculate survival rate (mortality data not available in current API)
-  // TODO: Add mortality API endpoint to calculate accurate survival rate
-  const survivalRate = 0; // Placeholder until mortality data is available
+  // Calculate survival rate using mortality data
+  const totalMortality = filteredMortality.reduce((sum, mortality) => sum + toNumber(mortality.count), 0);
+  const survivalRate = totalStocked > 0 ? ((totalStocked - totalMortality) / totalStocked) * 100 : 0;
 
   const kpiCards = [
     {
@@ -185,7 +278,7 @@ export default function AnalyticsPage() {
     },
     {
       title: 'Total Harvested',
-      value: `${totalHarvested.toFixed(1)} kg`,
+      value: `${formatWeight(totalHarvested)} kg`,
       change: 'total weight',
       icon: TrendingUp,
       color: 'green',
@@ -240,16 +333,16 @@ export default function AnalyticsPage() {
       trend: 'neutral'
     },
     {
-      title: 'Avg Feed Cost/Packet',
-      value: `৳${avgFeedCostPerPacket.toFixed(2)}`,
-      change: 'per packet (25kg)',
+      title: 'Avg Feed Cost per KG',
+      value: `৳${avgFeedCostPerKg.toFixed(2)}`,
+      change: 'per kg',
       icon: BarChart3,
-      color: avgFeedCostPerPacket <= 1000 ? 'green' : avgFeedCostPerPacket <= 1500 ? 'yellow' : 'red',
-      trend: avgFeedCostPerPacket <= 1000 ? 'up' : 'down'
+      color: avgFeedCostPerKg <= 40 ? 'green' : avgFeedCostPerKg <= 60 ? 'yellow' : 'red',
+      trend: avgFeedCostPerKg <= 40 ? 'up' : 'down'
     },
     {
       title: 'Daily Feed Consumption',
-      value: `${dailyFeedConsumption.toFixed(1)} kg`,
+      value: `${formatWeight(dailyFeedConsumption)} kg`,
       change: 'avg daily usage',
       icon: TrendingUp,
       color: 'blue',
@@ -257,11 +350,19 @@ export default function AnalyticsPage() {
     },
     {
       title: 'Avg Feeding Rate',
-      value: `${avgFeedingRate.toFixed(1)}%`,
+      value: `${avgFeedingRate.toFixed(2)}%`,
       change: 'of biomass',
       icon: BarChart3,
       color: avgFeedingRate >= 2 && avgFeedingRate <= 4 ? 'green' : avgFeedingRate < 2 ? 'yellow' : 'red',
       trend: avgFeedingRate >= 2 && avgFeedingRate <= 4 ? 'up' : 'down'
+    },
+    {
+      title: 'Total Mortality',
+      value: totalMortality.toLocaleString(),
+      change: 'fish lost',
+      icon: TrendingDown,
+      color: totalMortality === 0 ? 'green' : totalMortality <= 50 ? 'yellow' : 'red',
+      trend: totalMortality === 0 ? 'up' : 'down'
     }
   ];
 
@@ -329,12 +430,15 @@ export default function AnalyticsPage() {
     csvContent += `Metric,Value,Status\n`;
     csvContent += `Total Ponds,${totalPonds},${activePonds} active\n`;
     csvContent += `Total Stocked,${totalStocked.toLocaleString()},fish\n`;
-    csvContent += `Total Harvested,${totalHarvested.toFixed(1)},kg\n`;
+    csvContent += `Total Harvested,${formatWeight(totalHarvested)},kg\n`;
     csvContent += `Total Revenue,${formatCurrencyForCSV(totalRevenue)},from harvests\n`;
     csvContent += `Total Expenses,${formatCurrencyForCSV(totalExpenses)},operational costs\n`;
     csvContent += `Net Profit,${formatCurrencyForCSV(netProfit)},${netProfit >= 0 ? 'profit' : 'loss'}\n`;
     csvContent += `Feed Conversion Ratio,${fcr.toFixed(2)},kg feed/kg fish\n`;
-    csvContent += `Survival Rate,${survivalRate.toFixed(1)}%,fish survival\n\n`;
+    csvContent += `Survival Rate,${survivalRate.toFixed(1)}%,fish survival\n`;
+    csvContent += `Total Mortality,${totalMortality.toLocaleString()},fish lost\n`;
+    csvContent += `Total Feed Cost,${formatCurrencyForCSV(totalFeedCost)},feed expenses\n`;
+    csvContent += `Avg Feed Cost per KG,${formatCurrencyForCSV(avgFeedCostPerKg)},per kg\n\n`;
 
     // Water Quality Summary
     csvContent += `WATER QUALITY METRICS\n`;
@@ -348,7 +452,7 @@ export default function AnalyticsPage() {
     csvContent += `RECENT HARVESTS\n`;
     csvContent += `Date,Pond,Weight (kg),Revenue\n`;
     harvests.slice(0, 10).forEach(harvest => {
-      csvContent += `${formatDateForCSV(harvest.date)},"${harvest.pond_name}",${toNumber(harvest.total_weight_kg).toFixed(1)},${formatCurrencyForCSV(toNumber(harvest.total_revenue))}\n`;
+      csvContent += `${formatDateForCSV(harvest.date)},"${harvest.pond_name}",${formatWeight(toNumber(harvest.total_weight_kg))},${formatCurrencyForCSV(toNumber(harvest.total_revenue))}\n`;
     });
     csvContent += `\n`;
 
@@ -369,90 +473,102 @@ export default function AnalyticsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="md:flex space-y-3 md:space-y-0 items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Analytics Dashboard</h1>
-          <p className="text-gray-600">
-            {selectedPond === 'all' 
-              ? 'Comprehensive insights into your fish farming operations' 
-              : `Analytics for ${ponds.find(p => p.id === parseInt(selectedPond))?.name || 'Selected Pond'}`
-            }
-          </p>
+      <div className="space-y-6">
+        {/* Header Section */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Analytics Dashboard</h1>
+            <p className="text-gray-600 mt-1">
+              {selectedPond === 'all' 
+                ? 'Comprehensive insights into your fish farming operations' 
+                : `Analytics for ${ponds.find(p => p.id === parseInt(selectedPond))?.name || 'Selected Pond'}`
+              }
+            </p>
+          </div>
+          
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={exportAnalyticsToCSV}
+              className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg text-sm font-medium hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
+            >
+              <Download className="h-4 w-4" />
+              <span>Export Dashboard</span>
+            </button>
+          </div>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-4 space-x-4 gap-5">
-          <div className="flex items-center space-x-2 w-full">
-            <Filter className="h-5 w-5 text-gray-400" />
-            <select
-              value={timeRange}
-              onChange={(e) => setTimeRange(e.target.value)}
-              className="border w-full border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="7d">Last 7 days</option>
-              <option value="30d">Last 30 days</option>
-              <option value="90d">Last 90 days</option>
-              <option value="1y">Last year</option>
-              <option value="custom">Custom Range</option>
-            </select>
+        {/* Filters Section */}
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Filter className="h-4 w-4 text-gray-500" />
+            <span className="text-sm font-medium text-gray-700">Filters</span>
           </div>
-          
-          <div className="flex items-center space-x-2 w-full">
-            <Calendar className="h-5 w-5 text-gray-400" />
-            <input
-              type="date"
-              value={dateRange.startDate}
-              onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
-              className="border w-full border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Start Date"
-            />
-          </div>
-          
-          <div className="flex items-center space-x-2 w-full">
-            <Calendar className="h-5 w-5 text-gray-400" />
-            <input
-              type="date"
-              value={dateRange.endDate}
-              onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
-              className="border w-full border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="End Date"
-            />
-          </div>
-          
-          <div className="flex items-center space-x-2  w-full">
-            <Calendar className="h-5 w-5 text-gray-400" />
-            <select
-              value={selectedPond}
-              onChange={(e) => setSelectedPond(e.target.value)}
-              className={`border w-full rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                selectedPond !== 'all' 
-                  ? 'border-blue-500 bg-blue-50' 
-                  : 'border-gray-300'
-              }`}
-            >
-              <option value="all">All Ponds</option>
-              {ponds.map((pond) => (
-                <option key={pond.id} value={pond.id}>
-                  {pond.name}
-                </option>
-              ))}
-            </select>
-            {selectedPond !== 'all' && (
-              <button
-                onClick={() => setSelectedPond('all')}
-                className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Time Range</label>
+              <select
+                value={timeRange}
+                onChange={(e) => setTimeRange(e.target.value)}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
-                Clear Filter
-              </button>
-            )}
+                <option value="7d">Last 7 days</option>
+                <option value="30d">Last 30 days</option>
+                <option value="90d">Last 90 days</option>
+                <option value="1y">Last year</option>
+                <option value="custom">Custom Range</option>
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Start Date</label>
+              <input
+                type="date"
+                value={dateRange.startDate}
+                onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">End Date</label>
+              <input
+                type="date"
+                value={dateRange.endDate}
+                onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Pond</label>
+              <div className="flex items-center gap-2">
+                <select
+                  value={selectedPond}
+                  onChange={(e) => setSelectedPond(e.target.value)}
+                  className={`flex-1 border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                    selectedPond !== 'all' 
+                      ? 'border-blue-500 bg-blue-50' 
+                      : 'border-gray-300'
+                  }`}
+                >
+                  <option value="all">All Ponds</option>
+                  {ponds.map((pond) => (
+                    <option key={pond.id} value={pond.id}>
+                      {pond.name}
+                    </option>
+                  ))}
+                </select>
+                {selectedPond !== 'all' && (
+                  <button
+                    onClick={() => setSelectedPond('all')}
+                    className="text-blue-600 hover:text-blue-800 text-xs font-medium px-2 py-1 rounded hover:bg-blue-50 transition-colors"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
-
-          <button 
-            onClick={exportAnalyticsToCSV}
-            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700"
-          >
-            <Download className="h-4 w-4" />
-            <span>Export CSV</span>
-          </button>
         </div>
       </div>
 
@@ -529,6 +645,17 @@ export default function AnalyticsPage() {
                 {totalIncome > 0 ? ((netProfit / totalIncome) * 100).toFixed(1) : 0}%
               </span>
             </div>
+            <hr className="border-gray-200" />
+            <div className="flex justify-between items-center">
+              <span className="text-gray-600">Total Feed Cost</span>
+              <span className="text-orange-600 font-semibold">৳{totalFeedCost.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-gray-600">Avg Feed Cost per KG</span>
+              <span className={`font-semibold ${avgFeedCostPerKg <= 40 ? 'text-green-600' : avgFeedCostPerKg <= 60 ? 'text-yellow-600' : 'text-red-600'}`}>
+                ৳{avgFeedCostPerKg.toFixed(2)}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -541,7 +668,7 @@ export default function AnalyticsPage() {
             </div>
             <div className="flex justify-between items-center">
               <span className="text-gray-600">Total Harvested</span>
-              <span className="text-gray-900 font-semibold">{totalHarvested.toFixed(1)} kg</span>
+              <span className="text-gray-900 font-semibold">{formatWeight(totalHarvested)} kg</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-gray-600">Survival Rate</span>
@@ -571,17 +698,31 @@ export default function AnalyticsPage() {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-gray-900">Harvest completed</p>
-                  <p className="text-xs text-gray-500">{harvest.pond_name} - {toNumber(harvest.total_weight_kg)} kg</p>
+                  <p className="text-xs text-gray-500">{harvest.pond_name} - {formatWeight(toNumber(harvest.total_weight_kg))} kg</p>
                 </div>
               </div>
               <span className="text-sm text-green-600 font-semibold">৳{toNumber(harvest.total_revenue)}</span>
             </div>
           ))}
-          {alerts.slice(0, 3).map((alert) => (
-            <div key={alert.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-b-0">
+          {mortality.slice(0, 3).map((mortality) => (
+            <div key={mortality.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-b-0">
               <div className="flex items-center space-x-3">
                 <div className="rounded-full bg-red-100 p-2">
-                  <AlertTriangle className="h-4 w-4 text-red-600" />
+                  <TrendingDown className="h-4 w-4 text-red-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Mortality recorded</p>
+                  <p className="text-xs text-gray-500">{mortality.pond_name} - {mortality.count} fish</p>
+                </div>
+              </div>
+              <span className="text-sm text-red-600 font-semibold">{mortality.cause || 'Unknown'}</span>
+            </div>
+          ))}
+          {alerts.slice(0, 2).map((alert) => (
+            <div key={alert.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-b-0">
+              <div className="flex items-center space-x-3">
+                <div className="rounded-full bg-orange-100 p-2">
+                  <AlertTriangle className="h-4 w-4 text-orange-600" />
                 </div>
                 <div>
                   <p className="text-sm font-medium text-gray-900">Alert: {alert.alert_type}</p>

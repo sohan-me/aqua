@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useCreateHarvest, usePonds } from '@/hooks/useApi';
+import { useCreateHarvest, usePonds, useSpecies } from '@/hooks/useApi';
 import { ArrowLeft, Save, X, Fish, Scale, DollarSign, Calculator } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -10,15 +10,17 @@ export default function NewHarvestPage() {
   const router = useRouter();
   const createHarvest = useCreateHarvest();
   const { data: pondsData } = usePonds();
+  const { data: speciesData } = useSpecies();
   
   const ponds = pondsData?.data || [];
+  const species = speciesData?.data || [];
 
   const [formData, setFormData] = useState({
     pond: '',
+    species: '',
     date: new Date().toISOString().split('T')[0],
     total_weight_kg: '',
-    total_count: '',
-    avg_weight_g: '',
+    pieces_per_kg: '',
     price_per_kg: '',
     notes: ''
   });
@@ -31,20 +33,6 @@ export default function NewHarvestPage() {
       ...prev,
       [name]: value
     }));
-
-    // Auto-calculate average weight if both weight and count are provided
-    if (name === 'total_weight_kg' || name === 'total_count') {
-      const weight = name === 'total_weight_kg' ? parseFloat(value) : parseFloat(formData.total_weight_kg);
-      const count = name === 'total_count' ? parseInt(value) : parseInt(formData.total_count);
-      
-      if (weight && count && count > 0) {
-        const avgWeight = (weight * 1000) / count; // Convert kg to grams
-        setFormData(prev => ({
-          ...prev,
-          avg_weight_g: avgWeight.toFixed(2)
-        }));
-      }
-    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -54,10 +42,9 @@ export default function NewHarvestPage() {
     try {
       const submitData = {
         pond: parseInt(formData.pond),
+        species: formData.species ? parseInt(formData.species) : null,
         date: formData.date,
         total_weight_kg: parseFloat(formData.total_weight_kg),
-        total_count: parseInt(formData.total_count),
-        avg_weight_g: formData.avg_weight_g ? parseFloat(formData.avg_weight_g) : null,
         price_per_kg: formData.price_per_kg ? parseFloat(formData.price_per_kg) : null,
         notes: formData.notes
       };
@@ -123,6 +110,26 @@ export default function NewHarvestPage() {
             </div>
 
             <div>
+              <label htmlFor="species" className="block text-sm font-medium text-gray-700 mb-2">
+                Species
+              </label>
+              <select
+                id="species"
+                name="species"
+                value={formData.species}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
+              >
+                <option value="">Select a species (optional)</option>
+                {species.map((spec) => (
+                  <option key={spec.id} value={spec.id}>
+                    {spec.name} ({spec.scientific_name})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
               <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-2">
                 Harvest Date *
               </label>
@@ -166,44 +173,27 @@ export default function NewHarvestPage() {
             </div>
 
             <div>
-              <label htmlFor="total_count" className="block text-sm font-medium text-gray-700 mb-2">
-                Total Fish Count *
+              <label htmlFor="pieces_per_kg" className="block text-sm font-medium text-gray-700 mb-2">
+                Pieces per kg *
               </label>
               <input
                 type="number"
-                id="total_count"
-                name="total_count"
+                id="pieces_per_kg"
+                name="pieces_per_kg"
                 required
-                min="1"
-                value={formData.total_count}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
-                placeholder="e.g., 500"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="avg_weight_g" className="block text-sm font-medium text-gray-700 mb-2">
-                Average Weight (g)
-              </label>
-              <input
-                type="number"
-                id="avg_weight_g"
-                name="avg_weight_g"
                 min="0"
                 step="0.01"
-                value={formData.avg_weight_g}
+                value={formData.pieces_per_kg}
                 onChange={handleInputChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
-                placeholder="Auto-calculated"
-                readOnly
+                placeholder="e.g., 2.5"
               />
-              <p className="text-xs text-gray-500 mt-1">Automatically calculated from total weight and count</p>
+              <p className="text-xs text-gray-500 mt-1">Number of fish pieces per kilogram</p>
             </div>
 
             <div>
               <label htmlFor="price_per_kg" className="block text-sm font-medium text-gray-700 mb-2">
-                Price per kg ($)
+                Price per kg (৳)
               </label>
               <input
                 type="number"
@@ -219,6 +209,33 @@ export default function NewHarvestPage() {
             </div>
           </div>
         </div>
+
+        {/* Calculated Values Display */}
+        {(formData.total_weight_kg && formData.pieces_per_kg) && (
+          <div className="bg-blue-50 rounded-lg border border-blue-200 p-6">
+            <h3 className="text-lg font-semibold text-blue-900 mb-4 flex items-center">
+              <Calculator className="h-5 w-5 mr-2" />
+              Calculated Values
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-white rounded-md p-4 border border-blue-200">
+                <p className="text-sm font-medium text-blue-700">Average Weight per Fish (kg)</p>
+                <p className="text-2xl font-bold text-blue-900">
+                  {(1 / parseFloat(formData.pieces_per_kg)).toFixed(3)} kg
+                </p>
+              </div>
+              <div className="bg-white rounded-md p-4 border border-blue-200">
+                <p className="text-sm font-medium text-blue-700">Total Fish Count</p>
+                <p className="text-2xl font-bold text-blue-900">
+                  {Math.round(parseFloat(formData.total_weight_kg) * parseFloat(formData.pieces_per_kg))} fish
+                </p>
+              </div>
+            </div>
+            <p className="text-xs text-blue-600 mt-3">
+              * These values will be automatically calculated and saved
+            </p>
+          </div>
+        )}
 
         {/* Revenue Calculation */}
         {formData.price_per_kg && formData.total_weight_kg && (
@@ -251,7 +268,7 @@ export default function NewHarvestPage() {
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Additional Notes</h2>
           <div>
             <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-2">
-              Notes
+              Notes (Optional)
             </label>
             <textarea
               id="notes"
@@ -279,6 +296,7 @@ export default function NewHarvestPage() {
             type="submit"
             disabled={isSubmitting}
             className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ color: 'white !important' }}
           >
             <Save className="h-4 w-4 mr-2" />
             {isSubmitting ? 'Creating...' : 'Create Harvest Record'}

@@ -4,7 +4,7 @@ from .models import (
     Pond, Species, Stocking, DailyLog, FeedType, Feed, SampleType, Sampling, 
     Mortality, Harvest, ExpenseType, IncomeType, Expense, Income,
     InventoryFeed, Treatment, Alert, Setting, FeedingBand, 
-    EnvAdjustment, KPIDashboard, FishSampling, FeedingAdvice
+    EnvAdjustment, KPIDashboard, FishSampling, FeedingAdvice, SurvivalRate
 )
 
 
@@ -33,12 +33,11 @@ class PondSerializer(serializers.ModelSerializer):
 class StockingSerializer(serializers.ModelSerializer):
     pond_name = serializers.CharField(source='pond.name', read_only=True)
     species_name = serializers.CharField(source='species.name', read_only=True)
-    total_weight_kg = serializers.ReadOnlyField()
     
     class Meta:
         model = Stocking
         fields = '__all__'
-        read_only_fields = ['stocking_id', 'total_weight_kg', 'created_at']
+        read_only_fields = ['stocking_id', 'initial_avg_weight_kg', 'created_at']
 
 
 class DailyLogSerializer(serializers.ModelSerializer):
@@ -88,20 +87,22 @@ class SamplingSerializer(serializers.ModelSerializer):
 
 class MortalitySerializer(serializers.ModelSerializer):
     pond_name = serializers.CharField(source='pond.name', read_only=True)
+    species_name = serializers.CharField(source='species.name', read_only=True)
     
     class Meta:
         model = Mortality
         fields = '__all__'
-        read_only_fields = ['created_at']
+        read_only_fields = ['total_weight_kg', 'created_at']
 
 
 class HarvestSerializer(serializers.ModelSerializer):
     pond_name = serializers.CharField(source='pond.name', read_only=True)
+    species_name = serializers.CharField(source='species.name', read_only=True)
     
     class Meta:
         model = Harvest
         fields = '__all__'
-        read_only_fields = ['total_revenue', 'created_at']
+        read_only_fields = ['avg_weight_kg', 'total_count', 'total_revenue', 'created_at']
 
 
 class ExpenseTypeSerializer(serializers.ModelSerializer):
@@ -121,6 +122,7 @@ class IncomeTypeSerializer(serializers.ModelSerializer):
 class ExpenseSerializer(serializers.ModelSerializer):
     user_username = serializers.CharField(source='user.username', read_only=True)
     pond_name = serializers.CharField(source='pond.name', read_only=True)
+    species_name = serializers.CharField(source='species.name', read_only=True)
     expense_type_name = serializers.CharField(source='expense_type.name', read_only=True)
     
     class Meta:
@@ -132,6 +134,7 @@ class ExpenseSerializer(serializers.ModelSerializer):
 class IncomeSerializer(serializers.ModelSerializer):
     user_username = serializers.CharField(source='user.username', read_only=True)
     pond_name = serializers.CharField(source='pond.name', read_only=True)
+    species_name = serializers.CharField(source='species.name', read_only=True)
     income_type_name = serializers.CharField(source='income_type.name', read_only=True)
     
     class Meta:
@@ -267,17 +270,19 @@ class FinancialSummarySerializer(serializers.Serializer):
 # Fish Sampling serializers
 class FishSamplingSerializer(serializers.ModelSerializer):
     pond_name = serializers.CharField(source='pond.name', read_only=True)
+    species_name = serializers.CharField(source='species.name', read_only=True)
     user_username = serializers.CharField(source='user.username', read_only=True)
     
     class Meta:
         model = FishSampling
         fields = '__all__'
-        read_only_fields = ['user', 'average_weight_g', 'fish_per_kg', 'condition_factor', 'created_at', 'updated_at']
+        read_only_fields = ['user', 'average_weight_kg', 'fish_per_kg', 'condition_factor', 'growth_rate_kg_per_day', 'biomass_difference_kg', 'created_at', 'updated_at']
 
 
 # Feeding Advice serializers
 class FeedingAdviceSerializer(serializers.ModelSerializer):
     pond_name = serializers.CharField(source='pond.name', read_only=True)
+    species_name = serializers.CharField(source='species.name', read_only=True)
     user_username = serializers.CharField(source='user.username', read_only=True)
     feed_type_name = serializers.CharField(source='feed_type.name', read_only=True)
     
@@ -285,3 +290,14 @@ class FeedingAdviceSerializer(serializers.ModelSerializer):
         model = FeedingAdvice
         fields = '__all__'
         read_only_fields = ['user', 'total_biomass_kg', 'recommended_feed_kg', 'feeding_rate_percent', 'daily_feed_cost', 'created_at', 'updated_at']
+
+
+# Survival Rate serializers
+class SurvivalRateSerializer(serializers.ModelSerializer):
+    pond_name = serializers.CharField(source='pond.name', read_only=True)
+    species_name = serializers.CharField(source='species.name', read_only=True)
+    
+    class Meta:
+        model = SurvivalRate
+        fields = '__all__'
+        read_only_fields = ['survival_rate_percent', 'total_mortality', 'total_survival_kg', 'created_at', 'updated_at']

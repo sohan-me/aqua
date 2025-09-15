@@ -28,7 +28,7 @@ export default function EditFeedingAdvicePage({ params }: PageProps) {
     pond: '',
     date: '',
     estimated_fish_count: '',
-    average_fish_weight_g: '',
+    average_fish_weight_kg: '',
     water_temp_c: '',
     season: 'summer',
     feed_type: '',
@@ -44,7 +44,7 @@ export default function EditFeedingAdvicePage({ params }: PageProps) {
         pond: advice.data.pond.toString(),
         date: advice.data.date,
         estimated_fish_count: advice.data.estimated_fish_count.toString(),
-        average_fish_weight_g: advice.data.average_fish_weight_g,
+        average_fish_weight_kg: advice.data.average_fish_weight_kg,
         water_temp_c: advice.data.water_temp_c || '',
         season: advice.data.season,
         feed_type: advice.data.feed_type?.toString() || '',
@@ -73,7 +73,7 @@ export default function EditFeedingAdvicePage({ params }: PageProps) {
           pond: parseInt(formData.pond),
           date: formData.date,
           estimated_fish_count: parseInt(formData.estimated_fish_count),
-          average_fish_weight_g: parseFloat(formData.average_fish_weight_g),
+          average_fish_weight_kg: parseFloat(formData.average_fish_weight_kg),
           water_temp_c: formData.water_temp_c ? parseFloat(formData.water_temp_c) : null,
           season: formData.season,
           feed_type: formData.feed_type ? parseInt(formData.feed_type) : null,
@@ -93,11 +93,11 @@ export default function EditFeedingAdvicePage({ params }: PageProps) {
 
   // Calculate preview metrics
   const calculatePreview = () => {
-    if (!formData.estimated_fish_count || !formData.average_fish_weight_g) return null;
+    if (!formData.estimated_fish_count || !formData.average_fish_weight_kg) return null;
     
     const fishCount = parseInt(formData.estimated_fish_count);
-    const avgWeight = parseFloat(formData.average_fish_weight_g);
-    const totalBiomass = (fishCount * avgWeight) / 1000; // Convert to kg
+    const avgWeight = parseFloat(formData.average_fish_weight_kg);
+    const totalBiomass = fishCount * avgWeight; // Already in kg
     
     // Base feeding rate (3% of biomass)
     let feedingRate = 3.0;
@@ -234,7 +234,7 @@ export default function EditFeedingAdvicePage({ params }: PageProps) {
                   required
                   min="0"
                   step="0.1"
-                  value={formData.average_fish_weight_g}
+                  value={formData.average_fish_weight_kg}
                   onChange={handleInputChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
                   placeholder="e.g., 200"
@@ -305,7 +305,7 @@ export default function EditFeedingAdvicePage({ params }: PageProps) {
 
               <div>
                 <label htmlFor="feed_cost_per_kg" className="block text-sm font-medium text-gray-700 mb-2">
-                  Feed Cost per kg ($)
+                  Feed Cost per kg (৳)
                 </label>
                 <input
                   type="number"
@@ -323,7 +323,7 @@ export default function EditFeedingAdvicePage({ params }: PageProps) {
 
             <div>
               <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-2">
-                Notes
+                Notes (Optional)
               </label>
               <textarea
                 id="notes"
@@ -369,7 +369,7 @@ export default function EditFeedingAdvicePage({ params }: PageProps) {
               <div className="mt-4">
                 <p className="text-sm text-blue-700">Daily Feed Cost</p>
                 <p className="text-xl font-semibold text-blue-900">
-                  ${preview.dailyCost.toFixed(2)}
+                  ৳{preview.dailyCost.toFixed(2)}
                 </p>
               </div>
             )}

@@ -22,6 +22,14 @@ export function formatNumber(num: number | string, decimals: number = 2): string
   }).format(numValue);
 }
 
+export function formatWeight(weight: number | string): string {
+  const numValue = typeof weight === 'string' ? parseFloat(weight) : weight;
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 4,
+    maximumFractionDigits: 4,
+  }).format(numValue);
+}
+
 export function formatDate(date: string | Date): string {
   if (!date) return 'N/A';
   
