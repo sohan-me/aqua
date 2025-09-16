@@ -476,16 +476,16 @@ export default function AnalyticsPage() {
       <div className="space-y-6">
         {/* Header Section */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Analytics Dashboard</h1>
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Analytics Dashboard</h1>
             <p className="text-gray-600 mt-1">
-              {selectedPond === 'all' 
-                ? 'Comprehensive insights into your fish farming operations' 
-                : `Analytics for ${ponds.find(p => p.id === parseInt(selectedPond))?.name || 'Selected Pond'}`
-              }
-            </p>
-          </div>
-          
+            {selectedPond === 'all' 
+              ? 'Comprehensive insights into your fish farming operations' 
+              : `Analytics for ${ponds.find(p => p.id === parseInt(selectedPond))?.name || 'Selected Pond'}`
+            }
+          </p>
+        </div>
+        
           <div className="flex items-center gap-3">
             <button 
               onClick={exportAnalyticsToCSV}
@@ -506,66 +506,66 @@ export default function AnalyticsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Time Range</label>
-              <select
-                value={timeRange}
-                onChange={(e) => setTimeRange(e.target.value)}
+            <select
+              value={timeRange}
+              onChange={(e) => setTimeRange(e.target.value)}
                 className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="7d">Last 7 days</option>
-                <option value="30d">Last 30 days</option>
-                <option value="90d">Last 90 days</option>
-                <option value="1y">Last year</option>
-                <option value="custom">Custom Range</option>
-              </select>
-            </div>
-            
+            >
+              <option value="7d">Last 7 days</option>
+              <option value="30d">Last 30 days</option>
+              <option value="90d">Last 90 days</option>
+              <option value="1y">Last year</option>
+              <option value="custom">Custom Range</option>
+            </select>
+          </div>
+          
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Start Date</label>
-              <input
-                type="date"
-                value={dateRange.startDate}
-                onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
+            <input
+              type="date"
+              value={dateRange.startDate}
+              onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
                 className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-            
+            />
+          </div>
+          
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">End Date</label>
-              <input
-                type="date"
-                value={dateRange.endDate}
-                onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
+            <input
+              type="date"
+              value={dateRange.endDate}
+              onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
                 className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-            
+            />
+          </div>
+          
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Pond</label>
               <div className="flex items-center gap-2">
-                <select
-                  value={selectedPond}
-                  onChange={(e) => setSelectedPond(e.target.value)}
+            <select
+              value={selectedPond}
+              onChange={(e) => setSelectedPond(e.target.value)}
                   className={`flex-1 border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                    selectedPond !== 'all' 
-                      ? 'border-blue-500 bg-blue-50' 
-                      : 'border-gray-300'
-                  }`}
-                >
-                  <option value="all">All Ponds</option>
-                  {ponds.map((pond) => (
-                    <option key={pond.id} value={pond.id}>
-                      {pond.name}
-                    </option>
-                  ))}
-                </select>
-                {selectedPond !== 'all' && (
-                  <button
-                    onClick={() => setSelectedPond('all')}
+                selectedPond !== 'all' 
+                  ? 'border-blue-500 bg-blue-50' 
+                  : 'border-gray-300'
+              }`}
+            >
+              <option value="all">All Ponds</option>
+              {ponds.map((pond) => (
+                <option key={pond.id} value={pond.id}>
+                  {pond.name}
+                </option>
+              ))}
+            </select>
+            {selectedPond !== 'all' && (
+              <button
+                onClick={() => setSelectedPond('all')}
                     className="text-blue-600 hover:text-blue-800 text-xs font-medium px-2 py-1 rounded hover:bg-blue-50 transition-colors"
-                  >
+              >
                     Clear
-                  </button>
-                )}
+              </button>
+            )}
               </div>
             </div>
           </div>

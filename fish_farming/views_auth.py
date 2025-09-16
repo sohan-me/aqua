@@ -1,10 +1,12 @@
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 
 
 @api_view(['POST'])
@@ -56,3 +58,48 @@ def logout_view(request):
             {'error': 'Error logging out'}, 
             status=status.HTTP_400_BAD_REQUEST
         )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def change_password_view(request):
+    """
+    Change password endpoint for authenticated users
+    """
+    old_password = request.data.get('old_password')
+    new_password = request.data.get('new_password')
+    confirm_password = request.data.get('confirm_password')
+    
+    if not old_password or not new_password or not confirm_password:
+        return Response(
+            {'error': 'All password fields are required'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    if new_password != confirm_password:
+        return Response(
+            {'error': 'New passwords do not match'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Verify old password
+    if not request.user.check_password(old_password):
+        return Response(
+            {'error': 'Current password is incorrect'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Validate new password
+    try:
+        validate_password(new_password, user=request.user)
+    except ValidationError as e:
+        return Response(
+            {'error': 'Password validation failed', 'details': list(e.messages)}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Set new password
+    request.user.set_password(new_password)
+    request.user.save()
+    
+    return Response({'message': 'Password changed successfully'})

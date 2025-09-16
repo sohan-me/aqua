@@ -867,7 +867,7 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
             
             # Get the pond
             pond = get_object_or_404(Pond, id=pond_id, user=request.user)
-        
+            
             # Get latest stocking data for this pond
             latest_stocking = Stocking.objects.filter(pond=pond).order_by('-date').first()
             if not latest_stocking:
@@ -899,7 +899,10 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
                 avg_weight = latest_sampling.average_weight_kg
             else:
                 # Use initial weight from stocking if no sampling data
-                avg_weight = latest_stocking.initial_avg_weight_kg or Decimal('0.01')
+                try:
+                    avg_weight = latest_stocking.initial_avg_weight_kg or Decimal('0.01')
+                except (ValueError, TypeError):
+                    avg_weight = Decimal('0.01')
             
             # Get water temperature
             water_temp = None
@@ -922,7 +925,13 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
                 if latest_feed.cost_per_kg:
                     feed_cost = latest_feed.cost_per_kg
                 elif latest_feed.cost_per_packet and latest_feed.packet_size_kg:
-                    feed_cost = latest_feed.cost_per_packet / latest_feed.packet_size_kg
+                    # Use Decimal division to avoid InvalidOperation
+                    from decimal import Decimal, ROUND_HALF_UP
+                    try:
+                        feed_cost = Decimal(str(latest_feed.cost_per_packet)) / Decimal(str(latest_feed.packet_size_kg))
+                        feed_cost = feed_cost.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                    except (ValueError, TypeError, ZeroDivisionError):
+                        feed_cost = None
             
             # Create feeding advice
             feeding_advice = FeedingAdvice.objects.create(
@@ -963,7 +972,6 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
         advice.save()
         return Response({'status': 'advice applied'})
     
-    @action(detail=False, methods=['post'])
     @action(detail=False, methods=['post'])
     def auto_generate(self, request):
         """Automatically generate feeding advice for a pond - only requires pond selection"""

@@ -1,11 +1,12 @@
 'use client';
 
-import { Bell, Search, Menu, LogOut, User } from 'lucide-react';
+import { Bell, Search, Menu, LogOut, User, Key } from 'lucide-react';
 import { useAlerts } from '@/hooks/useApi';
 import { useAuth } from '@/contexts/AuthContext';
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { ChangePasswordModal } from '@/components/ChangePasswordModal';
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -16,6 +17,7 @@ export function Header({ onMenuClick }: HeaderProps) {
   const auth = useAuth();
   const router = useRouter();
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [filteredSuggestions, setFilteredSuggestions] = useState<Array<{name: string; href: string; description: string; keywords: string[]}>>([]);
@@ -191,6 +193,16 @@ export function Header({ onMenuClick }: HeaderProps) {
                   <p className="text-xs text-gray-500">{user?.email}</p>
                 </div>
                 <button
+                  onClick={() => {
+                    setShowChangePasswordModal(true);
+                    setShowUserMenu(false);
+                  }}
+                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100/50 transition-colors duration-200"
+                >
+                  <Key className="h-4 w-4 mr-2" />
+                  Change Password
+                </button>
+                <button
                   onClick={logout}
                   className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100/50 transition-colors duration-200"
                 >
@@ -202,6 +214,12 @@ export function Header({ onMenuClick }: HeaderProps) {
           </div>
         </div>
       </div>
+      
+      {/* Change Password Modal */}
+      <ChangePasswordModal
+        isOpen={showChangePasswordModal}
+        onClose={() => setShowChangePasswordModal(false)}
+      />
     </header>
   );
 }

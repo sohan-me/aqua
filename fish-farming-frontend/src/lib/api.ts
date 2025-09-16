@@ -538,6 +538,20 @@ export const apiService = {
     return response.data;
   },
 
+  changePassword: async (oldPassword: string, newPassword: string, confirmPassword: string) => {
+    const response = await axios.post(`${API_CONFIG.AUTH_URL}/change-password/`, {
+      old_password: oldPassword,
+      new_password: newPassword,
+      confirm_password: confirmPassword,
+    }, {
+      headers: {
+        'Authorization': `Token ${localStorage.getItem('authToken')}`,
+        'Content-Type': 'application/json',
+      }
+    });
+    return response.data;
+  },
+
   // Species
   getSpecies: () => api.get<Species[]>('/species/'),
   getSpeciesById: (id: number) => api.get<Species>(`/species/${id}/`),

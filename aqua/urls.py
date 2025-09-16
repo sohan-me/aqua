@@ -17,7 +17,7 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
-from fish_farming.views_auth import login_view, logout_view
+from fish_farming.views_auth import login_view, logout_view, change_password_view
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -27,6 +27,7 @@ urlpatterns = [
     # Authentication endpoints
     path('api/auth/login/', login_view, name='api_login'),
     path('api/auth/logout/', logout_view, name='api_logout'),
+    path('api/auth/change-password/', change_password_view, name='api_change_password'),
     
     # API Documentation
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),

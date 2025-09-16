@@ -832,10 +832,13 @@ class FeedingAdvice(models.Model):
             # Calculate total biomass
             self.total_biomass_kg = self.estimated_fish_count * self.average_fish_weight_kg
             
-            # Calculate recommended feed based on feeding bands
+                # Calculate recommended feed based on feeding bands
             if self.total_biomass_kg:
                 # Get the appropriate feeding band based on average fish weight
-                avg_weight_g = float(self.average_fish_weight_kg) * 1000  # Convert kg to grams
+                try:
+                    avg_weight_g = float(self.average_fish_weight_kg) * 1000  # Convert kg to grams
+                except (ValueError, TypeError):
+                    avg_weight_g = 0
                 
                 # Find the appropriate feeding band
                 feeding_band = FeedingBand.objects.filter(
@@ -866,11 +869,17 @@ class FeedingAdvice(models.Model):
                     base_rate *= Decimal('1.2')
                 
                 self.feeding_rate_percent = base_rate
-                self.recommended_feed_kg = (self.total_biomass_kg * base_rate) / 100
+                try:
+                    self.recommended_feed_kg = (self.total_biomass_kg * base_rate) / Decimal('100')
+                except (ValueError, TypeError, ZeroDivisionError):
+                    self.recommended_feed_kg = Decimal('0')
                 
                 # Calculate daily feed cost
-                if self.feed_cost_per_kg:
-                    self.daily_feed_cost = self.recommended_feed_kg * self.feed_cost_per_kg
+                if self.feed_cost_per_kg and self.recommended_feed_kg:
+                    try:
+                        self.daily_feed_cost = self.recommended_feed_kg * self.feed_cost_per_kg
+                    except (ValueError, TypeError):
+                        self.daily_feed_cost = Decimal('0')
         
         super().save(*args, **kwargs)
 
