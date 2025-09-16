@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useExpenses, usePonds, useDeleteExpense } from '@/hooks/useApi';
-import { formatDate, formatNumber } from '@/lib/utils';
-import { DollarSign, Plus, Edit, Trash2, Eye, TrendingDown, Receipt, Building2 } from 'lucide-react';
+import { Expense, Pond } from '@/lib/api';
+import { formatDate, formatNumber, extractApiData } from '@/lib/utils';
+import { DollarSign, Plus, Edit, Trash2, Eye, TrendingDown, Receipt, Building2, Filter, X, Calendar } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 
@@ -12,11 +13,58 @@ export default function ExpensesPage() {
   const { data: pondsData } = usePonds();
   const deleteExpense = useDeleteExpense();
   
-  const expenses = expensesData?.data || [];
-  const ponds = pondsData?.data || [];
+  const expenses = extractApiData<Expense>(expensesData);
+  const ponds = extractApiData<Pond>(pondsData);
+
+  // Date range and pond filtering state
+  const [dateRange, setDateRange] = useState({
+    startDate: '',
+    endDate: ''
+  });
+  const [filterPond, setFilterPond] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Filter expenses based on date range and pond
+  const filteredExpenses = useMemo(() => {
+    return expenses.filter(expense => {
+      // Date range filtering
+      const expenseDate = new Date(expense.date);
+      const startDate = dateRange.startDate ? new Date(dateRange.startDate) : null;
+      const endDate = dateRange.endDate ? new Date(dateRange.endDate) : null;
+
+      let dateMatch = true;
+      if (startDate && endDate) {
+        dateMatch = expenseDate >= startDate && expenseDate <= endDate;
+      } else if (startDate) {
+        dateMatch = expenseDate >= startDate;
+      } else if (endDate) {
+        dateMatch = expenseDate <= endDate;
+      }
+
+      // Pond filtering
+      const pondMatch = !filterPond || expense.pond === parseInt(filterPond);
+
+      return dateMatch && pondMatch;
+    });
+  }, [expenses, dateRange, filterPond]);
+
+  // Calculate filtered totals
+  const filteredTotals = useMemo(() => {
+    const totalAmount = filteredExpenses.reduce((sum, expense) => sum + parseFloat(expense.amount || '0'), 0);
+    const thisMonthAmount = filteredExpenses
+      .filter(expense => {
+        const expenseDate = new Date(expense.date);
+        const now = new Date();
+        return expenseDate.getMonth() === now.getMonth() && 
+               expenseDate.getFullYear() === now.getFullYear();
+      })
+      .reduce((sum, expense) => sum + parseFloat(expense.amount || '0'), 0);
+    
+    return { totalAmount, thisMonthAmount };
+  }, [filteredExpenses]);
 
   const handleDelete = async (id: number, expenseType: string, amount: string, date: string) => {
-    if (window.confirm(`Are you sure you want to delete the expense record for ${expenseType} (৳${amount}) on ${formatDate(date)}? This action cannot be undone.`)) {
+    if (window.confirm(`Are you sure you want to delete the expense record for ${expenseType} (৳${parseFloat(amount).toFixed(4)}) on ${formatDate(date)}? This action cannot be undone.`)) {
       try {
         await deleteExpense.mutateAsync(id);
       } catch (error) {
@@ -40,10 +88,10 @@ export default function ExpensesPage() {
           <h1 className="text-3xl font-bold text-gray-900">Expense Management</h1>
           <p className="text-gray-600">Track and manage farm expenses</p>
         </div>
-        <div className="flex space-x-3">
+        <div className="md:flex space-x-3 space-y-3 md:space-y-0">
           <Link
             href="/expense-types"
-            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            className="w-full md:w-auto inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           >
             <DollarSign className="h-4 w-4 mr-2" />
             Manage Expense Types
@@ -51,12 +99,106 @@ export default function ExpensesPage() {
           <Link
             style={{color: "white"}}
             href="/expenses/new"
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            className="w-full md:w-auto inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           >
             <Plus className="h-4 w-4 mr-2" />
             Add Expense
           </Link>
         </div>
+      </div>
+
+      {/* Date Range Filter */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-2">
+            <Filter className="h-5 w-5 text-gray-400" />
+            <h3 className="md:text-lg font-medium text-gray-900">Filter Expenses</h3>
+          </div>
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className="w-full md:w-auto inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            {showFilters ? 'Hide Filters' : 'Show Filters'}
+          </button>
+        </div>
+
+        {showFilters && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Start Date
+              </label>
+              <input
+                type="date"
+                value={dateRange.startDate}
+                onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500  text-gray-900 placeholder-gray-500 bg-white" 
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                End Date
+              </label>
+              <input
+                type="date"
+                value={dateRange.endDate}
+                onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500  text-gray-900 placeholder-gray-500 bg-white" 
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Filter by Pond
+              </label>
+              <select
+                value={filterPond}
+                onChange={(e) => setFilterPond(e.target.value)}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500  text-gray-900 placeholder-gray-500 bg-white"
+              >
+                <option value="">All Ponds</option>
+                {ponds.map((pond) => (
+                  <option key={pond.id} value={pond.id}>
+                    {pond.name} ({pond.area_decimal} decimal)
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-end w-full">
+              <button
+                onClick={() => {
+                  setDateRange({ startDate: '', endDate: '' });
+                  setFilterPond('');
+                }}
+                className="w-full md:w-auto inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                <X className="h-4 w-4 mr-2" />
+                Clear Filters
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Active Filters Summary */}
+        {(dateRange.startDate || dateRange.endDate || filterPond) && (
+          <div className="mt-4 p-3 bg-blue-50 rounded-md">
+            <div className="flex items-center">
+              <Filter className="h-4 w-4 text-blue-400 mr-2" />
+              <span className="text-sm text-blue-700">
+                Showing expenses{' '}
+                {dateRange.startDate || dateRange.endDate ? (
+                  <>
+                    from{' '}
+                    {dateRange.startDate ? formatDate(dateRange.startDate) : 'beginning'} to{' '}
+                    {dateRange.endDate ? formatDate(dateRange.endDate) : 'now'}
+                  </>
+                ) : null}
+                {dateRange.startDate || dateRange.endDate ? ' and ' : ''}
+                {filterPond && `for Pond: ${ponds.find(p => p.id === parseInt(filterPond))?.name || 'Unknown'}`}
+                {' '}({filteredExpenses.length} records)
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Summary Cards */}
@@ -65,7 +207,7 @@ export default function ExpensesPage() {
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-lg font-semibold text-gray-900">Total Expenses</h3>
-              <p className="text-3xl font-bold text-red-600">{expenses.length}</p>
+              <p className="text-3xl font-bold text-red-600">{filteredExpenses.length}</p>
             </div>
             <div className="rounded-full bg-red-100 p-3">
               <TrendingDown className="h-8 w-8 text-red-600" />
@@ -78,7 +220,7 @@ export default function ExpensesPage() {
             <div>
               <h3 className="text-lg font-semibold text-gray-900">Total Amount</h3>
               <p className="text-3xl font-bold text-red-600">
-                ৳{expenses.reduce((sum, expense) => sum + parseFloat(expense.amount || '0'), 0).toFixed(2)}
+                ৳{filteredTotals.totalAmount.toFixed(4)}
               </p>
             </div>
             <div className="rounded-full bg-red-100 p-3">
@@ -92,15 +234,7 @@ export default function ExpensesPage() {
             <div>
               <h3 className="text-lg font-semibold text-gray-900">This Month</h3>
               <p className="text-3xl font-bold text-orange-600">
-                ৳{expenses
-                  .filter(expense => {
-                    const expenseDate = new Date(expense.date);
-                    const now = new Date();
-                    return expenseDate.getMonth() === now.getMonth() && 
-                           expenseDate.getFullYear() === now.getFullYear();
-                  })
-                  .reduce((sum, expense) => sum + parseFloat(expense.amount || '0'), 0)
-                  .toFixed(2)}
+                ৳{filteredTotals.thisMonthAmount.toFixed(4)}
               </p>
             </div>
             <div className="rounded-full bg-orange-100 p-3">
@@ -114,7 +248,7 @@ export default function ExpensesPage() {
             <div>
               <h3 className="text-lg font-semibold text-gray-900">Suppliers</h3>
               <p className="text-3xl font-bold text-purple-600">
-                {new Set(expenses.filter(e => e.supplier).map(e => e.supplier)).size}
+                {new Set(filteredExpenses.filter(e => e.supplier).map(e => e.supplier)).size}
               </p>
             </div>
             <div className="rounded-full bg-purple-100 p-3">
@@ -125,7 +259,7 @@ export default function ExpensesPage() {
       </div>
 
       {/* Expenses List */}
-      {expenses.length === 0 ? (
+      {filteredExpenses.length === 0 ? (
         <div className="text-center py-12">
           <TrendingDown className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900">No expense records</h3>
@@ -170,7 +304,7 @@ export default function ExpensesPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {expenses.map((expense) => (
+                {filteredExpenses.map((expense) => (
                   <tr key={expense.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {formatDate(expense.date)}
@@ -185,11 +319,11 @@ export default function ExpensesPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                        ৳{expense.amount}
+                        ৳{parseFloat(expense.amount).toFixed(4)}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {expense.quantity ? `${expense.quantity} ${expense.unit}` : 'N/A'}
+                      {expense.quantity ? `${parseFloat(expense.quantity).toFixed(4)} ${expense.unit}` : 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {expense.supplier || 'N/A'}

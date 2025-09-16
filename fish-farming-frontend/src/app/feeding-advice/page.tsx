@@ -1,7 +1,8 @@
 'use client';
 
-import { useFeedingAdvice, useDeleteFeedingAdvice, useApplyFeedingAdvice, useGenerateFeedingAdvice, usePonds } from '@/hooks/useApi';
-import { formatDate, formatWeight } from '@/lib/utils';
+import { useFeedingAdvice, useDeleteFeedingAdvice, useApplyFeedingAdvice, useAutoGenerateFeedingAdvice, usePonds } from '@/hooks/useApi';
+import { FeedingAdvice, Pond } from '@/lib/api';
+import { formatDate, formatWeight, extractApiData } from '@/lib/utils';
 import { Lightbulb, Plus, Eye, Edit, Trash2, Calendar, CheckCircle, Clock } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -12,12 +13,13 @@ export default function FeedingAdvicePage() {
   const { data: pondsData } = usePonds();
   const deleteAdvice = useDeleteFeedingAdvice();
   const applyAdvice = useApplyFeedingAdvice();
-  const generateAdvice = useGenerateFeedingAdvice();
+  const generateAdvice = useAutoGenerateFeedingAdvice();
   const [filterPond, setFilterPond] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [selectedPondForGeneration, setSelectedPondForGeneration] = useState('');
   
-  const advice = adviceData?.data || [];
+  const advice = extractApiData<FeedingAdvice>(adviceData);
+  const ponds = extractApiData<Pond>(pondsData);
   
   const filteredAdvice = advice.filter(item => {
     const pondMatch = filterPond === 'all' || item.pond.toString() === filterPond;
@@ -52,7 +54,7 @@ export default function FeedingAdvicePage() {
     }
     
     try {
-      await generateAdvice.mutateAsync({ pond_id: parseInt(selectedPondForGeneration) });
+      await generateAdvice.mutateAsync({ pond: parseInt(selectedPondForGeneration) });
       setSelectedPondForGeneration('');
     } catch (error) {
       // Error is handled by the hook
@@ -84,7 +86,7 @@ export default function FeedingAdvicePage() {
               required
             >
               <option value="">Select Pond *</option>
-              {pondsData?.data?.map((pond: any) => (
+              {ponds.map((pond) => (
                 <option key={pond.id} value={pond.id}>
                   {pond.name}
                 </option>
@@ -203,9 +205,8 @@ export default function FeedingAdvicePage() {
                       <p className="text-sm text-gray-500">Feed Per Session</p>
                       <p className="text-lg font-semibold text-gray-900">
                         {(() => {
-                          // @ts-expect-error TypeScript strict mode issue with parseFloat division
-                          const feedPerSession = parseFloat(item.recommended_feed_kg) / parseFloat(item.feeding_frequency);
-                          return formatWeight(feedPerSession.toString());
+                          const feedPerSession = parseFloat(item.recommended_feed_kg) / item.feeding_frequency;
+                          return feedPerSession.toFixed(4);
                         })()} kg
                       </p>
                     </div>
@@ -287,7 +288,7 @@ export default function FeedingAdvicePage() {
                   {item.daily_feed_cost && (
                     <div className="mb-2">
                       <span className="text-sm text-gray-600">
-                        <strong>Daily Feed Cost:</strong> ৳{parseFloat(item.daily_feed_cost).toFixed(2)}
+                        <strong>Daily Feed Cost:</strong> ৳{parseFloat(item.daily_feed_cost).toFixed(4)}
                       </span>
                     </div>
                   )}

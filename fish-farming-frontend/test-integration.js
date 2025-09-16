@@ -7,7 +7,7 @@
 
 const axios = require('axios');
 
-const API_BASE_URL = 'https://apipremiumagro.sascorporationbd.com/api/ fish-farming';
+const API_BASE_URL = 'http://127.0.0.1:8000/api/ fish-farming';
 const FRONTEND_URL = 'https://apipremiumagro.sascorporationbd.com';
 
 async function testBackendAPI() {

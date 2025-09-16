@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useExpenseById, useUpdateExpense, usePonds, useExpenseTypes } from '@/hooks/useApi';
+import { extractApiData } from '@/lib/utils';
+import { Pond, ExpenseType } from '@/lib/api';
 import { ArrowLeft, Save, X, DollarSign, Receipt, Building2 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -16,8 +18,8 @@ export default function EditExpensePage() {
   const { data: expenseTypesData } = useExpenseTypes();
   const updateExpense = useUpdateExpense();
   
-  const ponds = pondsData?.data || [];
-  const expenseTypes = expenseTypesData?.data || [];
+  const ponds = extractApiData<Pond>(pondsData);
+  const expenseTypes = extractApiData<ExpenseType>(expenseTypesData);
 
   const [formData, setFormData] = useState({
     pond: '',

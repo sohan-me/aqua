@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useHarvestById, useUpdateHarvest, usePonds } from '@/hooks/useApi';
+import { extractApiData } from '@/lib/utils';
+import { Pond } from '@/lib/api';
 import { ArrowLeft, Save, X, Fish, Scale, DollarSign, Calculator } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -15,14 +17,13 @@ export default function EditHarvestPage() {
   const { data: pondsData } = usePonds();
   const updateHarvest = useUpdateHarvest();
   
-  const ponds = pondsData?.data || [];
+  const ponds = extractApiData<Pond>(pondsData);
 
   const [formData, setFormData] = useState({
     pond: '',
     date: '',
     total_weight_kg: '',
-    total_count: '',
-    avg_weight_g: '',
+    pieces_per_kg: '',
     price_per_kg: '',
     notes: ''
   });
@@ -36,8 +37,7 @@ export default function EditHarvestPage() {
         pond: harvest.data.pond?.toString() || '',
         date: harvest.data.date || '',
         total_weight_kg: harvest.data.total_weight_kg || '',
-        total_count: harvest.data.total_count?.toString() || '',
-        avg_weight_g: harvest.data.avg_weight_g || '',
+        pieces_per_kg: harvest.data.pieces_per_kg || '',
         price_per_kg: harvest.data.price_per_kg || '',
         notes: harvest.data.notes || ''
       });
@@ -51,17 +51,20 @@ export default function EditHarvestPage() {
       [name]: value
     }));
 
-    // Auto-calculate average weight if both weight and count are provided
-    if (name === 'total_weight_kg' || name === 'total_count') {
+    // Auto-calculate values if both weight and pieces_per_kg are provided
+    if (name === 'total_weight_kg' || name === 'pieces_per_kg') {
       const weight = name === 'total_weight_kg' ? parseFloat(value) : parseFloat(formData.total_weight_kg);
-      const count = name === 'total_count' ? parseInt(value) : parseInt(formData.total_count);
+      const piecesPerKg = name === 'pieces_per_kg' ? parseFloat(value) : parseFloat(formData.pieces_per_kg);
       
-      if (weight && count && count > 0) {
-        const avgWeight = (weight * 1000) / count; // Convert kg to grams
+      if (weight && piecesPerKg && piecesPerKg > 0) {
+        const avgWeightKg = 1 / piecesPerKg; // Average weight per fish in kg
+        const totalCount = Math.round(weight * piecesPerKg); // Total fish count
+        
         setFormData(prev => ({
           ...prev,
-          avg_weight_g: avgWeight.toFixed(2)
+          [name]: value
         }));
+        return;
       }
     }
   };
@@ -75,8 +78,7 @@ export default function EditHarvestPage() {
         pond: parseInt(formData.pond),
         date: formData.date,
         total_weight_kg: parseFloat(formData.total_weight_kg),
-        total_count: parseInt(formData.total_count),
-        avg_weight_g: formData.avg_weight_g ? parseFloat(formData.avg_weight_g) : null,
+        pieces_per_kg: formData.pieces_per_kg ? parseFloat(formData.pieces_per_kg) : null,
         price_per_kg: formData.price_per_kg ? parseFloat(formData.price_per_kg) : null,
         notes: formData.notes
       };
@@ -211,40 +213,24 @@ export default function EditHarvestPage() {
             </div>
 
             <div>
-              <label htmlFor="total_count" className="block text-sm font-medium text-gray-700 mb-2">
-                Total Fish Count *
+              <label htmlFor="pieces_per_kg" className="block text-sm font-medium text-gray-700 mb-2">
+                Pieces per kg *
               </label>
               <input
                 type="number"
-                id="total_count"
-                name="total_count"
+                id="pieces_per_kg"
+                name="pieces_per_kg"
                 required
-                min="1"
-                value={formData.total_count}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
-                placeholder="e.g., 500"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="avg_weight_g" className="block text-sm font-medium text-gray-700 mb-2">
-                Average Weight (g)
-              </label>
-              <input
-                type="number"
-                id="avg_weight_g"
-                name="avg_weight_g"
                 min="0"
                 step="0.01"
-                value={formData.avg_weight_g}
+                value={formData.pieces_per_kg}
                 onChange={handleInputChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
-                placeholder="Auto-calculated"
-                readOnly
+                placeholder="e.g., 2.5"
               />
-              <p className="text-xs text-gray-500 mt-1">Automatically calculated from total weight and count</p>
+              <p className="text-xs text-gray-500 mt-1">Number of fish pieces per kilogram</p>
             </div>
+
 
             <div>
               <label htmlFor="price_per_kg" className="block text-sm font-medium text-gray-700 mb-2">
@@ -265,6 +251,33 @@ export default function EditHarvestPage() {
           </div>
         </div>
 
+        {/* Calculated Values Display */}
+        {(formData.total_weight_kg && formData.pieces_per_kg) && (
+          <div className="bg-blue-50 rounded-lg border border-blue-200 p-6">
+            <h3 className="text-lg font-semibold text-blue-900 mb-4 flex items-center">
+              <Calculator className="h-5 w-5 mr-2" />
+              Calculated Values
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-white rounded-md p-4 border border-blue-200">
+                <p className="text-sm font-medium text-blue-700">Average Weight per Fish (kg)</p>
+                <p className="text-2xl font-bold text-blue-900">
+                  {(1 / parseFloat(formData.pieces_per_kg)).toFixed(3)} kg
+                </p>
+              </div>
+              <div className="bg-white rounded-md p-4 border border-blue-200">
+                <p className="text-sm font-medium text-blue-700">Total Fish Count</p>
+                <p className="text-2xl font-bold text-blue-900">
+                  {Math.round(parseFloat(formData.total_weight_kg) * parseFloat(formData.pieces_per_kg))} fish
+                </p>
+              </div>
+            </div>
+            <p className="text-xs text-blue-600 mt-3">
+              * These values will be automatically calculated and saved
+            </p>
+          </div>
+        )}
+
         {/* Revenue Calculation */}
         {formData.price_per_kg && formData.total_weight_kg && (
           <div className="bg-green-50 rounded-lg border border-green-200 p-6">
@@ -279,12 +292,12 @@ export default function EditHarvestPage() {
               </div>
               <div className="text-center">
                 <p className="text-sm text-green-700">Price per kg</p>
-                <p className="text-2xl font-bold text-green-900">৳{formData.price_per_kg}</p>
+                <p className="text-2xl font-bold text-green-900">৳{parseFloat(formData.price_per_kg).toFixed(4)}</p>
               </div>
               <div className="text-center">
                 <p className="text-sm text-green-700">Total Revenue</p>
                 <p className="text-2xl font-bold text-green-900">
-                  ৳{(parseFloat(formData.total_weight_kg) * parseFloat(formData.price_per_kg)).toFixed(2)}
+                  ৳{(parseFloat(formData.total_weight_kg) * parseFloat(formData.price_per_kg)).toFixed(4)}
                 </p>
               </div>
             </div>

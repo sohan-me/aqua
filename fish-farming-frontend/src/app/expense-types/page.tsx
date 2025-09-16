@@ -7,6 +7,8 @@ import {
   useUpdateExpenseType, 
   useDeleteExpenseType 
 } from '@/hooks/useApi';
+import { extractApiData } from '@/lib/utils';
+import { ExpenseType } from '@/lib/api';
 import { 
   Plus, 
   Edit, 
@@ -30,7 +32,7 @@ export default function ExpenseTypesPage() {
   const updateExpenseType = useUpdateExpenseType();
   const deleteExpenseType = useDeleteExpenseType();
 
-  const expenseTypes = expenseTypesData?.data || [];
+  const expenseTypes = extractApiData<ExpenseType>(expenseTypesData);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [formData, setFormData] = useState({

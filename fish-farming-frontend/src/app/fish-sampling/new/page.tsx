@@ -1,6 +1,8 @@
 'use client';
 
 import { usePonds, useSpecies, useCreateFishSampling } from '@/hooks/useApi';
+import { extractApiData } from '@/lib/utils';
+import { Pond, Species } from '@/lib/api';
 import { Scale, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -12,8 +14,8 @@ export default function NewFishSamplingPage() {
   const { data: pondsData } = usePonds();
   const { data: speciesData } = useSpecies();
   const createSampling = useCreateFishSampling();
-  const ponds = pondsData?.data || [];
-  const species = speciesData?.data || [];
+  const ponds = extractApiData<Pond>(pondsData);
+  const species = extractApiData<Species>(speciesData);
   
   const [formData, setFormData] = useState({
     pond: '',

@@ -1,6 +1,8 @@
 'use client';
 
 import { usePonds, useAutoGenerateFeedingAdvice } from '@/hooks/useApi';
+import { extractApiData } from '@/lib/utils';
+import { Pond } from '@/lib/api';
 import { Lightbulb, ArrowLeft, Zap, Info } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -11,7 +13,7 @@ export default function NewFeedingAdvicePage() {
   const router = useRouter();
   const { data: pondsData } = usePonds();
   const autoGenerateAdvice = useAutoGenerateFeedingAdvice();
-  const ponds = pondsData?.data || [];
+  const ponds = extractApiData<Pond>(pondsData);
   
   const [selectedPond, setSelectedPond] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);

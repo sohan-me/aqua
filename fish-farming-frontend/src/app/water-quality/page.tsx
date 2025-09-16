@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { useSamplings, usePonds, useDeleteSampling, useSampleTypes } from '@/hooks/useApi';
-import { formatDate, formatNumber } from '@/lib/utils';
+import { Sampling, Pond, SampleType } from '@/lib/api';
+import { formatDate, formatNumber, extractApiData } from '@/lib/utils';
 import { Droplets, Plus, Edit, Trash2, Eye, Thermometer, TestTube, Fish } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -13,9 +14,9 @@ export default function WaterQualityPage() {
   const { data: sampleTypesData } = useSampleTypes();
   const deleteSampling = useDeleteSampling();
   
-  const samplings = samplingsData?.data || [];
-  const ponds = pondsData?.data || [];
-  const sampleTypes = sampleTypesData?.data || [];
+  const samplings = extractApiData<Sampling>(samplingsData);
+  const ponds = extractApiData<Pond>(pondsData);
+  const sampleTypes = extractApiData<SampleType>(sampleTypesData);
 
   const handleDelete = async (id: number, pondName: string, sampleType: string, date: string) => {
     if (window.confirm(`Are you sure you want to delete the ${sampleType} sample for ${pondName} on ${formatDate(date)}? This action cannot be undone.`)) {

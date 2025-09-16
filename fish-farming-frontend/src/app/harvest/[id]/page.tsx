@@ -103,7 +103,7 @@ export default function HarvestDetailsPage() {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Avg Weight</p>
               <p className="text-2xl font-semibold text-gray-900">
-                {harvest.data.avg_weight_g ? `${(parseFloat(harvest.data.avg_weight_g) / 1000).toFixed(3)} kg` : 'N/A'}
+                {harvest.data.avg_weight_kg && parseFloat(harvest.data.avg_weight_kg) > 0 ? `${parseFloat(harvest.data.avg_weight_kg).toFixed(3)} kg` : 'N/A'}
               </p>
             </div>
           </div>
@@ -158,19 +158,19 @@ export default function HarvestDetailsPage() {
             <div className="flex justify-between">
               <span className="text-sm text-gray-500">Average Weight:</span>
               <span className="text-sm font-medium">
-                {harvest.data.avg_weight_g ? `${(parseFloat(harvest.data.avg_weight_g) / 1000).toFixed(3)} kg` : 'N/A'}
+                {harvest.data.avg_weight_kg && parseFloat(harvest.data.avg_weight_kg) > 0 ? `${parseFloat(harvest.data.avg_weight_kg).toFixed(3)} kg` : 'N/A'}
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-gray-500">Price per kg:</span>
               <span className="text-sm font-medium">
-                {harvest.data.price_per_kg ? `৳${harvest.data.price_per_kg}` : 'N/A'}
+                {harvest.data.price_per_kg ? `৳${parseFloat(harvest.data.price_per_kg).toFixed(4)}` : 'N/A'}
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-gray-500">Total Revenue:</span>
               <span className="text-sm font-medium">
-                {harvest.data.total_revenue ? `৳${harvest.data.total_revenue}` : 'N/A'}
+                {harvest.data.total_revenue ? `৳${parseFloat(harvest.data.total_revenue).toFixed(4)}` : 'N/A'}
               </span>
             </div>
           </div>
@@ -191,11 +191,11 @@ export default function HarvestDetailsPage() {
             </div>
             <div className="text-center">
               <p className="text-sm text-green-700">Price per kg</p>
-              <p className="text-2xl font-bold text-green-900">৳{harvest.data.price_per_kg}</p>
+              <p className="text-2xl font-bold text-green-900">৳{parseFloat(harvest.data.price_per_kg).toFixed(4)}</p>
             </div>
             <div className="text-center">
               <p className="text-sm text-green-700">Total Revenue</p>
-              <p className="text-2xl font-bold text-green-900">৳{harvest.data.total_revenue}</p>
+              <p className="text-2xl font-bold text-green-900">৳{parseFloat(harvest.data.total_revenue).toFixed(4)}</p>
             </div>
           </div>
         </div>

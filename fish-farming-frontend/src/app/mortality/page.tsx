@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { useMortalities, usePonds, useDeleteMortality, useStocking } from '@/hooks/useApi';
-import { formatDate, formatNumber, formatWeight } from '@/lib/utils';
+import { Mortality, Pond, Stocking } from '@/lib/api';
+import { formatDate, formatNumber, formatWeight, extractApiData } from '@/lib/utils';
 import { 
   Fish, 
   Plus, 
@@ -23,9 +24,9 @@ export default function MortalityPage() {
   const { data: stockingData } = useStocking();
   const deleteMortality = useDeleteMortality();
   
-  const mortalities = mortalitiesData?.data || [];
-  const ponds = pondsData?.data || [];
-  const stockings = stockingData?.data || [];
+  const mortalities = extractApiData<Mortality>(mortalitiesData);
+  const ponds = extractApiData<Pond>(pondsData);
+  const stockings = extractApiData<Stocking>(stockingData);
 
   const handleDelete = async (id: number, pondName: string, count: number, date: string) => {
     if (window.confirm(`Are you sure you want to delete the mortality record for ${pondName} (${count} fish) on ${formatDate(date)}? This action cannot be undone.`)) {
@@ -108,7 +109,7 @@ export default function MortalityPage() {
             <div>
               <h3 className="text-lg font-semibold text-gray-900">Mortality Rate</h3>
               <p className="text-3xl font-bold text-orange-600">
-                {mortalityRate.toFixed(2)}%
+                {mortalityRate.toFixed(4)}%
               </p>
             </div>
             <div className="rounded-full bg-orange-100 p-3">

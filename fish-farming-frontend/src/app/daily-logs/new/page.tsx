@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCreateDailyLog, usePonds } from '@/hooks/useApi';
+import { extractApiData } from '@/lib/utils';
+import { Pond } from '@/lib/api';
 import { ArrowLeft, Save, X, Calendar, Thermometer, Droplets, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -11,7 +13,7 @@ export default function NewDailyLogPage() {
   const createDailyLog = useCreateDailyLog();
   const { data: pondsData } = usePonds();
   
-  const ponds = pondsData?.data || [];
+  const ponds = extractApiData<Pond>(pondsData);
 
   const [formData, setFormData] = useState({
     pond: '',

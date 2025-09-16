@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCreateIncome, usePonds, useIncomeTypes, useSpecies } from '@/hooks/useApi';
+import { extractApiData } from '@/lib/utils';
+import { Pond, IncomeType, Species } from '@/lib/api';
 import { ArrowLeft, Save, X, DollarSign, Receipt, Users } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -13,9 +15,9 @@ export default function NewIncomePage() {
   const { data: incomeTypesData } = useIncomeTypes();
   const { data: speciesData } = useSpecies();
   
-  const ponds = pondsData?.data || [];
-  const incomeTypes = incomeTypesData?.data || [];
-  const species = speciesData?.data || [];
+  const ponds = extractApiData<Pond>(pondsData);
+  const incomeTypes = extractApiData<IncomeType>(incomeTypesData);
+  const species = extractApiData<Species>(speciesData);
 
   const [formData, setFormData] = useState({
     pond: '',

@@ -1,30 +1,65 @@
 'use client';
 
-import { useFishSampling, useDeleteFishSampling } from '@/hooks/useApi';
-import { formatDate } from '@/lib/utils';
-import { Scale, Plus, Eye, Edit, Trash2, Calendar, BarChart3 } from 'lucide-react';
+import { useFishSampling, useDeleteFishSampling, useSpecies, usePonds } from '@/hooks/useApi';
+import { Pond, Species } from '@/lib/api';
+import { formatDate, extractApiData } from '@/lib/utils';
+import { Scale, Plus, Eye, Edit, Trash2, Calendar, BarChart3, X } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
+import Pagination from '@/components/Pagination';
 
 export default function FishSamplingPage() {
-  const { data: samplingData, isLoading } = useFishSampling();
-  const deleteSampling = useDeleteFishSampling();
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [filterPond, setFilterPond] = useState('all');
+  const [filterSpecies, setFilterSpecies] = useState('all');
   const [biomassSummary, setBiomassSummary] = useState<any>(null);
   
-  const samplings = samplingData?.data || [];
+  // Build pagination and filter parameters
+  const paginationParams = {
+    page: currentPage,
+    page_size: pageSize,
+    ...(filterPond !== 'all' && { pond: filterPond }),
+    ...(filterSpecies !== 'all' && { species: filterSpecies }),
+  };
   
-  const filteredSamplings = filterPond === 'all' 
-    ? samplings 
-    : samplings.filter(sampling => sampling.pond.toString() === filterPond);
+  const { data: samplingData, isLoading } = useFishSampling(paginationParams);
+  const { data: speciesData } = useSpecies();
+  const { data: pondsData } = usePonds();
+  const deleteSampling = useDeleteFishSampling();
+  
+  const samplings = samplingData?.data?.results || [];
+  const totalItems = samplingData?.data?.count || 0;
+  const totalPages = Math.ceil(totalItems / pageSize);
+  const species = extractApiData<Species>(speciesData);
+  const ponds = extractApiData<Pond>(pondsData);
+  
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterPond, filterSpecies]);
 
   // Fetch biomass summary
   useEffect(() => {
     const fetchBiomassSummary = async () => {
       try {
         const token = localStorage.getItem('token');
-        const response = await fetch('/api/fish-farming/fish-sampling/biomass_analysis/', {
+        let url = '/api/fish-farming/fish-sampling/biomass_analysis/';
+        const params = new URLSearchParams();
+        
+        if (filterPond !== 'all') {
+          params.append('pond', filterPond);
+        }
+        if (filterSpecies !== 'all') {
+          params.append('species', filterSpecies);
+        }
+        
+        if (params.toString()) {
+          url += `?${params.toString()}`;
+        }
+        
+        const response = await fetch(url, {
           headers: {
             'Authorization': `Token ${token}`,
             'Content-Type': 'application/json',
@@ -41,7 +76,7 @@ export default function FishSamplingPage() {
     };
 
     fetchBiomassSummary();
-  }, [samplings]);
+  }, [samplings, filterPond, filterSpecies]);
 
   const handleDelete = async (id: number) => {
     if (window.confirm('Are you sure you want to delete this fish sampling record?')) {
@@ -81,20 +116,76 @@ export default function FishSamplingPage() {
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
         <div className="flex items-center space-x-4">
           <Scale className="h-5 w-5 text-gray-400" />
-          <select
-            value={filterPond}
-            onChange={(e) => setFilterPond(e.target.value)}
-            className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="all">All Ponds</option>
-            {Array.from(new Set(samplings.map(s => s.pond_name))).map(pondName => (
-              <option key={pondName} value={samplings.find(s => s.pond_name === pondName)?.pond}>
-                {pondName}
-              </option>
-            ))}
-          </select>
+          <div className="flex items-center space-x-4">
+            <div>
+              {/* <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Pond</label> */}
+              <select
+                value={filterPond}
+                onChange={(e) => setFilterPond(e.target.value)}
+                className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="all">All Ponds</option>
+                {ponds.map((pond) => (
+                  <option key={pond.id} value={pond.id}>
+                    {pond.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              {/* <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Species</label> */}
+              <select
+                value={filterSpecies}
+                onChange={(e) => setFilterSpecies(e.target.value)}
+                className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="all">All Species</option>
+                {species.map(speciesItem => (
+                  <option key={speciesItem.id} value={speciesItem.id}>
+                    {speciesItem.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-end">
+              <button
+                onClick={() => {
+                  setFilterPond('all');
+                  setFilterSpecies('all');
+                }}
+                className="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                <X className="h-4 w-4 mr-1" />
+                Clear Filters
+              </button>
+            </div>
+          </div>
         </div>
       </div>
+
+      {/* Active Filters Summary */}
+      {(filterPond !== 'all' || filterSpecies !== 'all') && (
+        <div className="bg-blue-50 rounded-lg border border-blue-200 p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <span className="text-sm font-medium text-blue-800">Active Filters:</span>
+              {filterPond !== 'all' && (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                  Pond: {filterPond}
+                </span>
+              )}
+              {filterSpecies !== 'all' && (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                  Species: {species.find(s => s.id.toString() === filterSpecies)?.name}
+                </span>
+              )}
+            </div>
+            <span className="text-sm text-blue-600">
+              Showing {samplings.length} of {totalItems} records
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Biomass Summary */}
       {biomassSummary && (
@@ -174,7 +265,7 @@ export default function FishSamplingPage() {
       )}
 
       {/* Sampling Records */}
-      {filteredSamplings.length === 0 ? (
+      {samplings.length === 0 ? (
         <div className="text-center py-12">
           <Scale className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900">No fish sampling records</h3>
@@ -191,7 +282,7 @@ export default function FishSamplingPage() {
         </div>
       ) : (
         <div className="grid gap-6">
-          {filteredSamplings.map((sampling) => (
+          {samplings.map((sampling) => (
             <div key={sampling.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
@@ -200,6 +291,11 @@ export default function FishSamplingPage() {
                     <h3 className="text-lg font-semibold text-gray-900">
                       {sampling.pond_name}
                     </h3>
+                    {sampling.species_name && (
+                      <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                        {sampling.species_name}
+                      </span>
+                    )}
                     <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
                       {sampling.sample_size} fish sampled
                     </span>
@@ -289,6 +385,19 @@ export default function FishSamplingPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Pagination */}
+      {totalItems > 0 && (
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          itemsPerPage={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={setPageSize}
+          showPageSizeSelector={true}
+        />
       )}
     </div>
   );

@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { useSpecies, useDeleteSpecies } from '@/hooks/useApi';
-import { formatDate } from '@/lib/utils';
+import { Species } from '@/lib/api';
+import { formatDate, extractApiData } from '@/lib/utils';
 import { Fish, Plus, Edit, Trash2, Eye } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -11,7 +12,7 @@ export default function SpeciesPage() {
   const { data: speciesData, isLoading } = useSpecies();
   const deleteSpecies = useDeleteSpecies();
   
-  const species = speciesData?.data || [];
+  const species = extractApiData<Species>(speciesData);
 
   const handleDelete = async (id: number, name: string) => {
     if (window.confirm(`Are you sure you want to delete the species "${name}"? This action cannot be undone and will affect all related stocking records.`)) {

@@ -108,6 +108,32 @@ export function generateId(): string {
   return Math.random().toString(36).substr(2, 9);
 }
 
+export function toNumber(value: string | number | null | undefined): number {
+  if (value === null || value === undefined || value === '') {
+    return 0;
+  }
+  const num = typeof value === 'string' ? parseFloat(value) : value;
+  return isNaN(num) ? 0 : num;
+}
+
+// Utility function to extract data from API responses (handles both paginated and non-paginated)
+export function extractApiData<T>(response: any): T[] {
+  if (!response?.data) return [];
+  
+  // Check if it's a paginated response
+  if (response.data.results && Array.isArray(response.data.results)) {
+    return response.data.results as T[];
+  }
+  
+  // Check if it's a direct array
+  if (Array.isArray(response.data)) {
+    return response.data as T[];
+  }
+  
+  // Fallback to empty array
+  return [];
+}
+
 export function debounce<T extends (...args: any[]) => any>(
   func: T,
   wait: number
