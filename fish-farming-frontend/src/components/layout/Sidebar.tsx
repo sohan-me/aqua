@@ -98,9 +98,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
       )}>
         {/* Header with close button for mobile */}
-        <div className="flex h-30 items-center justify-between border-b border-slate-700/50 mt-6 px-4">
+        <div className="flex h-40 items-center justify-between border-b border-slate-700/50 mt-6 px-4">
           <div className="flex items-center space-x-2">
-            <Image src="/logo.png" alt="AquaFarm Pro" width={150} height={150} />
+            <Image src="/logo.png" alt="AquaFarm Pro" width={150} height={100} />
           </div>
           <button
             onClick={onClose}

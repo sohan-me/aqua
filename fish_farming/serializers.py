@@ -277,6 +277,31 @@ class FishSamplingSerializer(serializers.ModelSerializer):
         model = FishSampling
         fields = '__all__'
         read_only_fields = ['user', 'average_weight_kg', 'fish_per_kg', 'condition_factor', 'growth_rate_kg_per_day', 'biomass_difference_kg', 'created_at', 'updated_at']
+    
+    def validate(self, data):
+        """Custom validation to provide better error messages for unique constraint violations"""
+        pond = data.get('pond')
+        species = data.get('species')
+        date = data.get('date')
+        
+        # Check for existing fish sampling with same pond, species, and date
+        existing_sampling = FishSampling.objects.filter(
+            pond=pond,
+            species=species,
+            date=date
+        )
+        
+        # If updating, exclude the current instance
+        if self.instance:
+            existing_sampling = existing_sampling.exclude(id=self.instance.id)
+        
+        if existing_sampling.exists():
+            species_name = species.name if species else "Mixed species"
+            raise serializers.ValidationError({
+                'non_field_errors': [f'Fish sampling for {pond.name} - {species_name} on {date} already exists. Please choose a different date or update the existing record.']
+            })
+        
+        return data
 
 
 # Feeding Advice serializers

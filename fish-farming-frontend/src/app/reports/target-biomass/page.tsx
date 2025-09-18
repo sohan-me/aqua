@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { usePonds, useSpecies } from '@/hooks/useApi';
+import { Pond, Species } from '@/lib/api';
+import { extractApiData } from '@/lib/utils';
 import { 
   Target, 
   Calculator, 
@@ -41,8 +43,8 @@ export default function TargetBiomassPage() {
   const { data: pondsData } = usePonds();
   const { data: speciesData } = useSpecies();
   
-  const ponds = pondsData?.data || [];
-  const species = speciesData?.data || [];
+  const ponds = extractApiData<Pond>(pondsData);
+  const species = extractApiData<Species>(speciesData);
   
   const [form, setForm] = useState<TargetBiomassForm>({
     pondId: '',
@@ -62,7 +64,11 @@ export default function TargetBiomassPage() {
 
     setIsLoading(true);
     try {
+<<<<<<< HEAD
       const response = await fetch('http://localhost:8000/api/ fish-farming/target-biomass/calculate/', {
+=======
+      const response = await fetch('https://apipremiumagro.sascorporationbd.com/api/fish-farming/target-biomass/calculate/', {
+>>>>>>> fdf8485018c78f175ef988e082f195e28f7f2afb
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -75,14 +81,15 @@ export default function TargetBiomassPage() {
           current_date: form.currentDate,
         }),
       });
-
+      console.log(response);
       if (response.ok) {
         const data = await response.json();
         setResult(data);
         toast.success('Target biomass calculation completed');
       } else {
         const errorData = await response.json();
-        toast.error(errorData.detail || 'Failed to calculate target biomass');
+        console.log(errorData);
+        toast.error(errorData.error || 'Failed to calculate target biomass');
       }
     } catch (error) {
       toast.error('Error calculating target biomass');
@@ -280,7 +287,7 @@ export default function TargetBiomassPage() {
                     <div className="ml-4">
                       <h3 className="text-sm font-medium text-gray-500">Daily Feed</h3>
                       <p className="text-2xl font-bold text-purple-600">
-                        {result.daily_feed_kg.toFixed(2)} kg/day
+                        {result.daily_feed_kg.toFixed(4)} kg/day
                       </p>
                     </div>
                   </div>
@@ -307,7 +314,7 @@ export default function TargetBiomassPage() {
                     </div>
                     <div>
                       <label className="text-sm font-medium text-gray-500">Feed Conversion Ratio</label>
-                      <p className="text-lg font-semibold text-gray-900">{result.feed_conversion_ratio.toFixed(2)}</p>
+                      <p className="text-lg font-semibold text-gray-900">{result.feed_conversion_ratio.toFixed(4)}</p>
                     </div>
                   </div>
                   

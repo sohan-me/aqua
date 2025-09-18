@@ -264,7 +264,7 @@ export default function WaterQualityDetailsPage() {
               <div className="flex justify-between">
                 <span className="text-sm text-gray-500">Fish Length:</span>
                 <span className="text-sm font-medium">
-                  {sampling.data.fish_length_cm ? `${(parseFloat(sampling.data.fish_length_cm) / 30.48).toFixed(2)} ft` : 'N/A'}
+                  {sampling.data.fish_length_cm ? `${(parseFloat(sampling.data.fish_length_cm) / 30.48).toFixed(4)} ft` : 'N/A'}
                 </span>
               </div>
             </div>

@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useStockingById, useUpdateStocking, usePonds, useSpecies } from '@/hooks/useApi';
+import { extractApiData } from '@/lib/utils';
+import { Pond, Species } from '@/lib/api';
 import { ArrowLeft, Save, X, Fish, Calculator, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
@@ -17,8 +19,8 @@ export default function EditStockingPage() {
   const { data: speciesData } = useSpecies();
   const updateStocking = useUpdateStocking();
   
-  const ponds = pondsData?.data || [];
-  const species = speciesData?.data || [];
+  const ponds = extractApiData<Pond>(pondsData);
+  const species = extractApiData<Species>(speciesData);
 
   const [formData, setFormData] = useState({
     pond: '',

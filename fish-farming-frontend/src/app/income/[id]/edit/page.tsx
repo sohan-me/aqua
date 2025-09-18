@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useIncomeById, useUpdateIncome, usePonds, useIncomeTypes } from '@/hooks/useApi';
+import { extractApiData } from '@/lib/utils';
+import { Pond, IncomeType } from '@/lib/api';
 import { ArrowLeft, Save, X, DollarSign, Receipt, Users } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -16,8 +18,8 @@ export default function EditIncomePage() {
   const { data: incomeTypesData } = useIncomeTypes();
   const updateIncome = useUpdateIncome();
   
-  const ponds = pondsData?.data || [];
-  const incomeTypes = incomeTypesData?.data || [];
+  const ponds = extractApiData<Pond>(pondsData);
+  const incomeTypes = extractApiData<IncomeType>(incomeTypesData);
 
   const [formData, setFormData] = useState({
     pond: '',

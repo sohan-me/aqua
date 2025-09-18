@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCreateHarvest, usePonds, useSpecies } from '@/hooks/useApi';
+import { extractApiData } from '@/lib/utils';
+import { Pond, Species } from '@/lib/api';
 import { ArrowLeft, Save, X, Fish, Scale, DollarSign, Calculator } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -12,8 +14,8 @@ export default function NewHarvestPage() {
   const { data: pondsData } = usePonds();
   const { data: speciesData } = useSpecies();
   
-  const ponds = pondsData?.data || [];
-  const species = speciesData?.data || [];
+  const ponds = extractApiData<Pond>(pondsData);
+  const species = extractApiData<Species>(speciesData);
 
   const [formData, setFormData] = useState({
     pond: '',
@@ -45,6 +47,7 @@ export default function NewHarvestPage() {
         species: formData.species ? parseInt(formData.species) : null,
         date: formData.date,
         total_weight_kg: parseFloat(formData.total_weight_kg),
+        pieces_per_kg: formData.pieces_per_kg ? parseFloat(formData.pieces_per_kg) : null,
         price_per_kg: formData.price_per_kg ? parseFloat(formData.price_per_kg) : null,
         notes: formData.notes
       };
@@ -251,12 +254,12 @@ export default function NewHarvestPage() {
               </div>
               <div className="text-center">
                 <p className="text-sm text-green-700">Price per kg</p>
-                <p className="text-2xl font-bold text-green-900">৳{formData.price_per_kg}</p>
+                <p className="text-2xl font-bold text-green-900">৳{parseFloat(formData.price_per_kg).toFixed(4)}</p>
               </div>
               <div className="text-center">
                 <p className="text-sm text-green-700">Total Revenue</p>
                 <p className="text-2xl font-bold text-green-900">
-                  ৳{(parseFloat(formData.total_weight_kg) * parseFloat(formData.price_per_kg)).toFixed(2)}
+                  ৳{(parseFloat(formData.total_weight_kg) * parseFloat(formData.price_per_kg)).toFixed(4)}
                 </p>
               </div>
             </div>

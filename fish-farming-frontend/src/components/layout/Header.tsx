@@ -2,11 +2,13 @@
 
 import { Bell, Search, Menu, LogOut, User, Key } from 'lucide-react';
 import { useAlerts } from '@/hooks/useApi';
+import { Alert } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ChangePasswordModal } from '@/components/ChangePasswordModal';
+import { extractApiData } from '@/lib/utils';
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -21,7 +23,8 @@ export function Header({ onMenuClick }: HeaderProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [filteredSuggestions, setFilteredSuggestions] = useState<Array<{name: string; href: string; description: string; keywords: string[]}>>([]);
-  const activeAlerts = alertsData?.data?.filter(alert => !alert.is_resolved) || [];
+  const alerts = extractApiData<Alert>(alertsData);
+  const activeAlerts = alerts.filter(alert => !alert.is_resolved);
 
   // Search suggestions data - memoized to prevent infinite re-renders
   const searchSuggestions = useMemo(() => [

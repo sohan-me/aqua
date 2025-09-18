@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { useDailyLogs, usePonds, useDeleteDailyLog } from '@/hooks/useApi';
-import { formatDate, formatNumber } from '@/lib/utils';
+import { DailyLog, Pond } from '@/lib/api';
+import { formatDate, formatNumber, extractApiData } from '@/lib/utils';
 import { Calendar, Plus, Edit, Trash2, Eye, Thermometer, Droplets, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -12,8 +13,8 @@ export default function DailyLogsPage() {
   const { data: pondsData } = usePonds();
   const deleteDailyLog = useDeleteDailyLog();
   
-  const dailyLogs = dailyLogsData?.data || [];
-  const ponds = pondsData?.data || [];
+  const dailyLogs = extractApiData<DailyLog>(dailyLogsData);
+  const ponds = extractApiData<Pond>(pondsData);
 
   const handleDelete = async (id: number, pondName: string, date: string) => {
     if (window.confirm(`Are you sure you want to delete the daily log for ${pondName} on ${formatDate(date)}? This action cannot be undone.`)) {

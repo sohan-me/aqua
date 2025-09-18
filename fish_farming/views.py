@@ -729,13 +729,34 @@ class FishSamplingViewSet(viewsets.ModelViewSet):
                 if combo_samplings.count() < 2:
                     continue
                 
-                # Get first and last sampling
-                first_sampling = combo_samplings.first()
-                last_sampling = combo_samplings.last()
+                # Get earliest (initial) and latest (final) sampling chronologically
+                earliest_sampling = combo_samplings.first()  # First chronologically (oldest date)
+                latest_sampling = combo_samplings.last()     # Last chronologically (newest date)
                 
-                # Calculate weight gain
-                initial_weight = float(first_sampling.average_weight_kg)
-                final_weight = float(last_sampling.average_weight_kg)
+                # Calculate weight gain (final - initial)
+                initial_weight = float(earliest_sampling.average_weight_kg)
+                final_weight = float(latest_sampling.average_weight_kg)
+                
+                # Data quality check: if final weight is significantly smaller than initial weight,
+                # try to use harvest data to get a more realistic final weight
+                if final_weight < initial_weight * 0.5:
+                    # Look for harvest data around the same time period to get realistic final weight
+                    harvest = Harvest.objects.filter(
+                        pond_id=pond_id, species_id=species_id, pond__user=request.user,
+                        date__gte=latest_sampling.date - timedelta(days=7),
+                        date__lte=latest_sampling.date + timedelta(days=7)
+                    ).first()
+                    
+                    if harvest and harvest.avg_weight_kg:
+                        final_weight = float(harvest.avg_weight_kg)
+                        # Update the latest sampling date to match harvest date for consistency
+                        latest_sampling_date = harvest.date
+                    else:
+                        # If no harvest data, skip this combination as data quality is poor
+                        continue
+                else:
+                    latest_sampling_date = latest_sampling.date
+                
                 weight_gain_per_fish = round(final_weight - initial_weight, 4)
                 
                 # Estimate fish count from stocking data (most reliable source)
@@ -762,10 +783,10 @@ class FishSamplingViewSet(viewsets.ModelViewSet):
                     estimated_fish_count = max(0, estimated_fish_count - mortality_count - harvest_count)
                 
                 # If no stocking data, try to estimate from sampling data
-                if not estimated_fish_count and first_sampling.fish_per_kg:
+                if not estimated_fish_count and earliest_sampling.fish_per_kg:
                     # This is a rough estimate - use the fish_per_kg from sampling
                     # and assume a reasonable total biomass
-                    estimated_fish_count = float(first_sampling.fish_per_kg) * 100  # Assume 100kg total biomass as fallback
+                    estimated_fish_count = float(earliest_sampling.fish_per_kg) * 100  # Assume 100kg total biomass as fallback
                 
                 total_weight_gain_kg = round(estimated_fish_count * weight_gain_per_fish, 4)
                 
@@ -773,7 +794,7 @@ class FishSamplingViewSet(viewsets.ModelViewSet):
                 fcr = round(total_feed_kg / total_weight_gain_kg, 4) if total_weight_gain_kg > 0 else 0
                 
                 # Calculate days
-                days = (last_sampling.date - first_sampling.date).days
+                days = (latest_sampling_date - earliest_sampling.date).days
                 
                 # Calculate average daily feed with 4 decimal places
                 avg_daily_feed = round(total_feed_kg / days, 4) if days > 0 else 0
@@ -786,8 +807,8 @@ class FishSamplingViewSet(viewsets.ModelViewSet):
                     'pond_name': pond.name,
                     'species_id': species_id,
                     'species_name': species.name,
-                    'start_date': first_sampling.date.isoformat(),
-                    'end_date': last_sampling.date.isoformat(),
+                    'start_date': earliest_sampling.date.isoformat(),
+                    'end_date': latest_sampling_date.isoformat(),
                     'days': days,
                     'estimated_fish_count': estimated_fish_count,
                     'initial_weight_kg': initial_weight,
@@ -1509,7 +1530,7 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
             ).order_by('date')
             
             if daily_feeds.count() > 5:
-                amounts = [feed['daily_total'] for feed in daily_feeds if feed['daily_total']]
+                amounts = [float(feed['daily_total']) for feed in daily_feeds if feed['daily_total']]
                 if amounts:
                     avg_amount = sum(amounts) / len(amounts)
                     variance = sum((x - avg_amount) ** 2 for x in amounts) / len(amounts)

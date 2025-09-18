@@ -1,13 +1,14 @@
   'use client';
 
   import { usePonds } from '@/hooks/useApi';
-  import { formatDate } from '@/lib/utils';
+  import { Pond } from '@/lib/api';
+  import { formatDate, extractApiData } from '@/lib/utils';
   import { Fish, Plus, MapPin, Droplets, Activity } from 'lucide-react';
   import Link from 'next/link';
 
   export default function PondsPage() {
     const { data: pondsData, isLoading } = usePonds();
-    const ponds = pondsData?.data || [];
+    const ponds = extractApiData<Pond>(pondsData);
 
     if (isLoading) {
       return (

@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useIncomes, usePonds, useDeleteIncome } from '@/hooks/useApi';
-import { formatDate, formatNumber } from '@/lib/utils';
-import { DollarSign, Plus, Edit, Trash2, Eye, TrendingUp, Receipt, Users } from 'lucide-react';
+import { Income, Pond } from '@/lib/api';
+import { formatDate, formatNumber, extractApiData } from '@/lib/utils';
+import { DollarSign, Plus, Edit, Trash2, Eye, TrendingUp, Receipt, Users, Filter, X, Calendar } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 
@@ -12,11 +13,58 @@ export default function IncomePage() {
   const { data: pondsData } = usePonds();
   const deleteIncome = useDeleteIncome();
   
-  const incomes = incomesData?.data || [];
-  const ponds = pondsData?.data || [];
+  const incomes = extractApiData<Income>(incomesData);
+  const ponds = extractApiData<Pond>(pondsData);
+
+  // Date range and pond filtering state
+  const [dateRange, setDateRange] = useState({
+    startDate: '',
+    endDate: ''
+  });
+  const [filterPond, setFilterPond] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Filter incomes based on date range and pond
+  const filteredIncomes = useMemo(() => {
+    return incomes.filter(income => {
+      // Date range filtering
+      const incomeDate = new Date(income.date);
+      const startDate = dateRange.startDate ? new Date(dateRange.startDate) : null;
+      const endDate = dateRange.endDate ? new Date(dateRange.endDate) : null;
+
+      let dateMatch = true;
+      if (startDate && endDate) {
+        dateMatch = incomeDate >= startDate && incomeDate <= endDate;
+      } else if (startDate) {
+        dateMatch = incomeDate >= startDate;
+      } else if (endDate) {
+        dateMatch = incomeDate <= endDate;
+      }
+
+      // Pond filtering
+      const pondMatch = !filterPond || income.pond === parseInt(filterPond);
+
+      return dateMatch && pondMatch;
+    });
+  }, [incomes, dateRange, filterPond]);
+
+  // Calculate filtered totals
+  const filteredTotals = useMemo(() => {
+    const totalAmount = filteredIncomes.reduce((sum, income) => sum + parseFloat(income.amount || '0'), 0);
+    const thisMonthAmount = filteredIncomes
+      .filter(income => {
+        const incomeDate = new Date(income.date);
+        const now = new Date();
+        return incomeDate.getMonth() === now.getMonth() && 
+               incomeDate.getFullYear() === now.getFullYear();
+      })
+      .reduce((sum, income) => sum + parseFloat(income.amount || '0'), 0);
+    
+    return { totalAmount, thisMonthAmount };
+  }, [filteredIncomes]);
 
   const handleDelete = async (id: number, incomeType: string, amount: string, date: string) => {
-    if (window.confirm(`Are you sure you want to delete the income record for ${incomeType} (৳${amount}) on ${formatDate(date)}? This action cannot be undone.`)) {
+    if (window.confirm(`Are you sure you want to delete the income record for ${incomeType} (৳${parseFloat(amount).toFixed(4)}) on ${formatDate(date)}? This action cannot be undone.`)) {
       try {
         await deleteIncome.mutateAsync(id);
       } catch (error) {
@@ -60,13 +108,107 @@ export default function IncomePage() {
         </div>
       </div>
 
+      {/* Date Range Filter */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-2">
+            <Filter className="h-5 w-5 text-gray-400" />
+            <h3 className="text-lg font-medium text-gray-900">Filter Income</h3>
+          </div>
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            {showFilters ? 'Hide Filters' : 'Show Filters'}
+          </button>
+        </div>
+
+        {showFilters && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Start Date
+              </label>
+              <input
+                type="date"
+                value={dateRange.startDate}
+                onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500  text-gray-900 placeholder-gray-500 bg-white"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                End Date
+              </label>
+              <input
+                type="date"
+                value={dateRange.endDate}
+                onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500  text-gray-900 placeholder-gray-500 bg-white"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Filter by Pond
+              </label>
+              <select
+                value={filterPond}
+                onChange={(e) => setFilterPond(e.target.value)}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500  text-gray-900 placeholder-gray-500 bg-white"
+              >
+                <option value="">All Ponds</option>
+                {ponds.map((pond) => (
+                  <option key={pond.id} value={pond.id}>
+                    {pond.name} ({pond.area_decimal} decimal)
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-end">
+              <button
+                onClick={() => {
+                  setDateRange({ startDate: '', endDate: '' });
+                  setFilterPond('');
+                }}
+                className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                <X className="h-4 w-4 mr-2" />
+                Clear Filters
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Active Filters Summary */}
+        {(dateRange.startDate || dateRange.endDate || filterPond) && (
+          <div className="mt-4 p-3 bg-green-50 rounded-md">
+            <div className="flex items-center">
+              <Filter className="h-4 w-4 text-green-400 mr-2" />
+              <span className="text-sm text-green-700">
+                Showing income{' '}
+                {dateRange.startDate || dateRange.endDate ? (
+                  <>
+                    from{' '}
+                    {dateRange.startDate ? formatDate(dateRange.startDate) : 'beginning'} to{' '}
+                    {dateRange.endDate ? formatDate(dateRange.endDate) : 'now'}
+                  </>
+                ) : null}
+                {dateRange.startDate || dateRange.endDate ? ' and ' : ''}
+                {filterPond && `for Pond: ${ponds.find(p => p.id === parseInt(filterPond))?.name || 'Unknown'}`}
+                {' '}({filteredIncomes.length} records)
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-lg font-semibold text-gray-900">Total Income</h3>
-              <p className="text-3xl font-bold text-green-600">{incomes.length}</p>
+              <p className="text-3xl font-bold text-green-600">{filteredIncomes.length}</p>
             </div>
             <div className="rounded-full bg-green-100 p-3">
               <TrendingUp className="h-8 w-8 text-green-600" />
@@ -79,7 +221,7 @@ export default function IncomePage() {
             <div>
               <h3 className="text-lg font-semibold text-gray-900">Total Amount</h3>
               <p className="text-3xl font-bold text-green-600">
-                ৳{incomes.reduce((sum, income) => sum + parseFloat(income.amount || '0'), 0).toFixed(2)}
+                ৳{filteredTotals.totalAmount.toFixed(4)}
               </p>
             </div>
             <div className="rounded-full bg-green-100 p-3">
@@ -93,15 +235,7 @@ export default function IncomePage() {
             <div>
               <h3 className="text-lg font-semibold text-gray-900">This Month</h3>
               <p className="text-3xl font-bold text-blue-600">
-                ৳{incomes
-                  .filter(income => {
-                    const incomeDate = new Date(income.date);
-                    const now = new Date();
-                    return incomeDate.getMonth() === now.getMonth() && 
-                           incomeDate.getFullYear() === now.getFullYear();
-                  })
-                  .reduce((sum, income) => sum + parseFloat(income.amount || '0'), 0)
-                  .toFixed(2)}
+                ৳{filteredTotals.thisMonthAmount.toFixed(4)}
               </p>
             </div>
             <div className="rounded-full bg-blue-100 p-3">
@@ -115,7 +249,7 @@ export default function IncomePage() {
             <div>
               <h3 className="text-lg font-semibold text-gray-900">Customers</h3>
               <p className="text-3xl font-bold text-purple-600">
-                {new Set(incomes.filter(i => i.customer).map(i => i.customer)).size}
+                {new Set(filteredIncomes.filter(i => i.customer).map(i => i.customer)).size}
               </p>
             </div>
             <div className="rounded-full bg-purple-100 p-3">
@@ -126,7 +260,7 @@ export default function IncomePage() {
       </div>
 
       {/* Income List */}
-      {incomes.length === 0 ? (
+      {filteredIncomes.length === 0 ? (
         <div className="text-center py-12">
           <TrendingUp className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900">No income records</h3>
@@ -171,7 +305,7 @@ export default function IncomePage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {incomes.map((income) => (
+                {filteredIncomes.map((income) => (
                   <tr key={income.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {formatDate(income.date)}
@@ -186,11 +320,11 @@ export default function IncomePage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                        ৳{income.amount}
+                        ৳{parseFloat(income.amount).toFixed(4)}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {income.quantity ? `${income.quantity} ${income.unit}` : 'N/A'}
+                      {income.quantity ? `${parseFloat(income.quantity).toFixed(4)} ${income.unit}` : 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {income.customer || 'N/A'}

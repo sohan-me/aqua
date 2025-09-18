@@ -78,7 +78,7 @@ export default function IncomeDetailsPage() {
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Amount</p>
-              <p className="text-2xl font-semibold text-black">৳{income.data.amount}</p>
+              <p className="text-2xl font-semibold text-black">৳{parseFloat(income.data.amount).toFixed(4)}</p>
             </div>
           </div>
         </div>
@@ -103,7 +103,7 @@ export default function IncomeDetailsPage() {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Quantity</p>
               <p className="text-2xl font-semibold text-black">
-                {income.data.quantity ? `${income.data.quantity} ${income.data.unit}` : 'N/A'}
+                {income.data.quantity ? `${parseFloat(income.data.quantity).toFixed(4)} ${income.data.unit}` : 'N/A'}
               </p>
             </div>
           </div>
@@ -143,7 +143,7 @@ export default function IncomeDetailsPage() {
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-gray-500">Amount:</span>
-              <span className="text-sm font-medium">৳{income.data.amount}</span>
+              <span className="text-sm font-medium">৳{parseFloat(income.data.amount).toFixed(4)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-gray-500">Created:</span>
@@ -158,7 +158,7 @@ export default function IncomeDetailsPage() {
             <div className="flex justify-between">
               <span className="text-sm text-gray-500">Quantity:</span>
               <span className="text-sm font-medium">
-                {income.data.quantity ? `${income.data.quantity} ${income.data.unit}` : 'N/A'}
+                {income.data.quantity ? `${parseFloat(income.data.quantity).toFixed(4)} ${income.data.unit}` : 'N/A'}
               </span>
             </div>
             <div className="flex justify-between">

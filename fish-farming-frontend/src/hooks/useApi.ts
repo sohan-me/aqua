@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiService } from '@/lib/api';
+import { apiService, PaginationParams } from '@/lib/api';
 import { toast } from 'sonner';
 
 // Generic hook for GET requests
@@ -75,8 +75,8 @@ export function useApiMutation<TData, TVariables>(
 }
 
 // Specific hooks for different entities
-export function usePonds() {
-  return useApiQuery(['ponds'], () => apiService.getPonds());
+export function usePonds(params?: PaginationParams) {
+  return useApiQuery(['ponds', JSON.stringify(params || {})], () => apiService.getPonds(params));
 }
 
 export function usePond(id: number) {
@@ -97,8 +97,8 @@ export function usePondFinancialSummary(id: number) {
   });
 }
 
-export function useSpecies() {
-  return useApiQuery(['species'], () => apiService.getSpecies());
+export function useSpecies(params?: PaginationParams) {
+  return useApiQuery(['species', JSON.stringify(params || {})], () => apiService.getSpecies(params));
 }
 
 export function useSpeciesById(id: number) {
@@ -145,16 +145,16 @@ export function useDeleteSpecies() {
   );
 }
 
-export function useStocking() {
-  return useApiQuery(['stocking'], () => apiService.getStocking());
+export function useStocking(params?: PaginationParams) {
+  return useApiQuery(['stocking', JSON.stringify(params || {})], () => apiService.getStocking(params));
 }
 
-export function useExpenses() {
-  return useApiQuery(['expenses'], () => apiService.getExpenses());
+export function useExpenses(params?: PaginationParams) {
+  return useApiQuery(['expenses', JSON.stringify(params || {})], () => apiService.getExpenses(params));
 }
 
-export function useIncomes() {
-  return useApiQuery(['incomes'], () => apiService.getIncomes());
+export function useIncomes(params?: PaginationParams) {
+  return useApiQuery(['incomes', JSON.stringify(params || {})], () => apiService.getIncomes(params));
 }
 
 export function useExpenseTypes() {
@@ -413,8 +413,8 @@ export function useDeleteStocking() {
 }
 
 // Daily Logs
-export function useDailyLogs() {
-  return useApiQuery(['daily-logs'], () => apiService.getDailyLogs());
+export function useDailyLogs(params?: PaginationParams) {
+  return useApiQuery(['daily-logs', JSON.stringify(params || {})], () => apiService.getDailyLogs(params));
 }
 
 export function useDailyLogById(id: number) {
@@ -511,8 +511,8 @@ export function useDeleteSampleType() {
 }
 
 // Water Quality Sampling
-export function useSamplings() {
-  return useApiQuery(['sampling'], () => apiService.getSamplings());
+export function useSamplings(params?: PaginationParams) {
+  return useApiQuery(['sampling', JSON.stringify(params || {})], () => apiService.getSamplings(params));
 }
 
 export function useSamplingById(id: number) {
@@ -560,8 +560,8 @@ export function useDeleteSampling() {
 }
 
 // Mortality Tracking
-export function useMortalities() {
-  return useApiQuery(['mortality'], () => apiService.getMortalities());
+export function useMortalities(params?: PaginationParams) {
+  return useApiQuery(['mortality', JSON.stringify(params || {})], () => apiService.getMortalities(params));
 }
 
 export function useMortalityById(id: number) {
@@ -658,8 +658,8 @@ export function useDeleteFeedType() {
 }
 
 // Feeds
-export function useFeeds() {
-  return useApiQuery(['feeds'], () => apiService.getFeeds());
+export function useFeeds(params?: PaginationParams) {
+  return useApiQuery(['feeds', JSON.stringify(params || {})], () => apiService.getFeeds(params));
 }
 
 export function useFeedById(id: number) {
@@ -805,8 +805,8 @@ export function useDeleteFeedingBand() {
 }
 
 // Harvests
-export function useHarvests() {
-  return useApiQuery(['harvests'], () => apiService.getHarvests());
+export function useHarvests(params?: PaginationParams) {
+  return useApiQuery(['harvests', JSON.stringify(params || {})], () => apiService.getHarvests(params));
 }
 
 export function useHarvestById(id: number) {
@@ -890,8 +890,8 @@ export function useResolveAlert() {
 }
 
 // Fish Sampling hooks
-export function useFishSampling() {
-  return useApiQuery(['fish-sampling'], () => apiService.getFishSampling());
+export function useFishSampling(params?: PaginationParams) {
+  return useApiQuery(['fish-sampling', JSON.stringify(params || {})], () => apiService.getFishSampling(params));
 }
 
 export function useFishSamplingById(id: number) {
@@ -939,8 +939,8 @@ export function useDeleteFishSampling() {
 }
 
 // Feeding Advice hooks
-export function useFeedingAdvice() {
-  return useApiQuery(['feeding-advice'], () => apiService.getFeedingAdvice());
+export function useFeedingAdvice(params?: PaginationParams) {
+  return useApiQuery(['feeding-advice', JSON.stringify(params || {})], () => apiService.getFeedingAdvice(params));
 }
 
 export function useFeedingAdviceById(id: number) {

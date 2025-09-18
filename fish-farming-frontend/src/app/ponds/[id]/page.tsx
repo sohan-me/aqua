@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { usePond, usePondSummary, usePondFinancialSummary } from '@/hooks/useApi';
+import { usePond, usePondSummary, usePondFinancialSummary, useFcrAnalysis } from '@/hooks/useApi';
 import { ArrowLeft, Edit, Trash2, Plus, TrendingUp, TrendingDown, AlertTriangle, Fish, Droplets, Calendar } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -15,6 +15,7 @@ export default function PondDetailsPage() {
   const { data: pond, isLoading: pondLoading } = usePond(pondId);
   const { data: summary, isLoading: summaryLoading } = usePondSummary(pondId);
   const { data: financial, isLoading: financialLoading } = usePondFinancialSummary(pondId);
+  const { data: fcrAnalysis, isLoading: fcrLoading } = useFcrAnalysis({ pond: pondId });
 console.log(pond);
   if (pondLoading) {
     return (
@@ -201,6 +202,126 @@ console.log(pond);
         </div>
       )}
 
+      {/* FCR Analysis */}
+      {fcrLoading ? (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Feed Conversion Ratio (FCR) Analysis</h2>
+          <div className="flex items-center justify-center h-32">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          </div>
+        </div>
+      ) : fcrAnalysis ? (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Feed Conversion Ratio (FCR) Analysis</h2>
+          
+          {/* Overall FCR Summary */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+            <div className="text-center">
+              <div className="flex items-center justify-center mb-2">
+                <Fish className="h-6 w-6 text-blue-600 mr-2" />
+                <span className="text-sm font-medium text-gray-500">Overall FCR</span>
+              </div>
+              <p className={`text-3xl font-bold ${
+                fcrAnalysis.data.summary.fcr_status === 'Excellent' ? 'text-green-600' :
+                fcrAnalysis.data.summary.fcr_status === 'Good' ? 'text-blue-600' :
+                fcrAnalysis.data.summary.fcr_status === 'Needs Improvement' ? 'text-yellow-600' :
+                'text-red-600'
+              }`}>
+                {fcrAnalysis.data.summary.overall_fcr.toFixed(4)}
+              </p>
+              <p className={`text-sm font-medium ${
+                fcrAnalysis.data.summary.fcr_status === 'Excellent' ? 'text-green-600' :
+                fcrAnalysis.data.summary.fcr_status === 'Good' ? 'text-blue-600' :
+                fcrAnalysis.data.summary.fcr_status === 'Needs Improvement' ? 'text-yellow-600' :
+                'text-red-600'
+              }`}>
+                {fcrAnalysis.data.summary.fcr_status}
+              </p>
+            </div>
+            
+            <div className="text-center">
+              <div className="flex items-center justify-center mb-2">
+                <TrendingUp className="h-6 w-6 text-green-600 mr-2" />
+                <span className="text-sm font-medium text-gray-500">Total Feed Used</span>
+              </div>
+              <p className="text-2xl font-bold text-gray-900">{fcrAnalysis.data.summary.total_feed_kg.toFixed(1)} kg</p>
+            </div>
+            
+            <div className="text-center">
+              <div className="flex items-center justify-center mb-2">
+                <TrendingUp className="h-6 w-6 text-blue-600 mr-2" />
+                <span className="text-sm font-medium text-gray-500">Weight Gain</span>
+              </div>
+              <p className="text-2xl font-bold text-gray-900">{fcrAnalysis.data.summary.total_weight_gain_kg.toFixed(1)} kg</p>
+            </div>
+            
+            <div className="text-center">
+              <div className="flex items-center justify-center mb-2">
+                <Calendar className="h-6 w-6 text-gray-600 mr-2" />
+                <span className="text-sm font-medium text-gray-500">Analysis Period</span>
+              </div>
+              <p className="text-sm font-bold text-gray-900">
+                {new Date(fcrAnalysis.data.summary.date_range.start_date).toLocaleDateString()} - {new Date(fcrAnalysis.data.summary.date_range.end_date).toLocaleDateString()}
+              </p>
+            </div>
+          </div>
+
+          {/* Detailed FCR Data */}
+          {fcrAnalysis.data.fcr_data && fcrAnalysis.data.fcr_data.length > 0 && (
+            <div>
+              <h3 className="text-md font-semibold text-gray-900 mb-3">Detailed Analysis by Species</h3>
+              <div className="space-y-3">
+                {fcrAnalysis.data.fcr_data.map((fcr, index) => (
+                  <div key={index} className="bg-gray-50 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center">
+                        <Fish className="h-5 w-5 text-blue-600 mr-2" />
+                        <span className="font-medium text-gray-900">{fcr.species_name}</span>
+                      </div>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        fcr.fcr_status === 'Excellent' ? 'bg-green-100 text-green-800' :
+                        fcr.fcr_status === 'Good' ? 'bg-blue-100 text-blue-800' :
+                        fcr.fcr_status === 'Needs Improvement' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-red-100 text-red-800'
+                      }`}>
+                        {fcr.fcr_status}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                      <div>
+                        <span className="text-gray-500">FCR:</span>
+                        <span className="ml-1 font-medium">{fcr.fcr.toFixed(4)}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Fish Count:</span>
+                        <span className="ml-1 font-medium">{fcr.estimated_fish_count.toLocaleString()}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Feed Used:</span>
+                        <span className="ml-1 font-medium">{fcr.total_feed_kg.toFixed(1)} kg</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Weight Gain:</span>
+                        <span className="ml-1 font-medium">{fcr.total_weight_gain_kg.toFixed(1)} kg</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Feed Conversion Ratio (FCR) Analysis</h2>
+          <div className="text-center text-gray-500 py-8">
+            <Fish className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <p>No FCR data available for this pond.</p>
+            <p className="text-sm mt-2">Add fish sampling and feeding records to see FCR analysis.</p>
+          </div>
+        </div>
+      )}
+
       {/* Summary Information */}
       {summaryLoading ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
@@ -296,7 +417,7 @@ console.log(pond);
       {/* Quick Actions */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <button
             onClick={() => router.push(`/stocking?pond=${pondId}`)}
             className="flex flex-col items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
@@ -327,6 +448,14 @@ console.log(pond);
           >
             <TrendingUp className="h-6 w-6 text-green-600 mb-2" />
             <span className="text-sm font-medium">Add Income</span>
+          </button>
+          
+          <button
+            onClick={() => router.push(`/fish-sampling?pond=${pondId}`)}
+            className="flex flex-col items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
+          >
+            <AlertTriangle className="h-6 w-6 text-purple-600 mb-2" />
+            <span className="text-sm font-medium">FCR Analysis</span>
           </button>
         </div>
       </div>

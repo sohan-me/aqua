@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useFeedById, useUpdateFeed, usePonds, useFeedTypes, useBiomassAnalysis } from '@/hooks/useApi';
+import { extractApiData } from '@/lib/utils';
+import { Pond, FeedType } from '@/lib/api';
 import { ArrowLeft, Save, X, Fish, Clock, Package } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -16,8 +18,8 @@ export default function EditFeedingPage() {
   const { data: feedTypesData } = useFeedTypes();
   const updateFeed = useUpdateFeed();
   
-  const ponds = pondsData?.data || [];
-  const feedTypes = feedTypesData?.data || [];
+  const ponds = extractApiData<Pond>(pondsData);
+  const feedTypes = extractApiData<FeedType>(feedTypesData);
 
   const [formData, setFormData] = useState({
     pond: '',
@@ -429,8 +431,8 @@ export default function EditFeedingPage() {
                   <span className="text-blue-700">Total Feed Cost:</span>
                   <span className="ml-2 font-semibold text-blue-900">
                     ৳{inputMode === 'packets' 
-                      ? (parseFloat(packetCount) * parseFloat(formData.cost_per_packet)).toFixed(2)
-                      : (parseFloat(formData.amount_kg) * parseFloat(formData.cost_per_kg)).toFixed(2)
+                      ? (parseFloat(packetCount) * parseFloat(formData.cost_per_packet)).toFixed(4)
+                      : (parseFloat(formData.amount_kg) * parseFloat(formData.cost_per_kg)).toFixed(4)
                     }
                   </span>
                 </div>

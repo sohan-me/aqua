@@ -21,6 +21,8 @@ import {
   EyeOff
 } from 'lucide-react';
 import { downloadCSV, formatCurrencyForCSV, formatDateForCSV, sanitizeFilename } from '@/lib/exportUtils';
+import { extractApiData } from '@/lib/utils';
+import { Pond, Expense, Income, Harvest, Stocking, Feed } from '@/lib/api';
 import { toast } from 'sonner';
 
 interface ReportFilters {
@@ -38,12 +40,12 @@ export default function ReportsPage() {
   const { data: stockingData } = useStocking();
   const { data: feedsData } = useFeeds();
 
-  const ponds = pondsData?.data || [];
-  const expenses = expensesData?.data || [];
-  const incomes = incomesData?.data || [];
-  const harvests = harvestsData?.data || [];
-  const stockings = stockingData?.data || [];
-  const feeds = feedsData?.data || [];
+  const ponds = extractApiData<Pond>(pondsData);
+  const expenses = extractApiData<Expense>(expensesData);
+  const incomes = extractApiData<Income>(incomesData);
+  const harvests = extractApiData<Harvest>(harvestsData);
+  const stockings = extractApiData<Stocking>(stockingData);
+  const feeds = extractApiData<Feed>(feedsData);
 
   const [filters, setFilters] = useState<ReportFilters>({
     pondId: 'all',
@@ -171,7 +173,7 @@ export default function ReportsPage() {
       // Feed Consumption Summary
       csvContent += `FEED CONSUMPTION SUMMARY\n`;
       csvContent += `Metric,Value\n`;
-      csvContent += `Feed Conversion Ratio,${fcr.toFixed(2)}\n`;
+      csvContent += `Feed Conversion Ratio,${fcr.toFixed(4)}\n`;
       csvContent += `Total Feed Cost,${formatCurrencyForCSV(totalFeedCost)}\n`;
       csvContent += `Average Feed Cost per KG,${formatCurrencyForCSV(avgFeedCostPerKg)}\n`;
       csvContent += `Daily Feed Consumption,${dailyFeedConsumption.toFixed(1)} kg\n`;
@@ -201,7 +203,7 @@ export default function ReportsPage() {
       csvContent += `Total Stocked,${totalStocked.toLocaleString()} fish\n`;
       csvContent += `Total Harvested,${totalHarvested.toFixed(1)} kg\n`;
       csvContent += `Total Feed Used,${totalFeedUsed.toFixed(1)} kg\n`;
-      csvContent += `Feed Conversion Ratio,${fcr.toFixed(2)}\n`;
+      csvContent += `Feed Conversion Ratio,${fcr.toFixed(4)}\n`;
 
     } else {
       // Detail CSV
@@ -229,7 +231,7 @@ export default function ReportsPage() {
       csvContent += `HARVEST DETAILS\n`;
       csvContent += `Date,Pond,Weight (kg),Count,Avg Weight (g),Price per kg,Total Revenue\n`;
       filteredHarvests.forEach(harvest => {
-        csvContent += `${formatDateForCSV(harvest.date)},"${harvest.pond_name}",${toNumber(harvest.total_weight_kg).toFixed(1)},${harvest.total_count},${toNumber(harvest.avg_weight_g).toFixed(1)},${formatCurrencyForCSV(toNumber(harvest.price_per_kg))},${formatCurrencyForCSV(toNumber(harvest.total_revenue))}\n`;
+        csvContent += `${formatDateForCSV(harvest.date)},"${harvest.pond_name}",${toNumber(harvest.total_weight_kg).toFixed(1)},${harvest.total_count || 0},${toNumber(harvest.avg_weight_kg).toFixed(1)},${formatCurrencyForCSV(toNumber(harvest.price_per_kg))},${formatCurrencyForCSV(toNumber(harvest.total_revenue))}\n`;
       });
       csvContent += `\n`;
 
@@ -461,7 +463,7 @@ export default function ReportsPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Feed Conversion Ratio</p>
-              <p className="text-2xl font-semibold text-gray-900">{fcr.toFixed(2)}</p>
+              <p className="text-2xl font-semibold text-gray-900">{fcr.toFixed(4)}</p>
               <p className="text-sm text-blue-600">kg feed/kg fish</p>
             </div>
             <div className="rounded-full bg-blue-100 p-3">
@@ -685,7 +687,7 @@ export default function ReportsPage() {
               </div>
               <div className="text-center">
                 <p className="text-sm font-medium text-gray-600">Feed Conversion Ratio</p>
-                <p className="text-2xl font-semibold text-gray-900">{fcr.toFixed(2)}</p>
+                <p className="text-2xl font-semibold text-gray-900">{fcr.toFixed(4)}</p>
                 <p className="text-xs text-gray-500">kg feed/kg fish</p>
               </div>
             </div>

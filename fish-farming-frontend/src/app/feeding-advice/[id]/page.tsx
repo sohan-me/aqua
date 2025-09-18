@@ -284,7 +284,7 @@ export default function FeedingAdviceDetailPage({ params }: PageProps) {
                 <div>
                   <h3 className="text-sm font-medium text-gray-500 mb-2">Daily Feed Cost</h3>
                   <p className="text-2xl font-bold text-gray-900">
-                    ৳{parseFloat(advice.data.daily_feed_cost).toFixed(2)}
+                    ৳{parseFloat(advice.data.daily_feed_cost).toFixed(4)}
                   </p>
                 </div>
               )}
@@ -293,7 +293,7 @@ export default function FeedingAdviceDetailPage({ params }: PageProps) {
                 <div>
                   <h3 className="text-sm font-medium text-gray-500 mb-2">Feed Cost per kg</h3>
                   <p className="text-lg font-semibold text-gray-900">
-                    ৳{parseFloat(advice.data.feed_cost_per_kg).toFixed(2)}
+                    ৳{parseFloat(advice.data.feed_cost_per_kg).toFixed(4)}
                   </p>
                 </div>
               )}
@@ -394,7 +394,7 @@ export default function FeedingAdviceDetailPage({ params }: PageProps) {
               <div className="bg-yellow-50 rounded-lg p-4">
                 <h3 className="text-sm font-medium text-yellow-900 mb-2">Feeding Patterns</h3>
                 <div className="space-y-1 text-sm text-yellow-700">
-                  <p>Avg Daily: <span className="font-semibold">{(advice.data.analysis_data.feeding_analysis?.avg_daily_feed || 0).toFixed(2)} kg</span></p>
+                  <p>Avg Daily: <span className="font-semibold">{(advice.data.analysis_data.feeding_analysis?.avg_daily_feed || 0).toFixed(4)} kg</span></p>
                   <p>Consistency: <span className="font-semibold capitalize">{advice.data.analysis_data.feeding_analysis?.feeding_consistency || 'Unknown'}</span></p>
                   <p>Feed Types: <span className="font-semibold">{advice.data.analysis_data.feeding_analysis?.feed_types_used?.length || 0}</span></p>
                 </div>
