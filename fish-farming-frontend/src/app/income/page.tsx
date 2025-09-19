@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useIncomes, usePonds, useDeleteIncome } from '@/hooks/useApi';
-import { Income, Pond } from '@/lib/api';
+import { useIncomes, usePonds, useDeleteIncome, useIncomeTypes } from '@/hooks/useApi';
+import { Income, Pond, IncomeType } from '@/lib/api';
 import { formatDate, extractApiData } from '@/lib/utils';
 import { Plus, Edit, Trash2, Eye, TrendingUp, Receipt, Users, Filter, X, DollarSign } from 'lucide-react';
 import Link from 'next/link';
@@ -11,20 +11,23 @@ import { toast } from 'sonner';
 export default function IncomePage() {
   const { data: incomesData, isLoading } = useIncomes();
   const { data: pondsData } = usePonds();
+  const { data: incomeTypesData } = useIncomeTypes();
   const deleteIncome = useDeleteIncome();
   
   const incomes = extractApiData<Income>(incomesData);
   const ponds = extractApiData<Pond>(pondsData);
+  const incomeTypes = extractApiData<IncomeType>(incomeTypesData);
 
-  // Date range and pond filtering state
+  // Date range, pond, and income type filtering state
   const [dateRange, setDateRange] = useState({
     startDate: '',
     endDate: ''
   });
   const [filterPond, setFilterPond] = useState('');
+  const [filterIncomeType, setFilterIncomeType] = useState('');
   const [showFilters, setShowFilters] = useState(false);
 
-  // Filter incomes based on date range and pond
+  // Filter incomes based on date range, pond, and income type
   const filteredIncomes = useMemo(() => {
     return incomes.filter(income => {
       // Date range filtering
@@ -44,9 +47,12 @@ export default function IncomePage() {
       // Pond filtering
       const pondMatch = !filterPond || income.pond === parseInt(filterPond);
 
-      return dateMatch && pondMatch;
+      // Income type filtering
+      const incomeTypeMatch = !filterIncomeType || income.income_type === parseInt(filterIncomeType);
+
+      return dateMatch && pondMatch && incomeTypeMatch;
     });
-  }, [incomes, dateRange, filterPond]);
+  }, [incomes, dateRange, filterPond, filterIncomeType]);
 
   // Calculate filtered totals
   const filteredTotals = useMemo(() => {
@@ -124,7 +130,7 @@ export default function IncomePage() {
         </div>
 
         {showFilters && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Start Date
@@ -164,13 +170,31 @@ export default function IncomePage() {
                 ))}
               </select>
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Filter by Income Type
+              </label>
+              <select
+                value={filterIncomeType}
+                onChange={(e) => setFilterIncomeType(e.target.value)}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500  text-gray-900 placeholder-gray-500 bg-white"
+              >
+                <option value="">All Income Types</option>
+                {incomeTypes.map((incomeType) => (
+                  <option key={incomeType.id} value={incomeType.id}>
+                    {incomeType.name}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div className="flex items-end">
               <button
                 onClick={() => {
                   setDateRange({ startDate: '', endDate: '' });
                   setFilterPond('');
+                  setFilterIncomeType('');
                 }}
-                className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                className="w-full inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
               >
                 <X className="h-4 w-4 mr-2" />
                 Clear Filters
@@ -180,7 +204,7 @@ export default function IncomePage() {
         )}
 
         {/* Active Filters Summary */}
-        {(dateRange.startDate || dateRange.endDate || filterPond) && (
+        {(dateRange.startDate || dateRange.endDate || filterPond || filterIncomeType) && (
           <div className="mt-4 p-3 bg-green-50 rounded-md">
             <div className="flex items-center">
               <Filter className="h-4 w-4 text-green-400 mr-2" />
@@ -193,8 +217,10 @@ export default function IncomePage() {
                     {dateRange.endDate ? formatDate(dateRange.endDate) : 'now'}
                   </>
                 ) : null}
-                {dateRange.startDate || dateRange.endDate ? ' and ' : ''}
+                {(dateRange.startDate || dateRange.endDate) && (filterPond || filterIncomeType) ? ' and ' : ''}
                 {filterPond && `for Pond: ${ponds.find(p => p.id === parseInt(filterPond))?.name || 'Unknown'}`}
+                {filterPond && filterIncomeType ? ' and ' : ''}
+                {filterIncomeType && `for Income Type: ${incomeTypes.find(it => it.id === parseInt(filterIncomeType))?.name || 'Unknown'}`}
                 {' '}({filteredIncomes.length} records)
               </span>
             </div>

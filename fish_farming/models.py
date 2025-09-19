@@ -55,7 +55,8 @@ class Pond(models.Model):
 
 class Species(models.Model):
     """Fish species model"""
-    name = models.CharField(max_length=100, unique=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='species')
+    name = models.CharField(max_length=100)
     scientific_name = models.CharField(max_length=150, blank=True, null=True)
     description = models.TextField(blank=True)
     optimal_temp_min = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
@@ -67,6 +68,7 @@ class Species(models.Model):
     class Meta:
         ordering = ['name']
         verbose_name_plural = 'Species'
+        unique_together = ['user', 'name']
     
     def __str__(self):
         return self.name
@@ -947,7 +949,7 @@ class MedicalDiagnostic(models.Model):
     pond = models.ForeignKey(Pond, on_delete=models.CASCADE, related_name='medical_diagnostics')
     
     # Disease information
-    disease_name = models.CharField(max_length=200, help_text="সম্ভাব্য রোগ (Possible Disease)")
+    disease_name = models.CharField(max_length=200, help_text="Possible Disease")
     confidence_percentage = models.DecimalField(
         max_digits=5, 
         decimal_places=2, 
@@ -956,8 +958,8 @@ class MedicalDiagnostic(models.Model):
     )
     
     # Treatment information
-    recommended_treatment = models.TextField(help_text="সুপারিশকৃত চিকিৎসা (Recommended Treatment)")
-    dosage_application = models.TextField(help_text="ডোজ ও প্রয়োগ (Dosage and Application)")
+    recommended_treatment = models.TextField(help_text="Recommended Treatment")
+    dosage_application = models.TextField(help_text="Dosage and Application")
     
     # Additional information
     selected_organs = models.JSONField(default=list, help_text="Selected organs for diagnosis")

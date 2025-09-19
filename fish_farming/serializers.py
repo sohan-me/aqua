@@ -17,9 +17,12 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class SpeciesSerializer(serializers.ModelSerializer):
+    user_username = serializers.CharField(source='user.username', read_only=True)
+    
     class Meta:
         model = Species
         fields = '__all__'
+        read_only_fields = ['user', 'created_at']
 
 
 class PondSerializer(serializers.ModelSerializer):

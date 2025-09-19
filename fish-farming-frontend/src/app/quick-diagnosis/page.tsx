@@ -4,19 +4,13 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CheckCircle, AlertTriangle, Heart, Eye, Brain, Zap, Droplets, Activity, Fish, MapPin, Edit3, Save, X, Search } from 'lucide-react';
+import { CheckCircle, AlertTriangle, Brain, Zap, Fish, MapPin, Edit3, Save, X, Search } from 'lucide-react';
 import { usePonds } from '@/hooks/useApi';
 import { Pond, MedicalDiagnostic } from '@/lib/api';
 import { extractApiData } from '@/lib/utils';
 import { api } from '@/lib/api';
 import { medicalData } from '@/lib/medicalData';
 import Link from 'next/link';
-
-interface SelectedOrgan {
-  id: string;
-  name: string;
-  conditions: string[];
-}
 
 interface Diagnosis {
   disease: string;
@@ -25,9 +19,10 @@ interface Diagnosis {
   dosage: string;
 }
 
-export default function MedicalDiagnosticPage() {
+export default function QuickDiagnosisPage() {
   const [selectedPond, setSelectedPond] = useState<Pond | null>(null);
-  const [selectedOrgans, setSelectedOrgans] = useState<SelectedOrgan[]>([]);
+  const [selectedSymptoms, setSelectedSymptoms] = useState<string[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
   const [diagnosis, setDiagnosis] = useState<Diagnosis | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -40,36 +35,32 @@ export default function MedicalDiagnosticPage() {
   const { data: pondsData, isLoading: pondsLoading } = usePonds();
   const ponds = extractApiData<Pond>(pondsData);
 
+  // Get all possible symptoms from medical data
+  const allSymptoms = [
+    ...new Set([
+      ...Object.values(medicalData.diseases).flatMap(condition => [
+        ...condition.symptoms,
+        // ...condition.unhealthy
+      ])
+    ])
+  ].sort();
+
+  // Filter symptoms based on search term
+  const filteredSymptoms = allSymptoms.filter(symptom =>
+    symptom.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   // Fetch saved diagnostics on component mount
   useEffect(() => {
     fetchSavedDiagnostics();
   }, []);
 
-  const handleOrganSelect = (organId: string) => {
-    const organ = medicalData.organs.find(o => o.id === organId);
-    if (!organ) return;
-
-    const existingOrgan = selectedOrgans.find(o => o.id === organId);
-    if (existingOrgan) {
-      setSelectedOrgans(selectedOrgans.filter(o => o.id !== organId));
+  const handleSymptomSelect = (symptom: string) => {
+    if (selectedSymptoms.includes(symptom)) {
+      setSelectedSymptoms(selectedSymptoms.filter(s => s !== symptom));
     } else {
-      setSelectedOrgans([...selectedOrgans, { id: organId, name: organ.name, conditions: [] }]);
+      setSelectedSymptoms([...selectedSymptoms, symptom]);
     }
-  };
-
-  const handleConditionSelect = (organId: string, condition: string) => {
-    setSelectedOrgans(prev => prev.map(organ => {
-      if (organ.id === organId) {
-        const hasCondition = organ.conditions.includes(condition);
-        return {
-          ...organ,
-          conditions: hasCondition 
-            ? organ.conditions.filter(c => c !== condition)
-            : [...organ.conditions, condition]
-        };
-      }
-      return organ;
-    }));
   };
 
   const analyzeSymptoms = () => {
@@ -77,13 +68,11 @@ export default function MedicalDiagnosticPage() {
     
     // Simulate analysis delay
     setTimeout(() => {
-      const allConditions = selectedOrgans.flatMap(organ => organ.conditions);
-      
-      if (allConditions.length === 0) {
+      if (selectedSymptoms.length === 0) {
         setDiagnosis({
           disease: 'No symptoms selected',
           confidence: 0,
-          treatment: 'Please select symptoms to continue',
+          treatment: 'Please select symptoms to proceed',
           dosage: ''
         });
         setIsAnalyzing(false);
@@ -91,13 +80,13 @@ export default function MedicalDiagnosticPage() {
       }
 
       // Check for healthy conditions only
-      const healthyConditions = selectedOrgans.every(organ => 
-        organ.conditions.every(condition => 
-          medicalData.conditions[organ.id as keyof typeof medicalData.conditions]?.healthy.includes(condition)
+      const healthySymptoms = selectedSymptoms.every(symptom => 
+        Object.values(medicalData.conditions).some(condition => 
+          condition.healthy.includes(symptom)
         )
       );
 
-      if (healthyConditions) {
+      if (healthySymptoms) {
         setDiagnosis({
           disease: 'Healthy Condition',
           confidence: 95,
@@ -108,111 +97,73 @@ export default function MedicalDiagnosticPage() {
         return;
       }
 
-      // Enhanced matching algorithm that properly handles multiple organs
+      // Enhanced matching algorithm for symptoms
       const diseaseMatches = medicalData.diseases
         .filter(disease => disease.id !== 'healthy')
         .map(disease => {
           let score = 0;
           let exactMatches = 0;
           let partialMatches = 0;
-          let organMatches = 0;
           const symptomMatches = [];
           
-          // Check each selected organ's conditions against disease symptoms
-          for (const organ of selectedOrgans) {
-            let organHasMatch = false;
-            const organSymptomMatches = [];
+          // Check each selected symptom against disease symptoms
+          for (const symptom of selectedSymptoms) {
+            // Check for exact symptom matches
+            const exactMatch = disease.symptoms.some(diseaseSymptom => 
+              symptom.toLowerCase() === diseaseSymptom.toLowerCase()
+            );
             
-            for (const condition of organ.conditions) {
-              // Check for exact symptom matches
-              const exactMatch = disease.symptoms.some(symptom => 
-                condition.toLowerCase() === symptom.toLowerCase()
-              );
-              
-              if (exactMatch) {
-                exactMatches++;
-                score += 20; // Higher score for exact matches
-                organHasMatch = true;
-                organSymptomMatches.push({ condition, match: 'exact' });
-              } else {
-                // Check for partial matches with better keyword matching
-                const partialMatch = disease.symptoms.some(symptom => {
-                  const conditionLower = condition.toLowerCase();
-                  const symptomLower = symptom.toLowerCase();
-                  
-                  // Direct substring match
-                  if (conditionLower.includes(symptomLower) || symptomLower.includes(conditionLower)) {
-                    return true;
-                  }
-                  
-                  // Keyword matching
-                  const conditionWords = conditionLower.split(/[\s,;]+/).filter(w => w.length > 2);
-                  const symptomWords = symptomLower.split(/[\s,;]+/).filter(w => w.length > 2);
-                  
-                  const hasKeywordMatch = conditionWords.some(cw => 
-                    symptomWords.some(sw => 
-                      cw.includes(sw) || sw.includes(cw) ||
-                      // Common medical terms
-                      (cw === 'gill' && sw === 'gill') ||
-                      (cw === 'eye' && sw === 'eye') ||
-                      (cw === 'skin' && sw === 'skin') ||
-                      (cw === 'liver' && sw === 'liver') ||
-                      (cw === 'intestine' && sw === 'intestine') ||
-                      (cw === 'spleen' && sw === 'spleen') ||
-                      (cw === 'kidney' && sw === 'kidney') ||
-                      (cw === 'brain' && sw === 'brain') ||
-                      (cw === 'muscle' && sw === 'muscle')
-                    )
-                  );
-                  
-                  return hasKeywordMatch;
-                });
+            if (exactMatch) {
+              exactMatches++;
+              score += 20; // Higher score for exact matches
+              symptomMatches.push({ symptom, match: 'exact' });
+            } else {
+              // Check for partial matches
+              const partialMatch = disease.symptoms.some(diseaseSymptom => {
+                const symptomLower = symptom.toLowerCase();
+                const diseaseSymptomLower = diseaseSymptom.toLowerCase();
                 
-                if (partialMatch) {
-                  partialMatches++;
-                  score += 10; // Good score for partial matches
-                  organHasMatch = true;
-                  organSymptomMatches.push({ condition, match: 'partial' });
+                // Direct substring match
+                if (symptomLower.includes(diseaseSymptomLower) || diseaseSymptomLower.includes(symptomLower)) {
+                  return true;
                 }
+                
+                // Keyword matching
+                const symptomWords = symptomLower.split(/[\s,;]+/).filter(w => w.length > 2);
+                const diseaseWords = diseaseSymptomLower.split(/[\s,;]+/).filter(w => w.length > 2);
+                
+                const hasKeywordMatch = symptomWords.some(sw => 
+                  diseaseWords.some(dw => 
+                    sw.includes(dw) || dw.includes(sw)
+                  )
+                );
+                
+                return hasKeywordMatch;
+              });
+              
+              if (partialMatch) {
+                partialMatches++;
+                score += 10; // Good score for partial matches
+                symptomMatches.push({ symptom, match: 'partial' });
               }
             }
-            
-            if (organHasMatch) {
-              organMatches++;
-              symptomMatches.push({
-                organ: organ.name,
-                matches: organSymptomMatches
-              });
-            }
           }
           
-          // Calculate confidence based on matches and organ involvement
+          // Calculate confidence based on matches
           const totalSymptoms = disease.symptoms.length;
-          const totalConditions = allConditions.length;
+          const totalSelectedSymptoms = selectedSymptoms.length;
           
-          // More sophisticated confidence calculation
           let confidence = 0;
           if (exactMatches > 0) {
-            confidence += (exactMatches / totalConditions) * 60; // Exact matches are very important
+            confidence += (exactMatches / totalSelectedSymptoms) * 60;
           }
           if (partialMatches > 0) {
-            confidence += (partialMatches / totalConditions) * 30; // Partial matches are good
+            confidence += (partialMatches / totalSelectedSymptoms) * 30;
           }
           
-          // Organ involvement bonus
-          if (organMatches > 1) {
-            confidence += Math.min(20, (organMatches - 1) * 10); // Bonus for multi-organ involvement
-          }
-          
-          // Penalty for diseases with very few symptoms if many conditions selected
-          if (totalSymptoms < 3 && totalConditions > 5) {
+          // Bonus for diseases with fewer symptoms if many symptoms selected
+          if (totalSymptoms < 3 && totalSelectedSymptoms > 5) {
             confidence = Math.max(0, confidence - 15);
-          }
-          
-          // Bonus for diseases that typically affect multiple organs
-          const multiOrganDiseases = ['bacterial_septicemia', 'systemic_infection', 'mixed_infection', 'tilv', 'iridovirus', 'streptococcus', 'edwardsiella'];
-          if (multiOrganDiseases.includes(disease.id) && organMatches > 1) {
-            confidence += 15;
           }
           
           // Ensure confidence is between 0 and 95
@@ -224,21 +175,16 @@ export default function MedicalDiagnosticPage() {
             confidence,
             exactMatches,
             partialMatches,
-            organMatches,
             symptomMatches
           };
         })
         .filter(match => match.confidence > 0)
         .sort((a, b) => {
-          // Primary sort by confidence, secondary by exact matches, tertiary by organ matches
           if (b.confidence !== a.confidence) {
             return b.confidence - a.confidence;
           }
           if (b.exactMatches !== a.exactMatches) {
             return b.exactMatches - a.exactMatches;
-          }
-          if (b.organMatches !== a.organMatches) {
-            return b.organMatches - a.organMatches;
           }
           return b.score - a.score;
         });
@@ -268,18 +214,14 @@ export default function MedicalDiagnosticPage() {
           dosage: `Dosage: ${bestMatch.disease.dosage}. Other possibilities: ${topMatches.slice(1).map(m => m.disease.name).join(', ')}`
         });
       } else {
-        // Add organ involvement info for better diagnosis
-        const organInfo = selectedOrgans.length > 1 ? 
-          ` (${selectedOrgans.length} organs with symptoms: ${selectedOrgans.map(o => o.name).join(', ')})` : '';
-        
         // Add symptom matching info for debugging
         const symptomInfo = bestMatch.symptomMatches && bestMatch.symptomMatches.length > 0 ? 
-          `\n\nMatching Symptoms:\n${bestMatch.symptomMatches.map(organMatch => 
-            `${organMatch.organ}: ${organMatch.matches.map(m => m.condition).join(', ')}`
+          `\n\nMatching Symptoms:\n${bestMatch.symptomMatches.map(match => 
+            `${match.symptom} (${match.match})`
           ).join('\n')}` : '';
         
         setDiagnosis({
-          disease: bestMatch.disease.name + organInfo,
+          disease: bestMatch.disease.name,
           confidence: bestMatch.confidence,
           treatment: bestMatch.disease.treatment,
           dosage: bestMatch.disease.dosage + symptomInfo
@@ -292,11 +234,12 @@ export default function MedicalDiagnosticPage() {
 
   const resetDiagnosis = () => {
     setSelectedPond(null);
-    setSelectedOrgans([]);
+    setSelectedSymptoms([]);
     setDiagnosis(null);
     setIsEditing(false);
     setEditableDiagnosis(null);
     setSavedDiagnostic(null);
+    setSearchTerm('');
   };
 
   const startEditing = () => {
@@ -320,37 +263,27 @@ export default function MedicalDiagnosticPage() {
     }
   };
 
-  const saveDiagnosticToDatabase = async (diagnosisToSave?: Diagnosis) => {
-    if (!selectedPond) return;
-
-    const diagnosisData = diagnosisToSave || editableDiagnosis;
-    if (!diagnosisData) return;
-
+  const saveDiagnosticToDatabase = async () => {
+    if (!selectedPond || !editableDiagnosis) return;
+    
     setIsSaving(true);
     try {
       const diagnosticData = {
         pond: selectedPond.id,
-        disease_name: diagnosisData.disease,
-        confidence_percentage: diagnosisData.confidence.toString(),
-        recommended_treatment: diagnosisData.treatment,
-        dosage_application: diagnosisData.dosage,
-        selected_organs: selectedOrgans.map(organ => ({
-          id: organ.id,
-          name: organ.name,
-          conditions: organ.conditions
-        })),
-        selected_symptoms: selectedOrgans.flatMap(organ => organ.conditions),
-        notes: ''
+        disease_name: editableDiagnosis.disease,
+        confidence_percentage: editableDiagnosis.confidence,
+        recommended_treatment: editableDiagnosis.treatment,
+        dosage_application: editableDiagnosis.dosage,
+        selected_organs: [],
+        selected_symptoms: selectedSymptoms,
+        notes: '',
+        is_applied: false
       };
 
       const response = await api.post('/medical-diagnostics/', diagnosticData);
       setSavedDiagnostic(response.data);
-      
-      if (editableDiagnosis) {
-        setDiagnosis(editableDiagnosis);
-        setIsEditing(false);
-        setEditableDiagnosis(null);
-      }
+      setIsEditing(false);
+      setEditableDiagnosis(null);
       
       // Refresh the diagnostics list
       fetchSavedDiagnostics();
@@ -362,24 +295,39 @@ export default function MedicalDiagnosticPage() {
     }
   };
 
-  const fetchSavedDiagnostics = async () => {
+  const saveWithoutEditing = async () => {
+    if (!selectedPond || !diagnosis) return;
+    
+    setIsSaving(true);
     try {
-      const response = await api.get('/medical-diagnostics/');
-      setSavedDiagnostics(response.data.results || response.data);
-    } catch (error) {
-      console.error('Error fetching diagnostics:', error);
-    }
-  };
+      const diagnosticData = {
+        pond: selectedPond.id,
+        disease_name: diagnosis.disease,
+        confidence_percentage: diagnosis.confidence,
+        recommended_treatment: diagnosis.treatment,
+        dosage_application: diagnosis.dosage,
+        selected_organs: [],
+        selected_symptoms: selectedSymptoms,
+        notes: '',
+        is_applied: false
+      };
 
-  const saveWithoutEditing = () => {
-    if (diagnosis) {
-      saveDiagnosticToDatabase(diagnosis);
+      const response = await api.post('/medical-diagnostics/', diagnosticData);
+      setSavedDiagnostic(response.data);
+      
+      // Refresh the diagnostics list
+      fetchSavedDiagnostics();
+    } catch (error) {
+      console.error('Error saving diagnostic:', error);
+      alert('Error saving treatment. Please try again.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const applyTreatment = async () => {
     if (!savedDiagnostic) return;
-
+    
     try {
       await api.post(`/medical-diagnostics/${savedDiagnostic.id}/apply_treatment/`);
       setSavedDiagnostic({
@@ -394,32 +342,32 @@ export default function MedicalDiagnosticPage() {
     }
   };
 
+  const fetchSavedDiagnostics = async () => {
+    try {
+      const response = await api.get('/medical-diagnostics/');
+      setSavedDiagnostics(response.data.results || response.data);
+    } catch (error) {
+      console.error('Error fetching diagnostics:', error);
+    }
+  };
+
   return (
     <div className="container mx-auto text-gray-900">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-center mb-4 text-gray-900">
-          🐟 Fish Medical Diagnostic Assistant
+          🔍 Quick Fish Diagnosis
         </h1>
         <p className="text-center text-gray-600">
-          Select a pond, choose organs, and identify symptoms for disease diagnosis
+          Select a pond and choose symptoms for instant disease diagnosis
         </p>
-        <div className="text-center mt-4 flex">
+        <div className="text-center mt-4">
           <Link href="/medical-diagnostics">
             <Button
               variant="outline"
-              className="flex items-center bg-blue-600 gap-2 text-gray-800 mr-4"
+              className="flex items-center justify-center gap-2 bg-blue-600 text-gray-800 w-full md:w-auto"
             >
               <Brain className="h-4 w-4" />
               View Saved Diagnostics
-            </Button>
-          </Link>
-          <Link href="/quick-diagnosis">
-            <Button
-              variant="outline"
-              className="flex items-center bg-blue-600 gap-2 text-gray-800"
-            >
-              <Search className="h-4 w-4" />
-              Quick Diagnosis
             </Button>
           </Link>
         </div>
@@ -429,7 +377,7 @@ export default function MedicalDiagnosticPage() {
       <Card className="mb-6">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-              <span className="text-2xl">🏞️</span>
+            <span className="text-2xl">🏞️</span>
             Select Pond
           </CardTitle>
         </CardHeader>
@@ -437,7 +385,7 @@ export default function MedicalDiagnosticPage() {
           {pondsLoading ? (
             <div className="flex items-center justify-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-              <span className="ml-3 text-gray-600">Loading ponds list...</span>
+              <span className="ml-3 text-gray-600">Loading ponds...</span>
             </div>
           ) : ponds.length === 0 ? (
             <div className="text-center py-8">
@@ -461,23 +409,13 @@ export default function MedicalDiagnosticPage() {
                   >
                     <div className={`font-semibold ${selectedPond?.id === pond.id ? 'text-white' : 'text-gray-800'}`}>{pond.name}</div>
                     <div className={`text-sm flex items-center gap-1 ${selectedPond?.id === pond.id ? 'text-white opacity-90' : 'text-gray-700'}`}>
-                      <Droplets className="h-3 w-3" />
-                      Size: {parseFloat(pond.area_decimal).toFixed(3)} decimel
-                    </div>
-                    <div className={`text-sm flex items-center gap-1 ${selectedPond?.id === pond.id ? 'text-white opacity-90' : 'text-gray-700'}`}>
-                      <Activity className="h-3 w-3" />
-                      Depth: {parseFloat(pond.depth_ft).toFixed(1)} ft
-                    </div>
-                    <div className={`text-sm flex items-center gap-1 ${selectedPond?.id === pond.id ? 'text-white opacity-90' : 'text-gray-700'}`}>
                       <Fish className="h-3 w-3" />
-                      Volume: {parseFloat(pond.volume_m3).toFixed(1)} m³
+                      Area: {parseFloat(pond.area_decimal).toFixed(3)} decimel
                     </div>
-                    {pond.location && (
-                      <div className={`text-sm flex items-center gap-1 ${selectedPond?.id === pond.id ? 'text-white opacity-90' : 'text-gray-700'}`}>
-                        <MapPin className="h-3 w-3" />
-                        {pond.location}
-                      </div>
-                    )}
+                    <div className={`text-sm flex items-center gap-1 ${selectedPond?.id === pond.id ? 'text-white opacity-90' : 'text-gray-700'}`}>
+                      <MapPin className="h-3 w-3" />
+                      {pond.location || 'Location not specified'}
+                    </div>
                     <div className={`text-xs px-2 py-1 rounded-full text-blue-500 border`}>
                       {pond.is_active ? 'Active' : 'Inactive'}
                     </div>
@@ -488,7 +426,7 @@ export default function MedicalDiagnosticPage() {
               {selectedPond && (
                 <div className="mt-4 p-3 bg-blue-50 rounded-lg">
                   <p className="text-sm text-blue-800">
-                    <strong>Selected Pond:</strong> {selectedPond.name} ({parseFloat(selectedPond.area_decimal).toFixed(3)} decimel) - {selectedPond.location || 'No location specified'}
+                    <strong>Selected Pond:</strong> {selectedPond.name} ({parseFloat(selectedPond.area_decimal).toFixed(3)} decimel) - {selectedPond.location || 'Location not specified'}
                   </p>
                 </div>
               )}
@@ -497,115 +435,71 @@ export default function MedicalDiagnosticPage() {
         </CardContent>
       </Card>
 
-
+      {/* Symptom Selection */}
       {selectedPond && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Organ Selection */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-gray-900">
-                <Heart className="h-5 w-5" />
-                Select Organs
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-3">
-                {medicalData.organs.map(organ => (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Search className="h-5 w-5" />
+              Select Symptoms
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {/* Search Bar */}
+            <div className="mb-4">
+              <input
+                type="text"
+                placeholder="Search symptoms..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+
+            {/* Symptoms Grid */}
+            <div className="max-h-96 overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-2">
+                {filteredSymptoms.map(symptom => (
                   <Button
-                    key={organ.id}
-                    variant={selectedOrgans.some(o => o.id === organ.id) ? "default" : "outline"}
-                    onClick={() => handleOrganSelect(organ.id)}
-                    className={`h-auto p-4 flex flex-col items-center gap-2 ${
-                      selectedOrgans.some(o => o.id === organ.id)
+                    key={symptom}
+                    variant={selectedSymptoms.includes(symptom) ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => handleSymptomSelect(symptom)}
+                    className={`text-xs h-auto p-2 text-left justify-start ${
+                      selectedSymptoms.includes(symptom) 
                         ? 'bg-blue-600 hover:bg-blue-700 text-white' 
                         : 'bg-white hover:bg-gray-50 text-gray-800 border-gray-300'
                     }`}
                   >
-                    <span className="text-2xl">{organ.icon}</span>
-                    <span className={`text-sm text-center font-medium ${selectedOrgans.some(o => o.id === organ.id) ? 'text-white' : 'text-gray-800'}`}>{organ.name}</span>
+                    {symptom}
                   </Button>
                 ))}
               </div>
-            </CardContent>
-          </Card>
+            </div>
 
-          {/* Condition Selection */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-gray-900">
-                <Eye className="h-5 w-5" />
-                Select Symptoms
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {selectedOrgans.map(organ => (
-                  <div key={organ.id} className="border rounded-lg p-4">
-                    <h4 className="font-semibold mb-3 flex items-center gap-2 text-gray-900">
-                      {medicalData.organs.find(o => o.id === organ.id)?.icon} {organ.name}
-                    </h4>
-                    
-                    {/* Healthy Conditions */}
-                    <div className="mb-4">
-                      <h5 className="text-sm font-medium text-green-700 mb-2 flex items-center gap-1">
-                        <CheckCircle className="h-4 w-4" />
-                        Healthy Symptoms
-                      </h5>
-                      <div className="flex flex-wrap gap-2">
-                        {medicalData.conditions[organ.id as keyof typeof medicalData.conditions]?.healthy.map(condition => (
-                          <Button
-                            key={condition}
-                            variant={organ.conditions.includes(condition) ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => handleConditionSelect(organ.id, condition)}
-                            className={`text-xs ${
-                              organ.conditions.includes(condition) 
-                                ? 'bg-green-600 hover:bg-green-700 text-white' 
-                                : 'bg-white hover:bg-gray-50 text-gray-800 border-gray-300'
-                            }`}
-                          >
-                            {condition}
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Unhealthy Conditions */}
-                    <div>
-                      <h5 className="text-sm font-medium text-red-700 mb-2 flex items-center gap-1">
-                        <AlertTriangle className="h-4 w-4" />
-                        Unhealthy/Abnormal Symptoms
-                      </h5>
-                      <div className="flex flex-wrap gap-2">
-                        {medicalData.conditions[organ.id as keyof typeof medicalData.conditions]?.unhealthy.map(condition => (
-                          <Button
-                            key={condition}
-                            variant={organ.conditions.includes(condition) ? "destructive" : "outline"}
-                            size="sm"
-                            onClick={() => handleConditionSelect(organ.id, condition)}
-                            className={`text-xs ${
-                              organ.conditions.includes(condition) 
-                                ? 'bg-red-600 hover:bg-red-700 text-white' 
-                                : 'bg-white hover:bg-gray-50 text-gray-800 border-gray-300'
-                            }`}
-                          >
-                            {condition}
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                
-                {selectedOrgans.length === 0 && (
-                  <p className="text-center text-gray-600 py-8">
-                    Please select organs first
-                  </p>
-                )}
+            {selectedSymptoms.length > 0 && (
+              <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                <p className="text-sm font-medium mb-2">Selected Symptoms ({selectedSymptoms.length}):</p>
+                <div className="flex flex-wrap gap-1">
+                  {selectedSymptoms.map(symptom => (
+                    <span
+                      key={symptom}
+                      className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full"
+                    >
+                      {symptom}
+                      <button
+                        onClick={() => handleSymptomSelect(symptom)}
+                        className="ml-1 hover:text-blue-600"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
               </div>
-            </CardContent>
-          </Card>
-        </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* Analysis Button */}
@@ -613,7 +507,7 @@ export default function MedicalDiagnosticPage() {
         <div className="mt-6 text-center">
           <Button
             onClick={analyzeSymptoms}
-            disabled={selectedOrgans.length === 0 || isAnalyzing}
+            disabled={selectedSymptoms.length === 0 || isAnalyzing}
             // size="lg"
             className="px-8 bg-blue-600 text-gray-800"
           >
@@ -630,11 +524,11 @@ export default function MedicalDiagnosticPage() {
             )}
           </Button>
           
-          {(selectedOrgans.length > 0 || selectedPond) && (
+          {(selectedSymptoms.length > 0 || selectedPond) && (
             <Button
               variant="outline"
               onClick={resetDiagnosis}
-              className="ml-4 text-gray-800 bg-red-600"
+              className="ml-4 bg-red-600 text-gray-800"
             >
               Reset
             </Button>
@@ -644,8 +538,8 @@ export default function MedicalDiagnosticPage() {
 
       {!selectedPond && (
         <div className="mt-6 text-center">
-          <p className="text-gray-600 text-lg">
-            Please select a pond first to begin disease diagnosis
+          <p className="text-gray-500 text-lg">
+            Please select a pond first to start disease diagnosis
           </p>
         </div>
       )}
@@ -655,12 +549,12 @@ export default function MedicalDiagnosticPage() {
         <Card className="mt-6">
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2 text-gray-900">
-                <Brain className="h-5 w-5 hidden md:block" />
+              <CardTitle className="flex items-center gap-2">
+                <Brain className="h-5 w-5" />
                 Diagnosis Results
               </CardTitle>
               {!isEditing && !savedDiagnostic && (
-                <div className="md:flex gap-2">
+                <div className="flex gap-2">
                   <Button
                     variant="outline"
                     size="sm"
@@ -688,7 +582,7 @@ export default function MedicalDiagnosticPage() {
             {selectedPond && (
               <div className="bg-blue-50 p-3 rounded-lg mb-4">
                 <p className="text-sm text-blue-800">
-                  <strong>Pond:</strong> {selectedPond.name} ({parseFloat(selectedPond.area_decimal).toFixed(3)} decimel) - {selectedPond.location || 'No location specified'}
+                  <strong>Pond:</strong> {selectedPond.name} ({parseFloat(selectedPond.area_decimal).toFixed(3)} decimel) - {selectedPond.location || 'Location not specified'}
                 </p>
               </div>
             )}
@@ -707,9 +601,6 @@ export default function MedicalDiagnosticPage() {
               ) : (
                 <h3 className="text-xl font-semibold text-gray-900">{diagnosis.disease}</h3>
               )}
-              {/* <Badge variant={diagnosis.confidence > 70 ? "default" : "secondary"}>
-                {diagnosis.confidence}% confident
-              </Badge> */}
             </div>
 
             <Alert>
@@ -739,7 +630,7 @@ export default function MedicalDiagnosticPage() {
                   rows={4}
                 />
               ) : (
-                <p className="text-sm text-gray-800">{diagnosis.dosage}</p>
+                <p className="text-sm text-gray-800 whitespace-pre-line">{diagnosis.dosage}</p>
               )}
             </div>
 
@@ -751,7 +642,7 @@ export default function MedicalDiagnosticPage() {
                   className="flex items-center gap-2"
                 >
                   <Save className="h-4 w-4" />
-                  {isSaving ? 'Saving...' : 'Save Changes'}
+                  {isSaving ? 'Saving...' : 'Save'}
                 </Button>
                 <Button
                   variant="outline"
@@ -770,7 +661,7 @@ export default function MedicalDiagnosticPage() {
                   <div>
                     <p className="text-green-800 font-medium">Treatment saved successfully</p>
                     <p className="text-sm text-green-600">
-                      Saved at: {new Date(savedDiagnostic.created_at).toLocaleString('en-US')}
+                      Saved at: {new Date(savedDiagnostic.created_at).toLocaleString()}
                     </p>
                   </div>
                   <Button
@@ -783,7 +674,7 @@ export default function MedicalDiagnosticPage() {
                 </div>
                 {savedDiagnostic.is_applied && savedDiagnostic.applied_at && (
                   <p className="text-sm text-green-600 mt-2">
-                    Applied at: {new Date(savedDiagnostic.applied_at).toLocaleString('en-US')}
+                    Applied at: {new Date(savedDiagnostic.applied_at).toLocaleString()}
                   </p>
                 )}
               </div>

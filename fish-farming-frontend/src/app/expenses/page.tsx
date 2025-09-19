@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useExpenses, usePonds, useDeleteExpense } from '@/hooks/useApi';
-import { Expense, Pond } from '@/lib/api';
+import { useExpenses, usePonds, useDeleteExpense, useExpenseTypes } from '@/hooks/useApi';
+import { Expense, Pond, ExpenseType } from '@/lib/api';
 import { formatDate, extractApiData } from '@/lib/utils';
 import { Plus, Edit, Trash2, Eye, TrendingDown, Receipt, Building2, Filter, X, DollarSign } from 'lucide-react';
 import Link from 'next/link';
@@ -11,20 +11,23 @@ import { toast } from 'sonner';
 export default function ExpensesPage() {
   const { data: expensesData, isLoading } = useExpenses();
   const { data: pondsData } = usePonds();
+  const { data: expenseTypesData } = useExpenseTypes();
   const deleteExpense = useDeleteExpense();
   
   const expenses = extractApiData<Expense>(expensesData);
   const ponds = extractApiData<Pond>(pondsData);
+  const expenseTypes = extractApiData<ExpenseType>(expenseTypesData);
 
-  // Date range and pond filtering state
+  // Date range, pond, and expense type filtering state
   const [dateRange, setDateRange] = useState({
     startDate: '',
     endDate: ''
   });
   const [filterPond, setFilterPond] = useState('');
+  const [filterExpenseType, setFilterExpenseType] = useState('');
   const [showFilters, setShowFilters] = useState(false);
 
-  // Filter expenses based on date range and pond
+  // Filter expenses based on date range, pond, and expense type
   const filteredExpenses = useMemo(() => {
     return expenses.filter(expense => {
       // Date range filtering
@@ -44,9 +47,12 @@ export default function ExpensesPage() {
       // Pond filtering
       const pondMatch = !filterPond || expense.pond === parseInt(filterPond);
 
-      return dateMatch && pondMatch;
+      // Expense type filtering
+      const expenseTypeMatch = !filterExpenseType || expense.expense_type === parseInt(filterExpenseType);
+
+      return dateMatch && pondMatch && expenseTypeMatch;
     });
-  }, [expenses, dateRange, filterPond]);
+  }, [expenses, dateRange, filterPond, filterExpenseType]);
 
   // Calculate filtered totals
   const filteredTotals = useMemo(() => {
@@ -123,7 +129,7 @@ export default function ExpensesPage() {
         </div>
 
         {showFilters && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 w-full">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Start Date
@@ -163,13 +169,31 @@ export default function ExpensesPage() {
                 ))}
               </select>
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Filter by Expense Type
+              </label>
+              <select
+                value={filterExpenseType}
+                onChange={(e) => setFilterExpenseType(e.target.value)}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500  text-gray-900 placeholder-gray-500 bg-white"
+              >
+                <option value="">All Expense Types</option>
+                {expenseTypes.map((expenseType) => (
+                  <option key={expenseType.id} value={expenseType.id}>
+                    {expenseType.name} ({expenseType.category})
+                  </option>
+                ))}
+              </select>
+            </div>
             <div className="flex items-end w-full">
               <button
                 onClick={() => {
                   setDateRange({ startDate: '', endDate: '' });
                   setFilterPond('');
+                  setFilterExpenseType('');
                 }}
-                className="w-full md:w-auto inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                className="w-full  inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
               >
                 <X className="h-4 w-4 mr-2" />
                 Clear Filters
@@ -179,7 +203,7 @@ export default function ExpensesPage() {
         )}
 
         {/* Active Filters Summary */}
-        {(dateRange.startDate || dateRange.endDate || filterPond) && (
+        {(dateRange.startDate || dateRange.endDate || filterPond || filterExpenseType) && (
           <div className="mt-4 p-3 bg-blue-50 rounded-md">
             <div className="flex items-center">
               <Filter className="h-4 w-4 text-blue-400 mr-2" />
@@ -194,6 +218,8 @@ export default function ExpensesPage() {
                 ) : null}
                 {dateRange.startDate || dateRange.endDate ? ' and ' : ''}
                 {filterPond && `for Pond: ${ponds.find(p => p.id === parseInt(filterPond))?.name || 'Unknown'}`}
+                {(dateRange.startDate || dateRange.endDate || filterPond) && filterExpenseType ? ' and ' : ''}
+                {filterExpenseType && `Type: ${expenseTypes.find(et => et.id === parseInt(filterExpenseType))?.name || 'Unknown'}`}
                 {' '}({filteredExpenses.length} records)
               </span>
             </div>

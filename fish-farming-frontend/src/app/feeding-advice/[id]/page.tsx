@@ -2,7 +2,7 @@
 
 import { useFeedingAdviceById, useDeleteFeedingAdvice, useApplyFeedingAdvice } from '@/hooks/useApi';
 import { formatDate, formatWeight } from '@/lib/utils';
-import { Lightbulb, ArrowLeft, Edit, Trash2, Calendar, User, CheckCircle, Clock, Thermometer, Droplets } from 'lucide-react';
+import { Lightbulb, ArrowLeft, Edit, Trash2, Calendar, User, CheckCircle, Clock, Thermometer, Droplets, AlertTriangle, Stethoscope, Shield } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -230,6 +230,173 @@ export default function FeedingAdviceDetailPage({ params }: PageProps) {
           </div>
         </div>
 
+        {/* Parameters Used for Feeding Advice */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+            <Lightbulb className="h-5 w-5 mr-2 text-blue-600" />
+            Parameters Used for Feeding Advice Generation
+          </h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {/* Fish Data Parameters */}
+            <div className="bg-blue-50 rounded-lg p-4">
+              <h3 className="text-sm font-medium text-blue-900 mb-3">🐟 Fish Data Parameters</h3>
+              <div className="space-y-2 text-sm text-blue-700">
+                <div className="flex justify-between">
+                  <span>Fish Count:</span>
+                  <span className="font-semibold">{advice.data.estimated_fish_count?.toLocaleString() || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Avg Weight:</span>
+                  <span className="font-semibold">{advice.data.average_fish_weight_kg ? formatWeight(advice.data.average_fish_weight_kg) + ' kg' : 'N/A'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Total Biomass:</span>
+                  <span className="font-semibold">{advice.data.total_biomass_kg ? formatWeight(advice.data.total_biomass_kg) + ' kg' : 'N/A'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Species:</span>
+                  <span className="font-semibold">{(advice.data as any).species_name || 'N/A'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Environmental Parameters */}
+            <div className="bg-green-50 rounded-lg p-4">
+              <h3 className="text-sm font-medium text-green-900 mb-3">🌡️ Environmental Parameters</h3>
+              <div className="space-y-2 text-sm text-green-700">
+                <div className="flex justify-between">
+                  <span>Season:</span>
+                  <span className="font-semibold capitalize">{advice.data.season || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Water Temp:</span>
+                  <span className="font-semibold">{advice.data.water_temp_c ? `${parseFloat(advice.data.water_temp_c).toFixed(1)}°C` : 'Not specified'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Pond:</span>
+                  <span className="font-semibold">{advice.data.pond_name || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Date:</span>
+                  <span className="font-semibold">{advice.data.date ? formatDate(advice.data.date) : 'N/A'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Feeding Parameters */}
+            <div className="bg-purple-50 rounded-lg p-4">
+              <h3 className="text-sm font-medium text-purple-900 mb-3">🍽️ Feeding Parameters</h3>
+              <div className="space-y-2 text-sm text-purple-700">
+                <div className="flex justify-between">
+                  <span>Feeding Rate:</span>
+                  <span className="font-semibold">{advice.data.feeding_rate_percent ? `${parseFloat(advice.data.feeding_rate_percent).toFixed(1)}%` : 'N/A'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Frequency:</span>
+                  <span className="font-semibold">{advice.data.feeding_frequency ? `${advice.data.feeding_frequency}x/day` : 'N/A'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Feed Type:</span>
+                  <span className="font-semibold">{advice.data.feed_type_name || 'Not specified'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Daily Feed:</span>
+                  <span className="font-semibold">{advice.data.recommended_feed_kg ? formatWeight(advice.data.recommended_feed_kg) + ' kg' : 'N/A'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Data Source Parameters */}
+            <div className="bg-orange-50 rounded-lg p-4">
+              <h3 className="text-sm font-medium text-orange-900 mb-3">📊 Data Source</h3>
+              <div className="space-y-2 text-sm text-orange-700">
+                <div className="flex justify-between">
+                  <span>Data Type:</span>
+                  <span className="font-semibold">
+                    {advice.data.notes?.includes('stocking data') ? 'Stocking Data' : 
+                     advice.data.notes?.includes('fish sampling') ? 'Fish Sampling' : 'Mixed Data'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Survival Rate:</span>
+                  <span className="font-semibold">
+                    {advice.data.notes?.includes('100.0%') ? '100.0%' : 
+                     advice.data.notes?.includes('survival rate') ? 'Calculated' : 'N/A'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Days Since Stocking:</span>
+                  <span className="font-semibold">
+                    {advice.data.notes?.includes('Days since stocking:') ? 
+                     advice.data.notes.match(/Days since stocking: (\d+)/)?.[1] + ' days' : 'N/A'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Generated By:</span>
+                  <span className="font-semibold">{advice.data.user_username || 'N/A'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Medical Parameters */}
+            <div className="bg-red-50 rounded-lg p-4">
+              <h3 className="text-sm font-medium text-red-900 mb-3">🏥 Medical Parameters</h3>
+              <div className="space-y-2 text-sm text-red-700">
+                <div className="flex justify-between">
+                  <span>Medical Warnings:</span>
+                  <span className="font-semibold">{advice.data.medical_warnings?.length || 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Medical Considerations:</span>
+                  <span className="font-semibold">{advice.data.medical_considerations ? 'Yes' : 'No'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Diagnostics Data:</span>
+                  <span className="font-semibold">{advice.data.medical_diagnostics_data?.length || 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Health Status:</span>
+                  <span className="font-semibold">
+                    {advice.data.medical_warnings?.length > 0 ? '⚠️ Issues Detected' : '✅ Healthy'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Cost Parameters */}
+            <div className="bg-yellow-50 rounded-lg p-4">
+              <h3 className="text-sm font-medium text-yellow-900 mb-3">💰 Cost Parameters</h3>
+              <div className="space-y-2 text-sm text-yellow-700">
+                <div className="flex justify-between">
+                  <span>Feed Cost/kg:</span>
+                  <span className="font-semibold">
+                    {advice.data.feed_cost_per_kg ? `৳${parseFloat(advice.data.feed_cost_per_kg).toFixed(4)}` : 'Not specified'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Daily Cost:</span>
+                  <span className="font-semibold">
+                    {advice.data.daily_feed_cost ? `৳${parseFloat(advice.data.daily_feed_cost).toFixed(4)}` : 'Not calculated'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Cost Status:</span>
+                  <span className="font-semibold">
+                    {advice.data.feed_cost_per_kg ? '✅ Available' : '❌ Not Available'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Economic Analysis:</span>
+                  <span className="font-semibold">
+                    {advice.data.daily_feed_cost ? '✅ Complete' : '⚠️ Partial'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Feeding Recommendations */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Feeding Recommendations</h2>
@@ -428,6 +595,62 @@ export default function FeedingAdviceDetailPage({ params }: PageProps) {
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Detailed Analysis & Recommendations</h2>
             <p className="text-gray-700 whitespace-pre-wrap">{advice.data.notes}</p>
+          </div>
+        )}
+
+        {/* Medical Warnings */}
+        {advice.data.medical_warnings && advice.data.medical_warnings.length > 0 && (
+          <div className="bg-red-50 rounded-lg border border-red-200 p-6">
+            <h2 className="text-lg font-semibold text-red-900 mb-4 flex items-center">
+              <AlertTriangle className="h-5 w-5 mr-2" />
+              Medical Warnings
+            </h2>
+            
+            <div className="space-y-3">
+              {advice.data.medical_warnings.map((warning, index) => (
+                <div key={index} className="bg-white rounded-lg p-4 border border-red-200">
+                  <div className="flex items-start">
+                    <AlertTriangle className="h-4 w-4 text-red-600 mt-0.5 mr-3 flex-shrink-0" />
+                    <p className="text-sm text-red-800">{warning}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Medical Considerations */}
+        {advice.data.medical_considerations && (
+          <div className="bg-orange-50 rounded-lg border border-orange-200 p-6">
+            <h2 className="text-lg font-semibold text-orange-900 mb-4 flex items-center">
+              <Stethoscope className="h-5 w-5 mr-2" />
+              Medical Considerations & Treatment Recommendations
+            </h2>
+            
+            <div className="bg-white rounded-lg p-4 border border-orange-200">
+              <p className="text-sm text-orange-800 whitespace-pre-wrap">{advice.data.medical_considerations}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Medical Diagnostics */}
+        {advice.data.medical_diagnostics_data && advice.data.medical_diagnostics_data.length > 0 && (
+          <div className="bg-blue-50 rounded-lg border border-blue-200 p-6">
+            <h2 className="text-lg font-semibold text-blue-900 mb-4 flex items-center">
+              <Shield className="h-5 w-5 mr-2" />
+              Medical Diagnostics Data
+            </h2>
+            
+            <div className="space-y-4">
+              {advice.data.medical_diagnostics_data.map((diagnostic, index) => (
+                <div key={index} className="bg-white rounded-lg p-4 border border-blue-200">
+                  <h3 className="font-medium text-blue-900 mb-2">Diagnostic #{index + 1}</h3>
+                  <div className="text-sm text-blue-800">
+                    <pre className="whitespace-pre-wrap">{JSON.stringify(diagnostic, null, 2)}</pre>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

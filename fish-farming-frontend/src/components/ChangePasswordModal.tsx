@@ -23,6 +23,15 @@ export function ChangePasswordModal({ isOpen, onClose }: ChangePasswordModalProp
   });
   const [isLoading, setIsLoading] = useState(false);
 
+  const validatePassword = (password: string) => {
+    const hasSymbol = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
+    const hasDigit = /\d/.test(password);
+    const hasAlphabet = /[a-zA-Z]/.test(password);
+    const isLongEnough = password.length >= 8;
+    
+    return { hasSymbol, hasDigit, hasAlphabet, isLongEnough };
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -31,8 +40,25 @@ export function ChangePasswordModal({ isOpen, onClose }: ChangePasswordModalProp
       return;
     }
 
-    if (formData.newPassword.length < 8) {
-      toast.error('New password must be at least 8 characters long');
+    const passwordValidation = validatePassword(formData.newPassword);
+    
+    if (!passwordValidation.isLongEnough) {
+      toast.error('Password must be at least 8 characters long');
+      return;
+    }
+    
+    if (!passwordValidation.hasAlphabet) {
+      toast.error('Password must contain at least one letter');
+      return;
+    }
+    
+    if (!passwordValidation.hasDigit) {
+      toast.error('Password must contain at least one digit');
+      return;
+    }
+    
+    if (!passwordValidation.hasSymbol) {
+      toast.error('Password must contain at least one symbol');
       return;
     }
 
@@ -140,7 +166,9 @@ export function ChangePasswordModal({ isOpen, onClose }: ChangePasswordModalProp
                 {showPasswords.new ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
               </button>
             </div>
-            <p className="text-xs text-gray-500 mt-1">Password must be at least 8 characters long</p>
+            <p className="text-xs text-gray-500 mt-1">
+              Password must be at least 8 characters long and contain at least one letter, one digit, and one symbol
+            </p>
           </div>
 
           {/* Confirm New Password */}

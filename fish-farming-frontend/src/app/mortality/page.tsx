@@ -75,8 +75,8 @@ export default function MortalityPage() {
     <div className="space-y-6">
       <div className="md:flex space-y-3 md:space-y-0 items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Mortality Tracking</h1>
-          <p className="text-gray-600">Monitor fish mortality rates and causes</p>
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Mortality Tracking</h1>
+          <p className="text-sm md:text-base text-gray-600">Monitor fish mortality rates and causes</p>
         </div>
         <Link
           style={{color: "white"}}

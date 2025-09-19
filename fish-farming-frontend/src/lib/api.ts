@@ -56,9 +56,15 @@ export interface PaginationParams {
 // API Types
 export interface Species {
   id: number;
+  user: number;
+  user_username: string;
   name: string;
   scientific_name: string;
   description: string;
+  optimal_temp_min?: number;
+  optimal_temp_max?: number;
+  optimal_ph_min?: number;
+  optimal_ph_max?: number;
   created_at: string;
 }
 

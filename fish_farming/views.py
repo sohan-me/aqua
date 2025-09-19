@@ -115,9 +115,15 @@ class PondViewSet(viewsets.ModelViewSet):
 
 class SpeciesViewSet(viewsets.ModelViewSet):
     """ViewSet for fish species"""
-    queryset = Species.objects.all()
+    queryset = Species.objects.none()  # Will be overridden by get_queryset
     serializer_class = SpeciesSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return Species.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
 
 class StockingViewSet(viewsets.ModelViewSet):

@@ -1,0 +1,430 @@
+{
+  "diseases": [
+    {
+      "No.": "1",
+      "Observation (External/Internal)": "Pale gills; gasping at surface; crowding at inlet; morning mortality",
+      "Possible Disease/Condition": "DO Crash/Hypoxia",
+      "Recommended Treatment/Measures": "Aerator, Water exchange, Agricultural Lime (Calcium Carbonate-CaCO3)",
+      "Dosage & Application": "Aerator immediately; 20-30% water change; 1-2 kg lime/decimel (evening); DO >5 mg/L; reduce feeding for 24 hours"
+    },
+    {
+      "No.": "2",
+      "Observation (External/Internal)": "Brown gills after algal die-off; foul odor; lethargy",
+      "Possible Disease/Condition": "Ammonia/Nitrite Toxicity",
+      "Recommended Treatment/Measures": "Zeolite, Salt - NaCl, Water exchange, Reduce feed",
+      "Dosage & Application": "Zeolite 2-3 kg/decimel; Salt 1-2 kg/decimel; 30-50% water change; stop/reduce feeding for 24-48 hours"
+    },
+    {
+      "No.": "3",
+      "Observation (External/Internal)": "Excessive mucus; rubbing; disc-like appearance under microscope",
+      "Possible Disease/Condition": "Trichodina spp.",
+      "Recommended Treatment/Measures": "Salt dip, Potassium Permanganate-KMnO4, Formalin (if legal)",
+      "Dosage & Application": "Salt dip 2-3% for 5-10 minutes; KMnO4 2-3 g/decimel; Formalin 25 ppm for entire pond"
+    },
+    {
+      "No.": "4",
+      "Observation (External/Internal)": "Torn gills; thread-like worms; gasping",
+      "Possible Disease/Condition": "Dactylogyrus/Gyrodactylus (Flukes)",
+      "Recommended Treatment/Measures": "Praziquantel, Salt, KMnO4",
+      "Dosage & Application": "Praziquantel 2-5 mg/L bath or 10-20 mg/kg feed ×3-5 days; Salt 1-2 kg/decimel; KMnO4 2 g/decimel"
+    },
+    {
+      "No.": "5",
+      "Observation (External/Internal)": "White spots like salt grains on skin/fins",
+      "Possible Disease/Condition": "Ich (White Spot Disease)",
+      "Recommended Treatment/Measures": "Formalin + Malachite Green, Salt, KMnO4",
+      "Dosage & Application": "Formalin 25 ppm for 1 hour with strong aeration ×3 (48 hours apart); or Salt 3-5% dip for 5-10 minutes; KMnO4 2 g/decimel"
+    },
+    {
+      "No.": "6",
+      "Observation (External/Internal)": "Blue-gray patches; heavy mucus; Costia sign",
+      "Possible Disease/Condition": "Costia/Ichthyobodo",
+      "Recommended Treatment/Measures": "Salt, KMnO4, Formalin (if legal)",
+      "Dosage & Application": "Salt dip 3-5% for 5-10 minutes; KMnO4 2-3 g/decimel; re-dose after 48-72 hours"
+    },
+    {
+      "No.": "7",
+      "Observation (External/Internal)": "Ulcers with red edges; scale loss",
+      "Possible Disease/Condition": "Bacterial Ulcer (Aeromonas/Pseudomonas)",
+      "Recommended Treatment/Measures": "Oxytetracycline-OTC, Florfenicol, KMnO4",
+      "Dosage & Application": "OTC 50-75 mg/kg/day ×5-7 days; or Florfenicol 10-15 mg/kg/day ×5 days; KMnO4 2 g/decimel"
+    },
+    {
+      "No.": "8",
+      "Observation (External/Internal)": "Cotton-like white tufts",
+      "Possible Disease/Condition": "Saprolegnia (Fungus)",
+      "Recommended Treatment/Measures": "KMnO4, Salt, Povidone-Iodine",
+      "Dosage & Application": "KMnO4 2-3 g/decimel; Salt 1-2 kg/decimel; brush iodine on wounds"
+    },
+    {
+      "No.": "9",
+      "Observation (External/Internal)": "Green slimy; black patches with low DO",
+      "Possible Disease/Condition": "Algal crash/H2S exposure",
+      "Recommended Treatment/Measures": "Aeration, Water exchange, Agricultural Lime",
+      "Dosage & Application": "Emergency aeration; 30-50% water change; Lime 1-2 kg/decimel; avoid stirring black sludge"
+    },
+    {
+      "No.": "10",
+      "Observation (External/Internal)": "Disc-like lice on skin",
+      "Possible Disease/Condition": "Argulus (Fish Lice)",
+      "Recommended Treatment/Measures": "Trichlorfon/Dipterex, Salt dip",
+      "Dosage & Application": "Trichlorfon 0.25-0.5 mg/L; repeat in 7-10 days; Salt dip 3-5% for 5-10 minutes"
+    },
+    {
+      "No.": "11",
+      "Observation (External/Internal)": "Thread-like worms attached; reddish spots at attachment sites",
+      "Possible Disease/Condition": "Lernaea (Anchor Worm)",
+      "Recommended Treatment/Measures": "Manual removal + Iodine, Trichlorfon",
+      "Dosage & Application": "Pull out worms and apply iodine; Trichlorfon 0.25-0.5 mg/L; repeat in 10-14 days"
+    },
+    {
+      "No.": "12",
+      "Observation (External/Internal)": "Pop-eye; blood around eyes",
+      "Possible Disease/Condition": "Septicemia/ Gas supersaturation",
+      "Recommended Treatment/Measures": "Florfenicol, Water improvement",
+      "Dosage & Application": "Florfenicol 10-15 mg/kg/day ×5 days; reduce supersaturation; gentle water change"
+    },
+    {
+      "No.": "13",
+      "Observation (External/Internal)": "Spiral/spinning swimming; no external lesions",
+      "Possible Disease/Condition": "Toxicity/Neurological stress",
+      "Recommended Treatment/Measures": "Water exchange, Activated Carbon, Stop feeding",
+      "Dosage & Application": "50-80% water change; Carbon 10-20 g/m³ on inflow screen; find and solve source"
+    },
+    {
+      "No.": "14",
+      "Observation (External/Internal)": "Pale liver; enlarged gallbladder; empty intestines",
+      "Possible Disease/Condition": "Chronic starvation/Anemia",
+      "Recommended Treatment/Measures": "Quality Feed, Vitamin-Mineral Premix",
+      "Dosage & Application": "Grower protein 28-32%; Vit C 500-1000 mg/kg feed"
+    },
+    {
+      "No.": "15",
+      "Observation (External/Internal)": "Large, yellow, oily liver",
+      "Possible Disease/Condition": "Fatty Liver (Hepatic Lipidosis)",
+      "Recommended Treatment/Measures": "Reduce ration, Probiotics, Vitamin E + Selenium",
+      "Dosage & Application": "Reduce feed 20-30% for 1-2 weeks; Vit E 100-200 mg/kg + Se 0.3 mg/kg; probiotics as per label"
+    },
+    {
+      "No.": "16",
+      "Observation (External/Internal)": "Petechial hemorrhages in liver/kidney; enlarged spleen; ascites",
+      "Possible Disease/Condition": "Bacterial Septicemia",
+      "Recommended Treatment/Measures": "Oxytetracycline / Florfenicol, KMnO4",
+      "Dosage & Application": "OTC 50-75 mg/kg/day ×5-7; or Florfenicol 10-15 mg/kg/day ×5; KMnO4 2 g/decimel"
+    },
+    {
+      "No.": "17",
+      "Observation (External/Internal)": "Red intestines, gas; foul odor; thin walls",
+      "Possible Disease/Condition": "Bacterial Enteritis",
+      "Recommended Treatment/Measures": "Oxytetracycline, Probiotics",
+      "Dosage & Application": "OTC 50-75 mg/kg/day ×5; probiotics as per label; reduce ration 20-30%"
+    },
+    {
+      "No.": "18",
+      "Observation (External/Internal)": "Mucus in intestines; white thread-like worms",
+      "Possible Disease/Condition": "Intestinal Nematodes",
+      "Recommended Treatment/Measures": "Levamisole/Piperazine/Fenbendazole",
+      "Dosage & Application": "Levamisole 10 mg/kg once, repeat in 7-10 days; or Fenbendazole 10 mg/kg/day ×3"
+    },
+    {
+      "No.": "19",
+      "Observation (External/Internal)": "Cysts in organs/muscle; small tapeworm heads",
+      "Possible Disease/Condition": "Cestodes (Metacestodes)",
+      "Recommended Treatment/Measures": "Praziquantel in feed; Sanitation",
+      "Dosage & Application": "Praziquantel 10-20 mg/kg feed ×1-3 days; prevent bird access; dry between cycles"
+    },
+    {
+      "No.": "20",
+      "Observation (External/Internal)": "Swollen belly; clear/yellow fluid in cavity",
+      "Possible Disease/Condition": "Dropsy/Ascites",
+      "Recommended Treatment/Measures": "Florfenicol, Salt Bath, Supportive care",
+      "Dosage & Application": "Florfenicol 10-15 mg/kg/day ×5; Salt 1-2 kg/decimel; water improvement; cull moribund"
+    },
+    {
+      "No.": "21",
+      "Observation (External/Internal)": "Sudden mortality in all sizes; dark skin; anemia",
+      "Possible Disease/Condition": "TiLV suspected",
+      "Recommended Treatment/Measures": "Biosecurity, Secondary control",
+      "Dosage & Application": "Stop movement; disinfect gear; increase aeration; probiotics; notify authorities"
+    },
+    {
+      "No.": "22",
+      "Observation (External/Internal)": "Pale/necrotic gills; mortality without bacteria",
+      "Possible Disease/Condition": "Iridovirus-like suspected",
+      "Recommended Treatment/Measures": "Biosecurity, Water Quality",
+      "Dosage & Application": "Quarantine; partial harvest if deteriorating; disinfect at cycle end"
+    },
+    {
+      "No.": "23",
+      "Observation (External/Internal)": "Swims on one side; cannot stay submerged",
+      "Possible Disease/Condition": "Swim Bladder Disorder",
+      "Recommended Treatment/Measures": "Vitamin C + Vitamin E; Pellet check",
+      "Dosage & Application": "Vit C 500-1000 mg/kg; Vit E 100-200 mg/kg; fast 12-24 hours, then light feeding"
+    },
+    {
+      "No.": "24",
+      "Observation (External/Internal)": "Curved spine; jaw deformity; poor growth",
+      "Possible Disease/Condition": "Mineral/Vit Deficiency",
+      "Recommended Treatment/Measures": "Balanced Starter Feed, Premix",
+      "Dosage & Application": "Starter 38-42% protein; vitamin-mineral premix as per label; maintain temperature"
+    },
+    {
+      "No.": "25",
+      "Observation (External/Internal)": "Inflammation/cysts in ovary/testis",
+      "Possible Disease/Condition": "Reproductive Tract Inflammation/Parasitism",
+      "Recommended Treatment/Measures": "Water exchange, Probiotics, Vet consult",
+      "Dosage & Application": "20-30% water change; probiotics as per label"
+    },
+    {
+      "No.": "26",
+      "Observation (External/Internal)": "Gas bubbles in fins/eyes; after new pump",
+      "Possible Disease/Condition": "Gas Bubble Disease",
+      "Recommended Treatment/Measures": "Vent lines, Pressure ↓, Aeration Cascade",
+      "Dosage & Application": "Fix plumbing; splash/cascade aeration; stop feeding for 24 hours"
+    },
+    {
+      "No.": "27",
+      "Observation (External/Internal)": "Mass surfacing after rain; pH fluctuation",
+      "Possible Disease/Condition": "pH Stress",
+      "Recommended Treatment/Measures": "Agricultural Lime, Controlled Exchange",
+      "Dosage & Application": "If pH<7, lime 1-2 kg/decimel; no lime at noon; 20-30% water change"
+    },
+    {
+      "No.": "28",
+      "Observation (External/Internal)": "Brown necrotic gills; saddleback lesions",
+      "Possible Disease/Condition": "Columnaris",
+      "Recommended Treatment/Measures": "KMnO4, Oxytetracycline-OTC, Organic load ↓",
+      "Dosage & Application": "KMnO4 2 g/decimel; OTC 50-75 mg/kg/day ×5; siphon waste"
+    },
+    {
+      "No.": "29",
+      "Observation (External/Internal)": "Cloudy eyes; opaque cornea; lethargic",
+      "Possible Disease/Condition": "Nutritional Deficit/Bacterial Keratitis",
+      "Recommended Treatment/Measures": "Vitamin A/E/C Premix, Florfenicol (if infected)",
+      "Dosage & Application": "Vitamin premix as per label; Florfenicol 10-15 mg/kg/day ×5"
+    },
+    {
+      "No.": "30",
+      "Observation (External/Internal)": "Very large spleen; petechial kidney",
+      "Possible Disease/Condition": "Systemic Infection/Septicemia",
+      "Recommended Treatment/Measures": "Florfenicol, KMnO4, Water Improve",
+      "Dosage & Application": "Florfenicol 10-15 mg/kg/day ×5; KMnO4 2 g/decimel"
+    },
+    {
+      "No.": "31",
+      "Observation (External/Internal)": "White plaque around mouth; mortality in crowded tanks",
+      "Possible Disease/Condition": "Bacterial Gill Disease/Flexibacter-like",
+      "Recommended Treatment/Measures": "Reduce Biomass, KMnO4, OTC",
+      "Dosage & Application": "Thin stock; KMnO4 2 g/decimel; OTC 50-75 mg/kg/day ×5"
+    },
+    {
+      "No.": "32",
+      "Observation (External/Internal)": "Eating but wasting; pale intestines",
+      "Possible Disease/Condition": "Internal Protozoa (Hexamita/Spironucleus)",
+      "Recommended Treatment/Measures": "Metronidazole (if legal), Probiotics",
+      "Dosage & Application": "Metronidazole 25 mg/kg twice daily ×3-5; probiotics as per label"
+    },
+    {
+      "No.": "33",
+      "Observation (External/Internal)": "Lethargic in cold; bottom dwelling; poor appetite",
+      "Possible Disease/Condition": "Cold Stress",
+      "Recommended Treatment/Measures": "Reduce Feeding, Midday Feeding, Aeration/Depth ↑",
+      "Dosage & Application": "Feed once at 12-2 PM; avoid handling; maintain deep areas"
+    },
+    {
+      "No.": "34",
+      "Observation (External/Internal)": "Surface at noon; pale patches; >32-34°C",
+      "Possible Disease/Condition": "Heat Stress/Sunburn",
+      "Recommended Treatment/Measures": "Shade, Aeration, Ration ↓",
+      "Dosage & Application": "Reduce feed 20-30%; splash aeration; shade/pond dye as per label"
+    },
+    {
+      "No.": "35",
+      "Observation (External/Internal)": "Scale loss; injury; delayed mortality after netting",
+      "Possible Disease/Condition": "Handling Stress/Injury",
+      "Recommended Treatment/Measures": "Salt in Transport Water, Minimize Air Exposure",
+      "Dosage & Application": "Salt 2-3 g/liter; oxygenation; gentle handling"
+    },
+    {
+      "No.": "36",
+      "Observation (External/Internal)": "Mass mortality at bottom; black gills; rotten egg smell",
+      "Possible Disease/Condition": "H2S Poisoning (Sludge)",
+      "Recommended Treatment/Measures": "Don't Stir Sludge, Aerate, Lime, Exchange",
+      "Dosage & Application": "Immediate aeration; lime 1-2 kg/decimel (near edges); 30-50% water change"
+    },
+    {
+      "No.": "37",
+      "Observation (External/Internal)": "Green paint-like scum; mortality after bloom crash",
+      "Possible Disease/Condition": "Cyanobacteria Toxins",
+      "Recommended Treatment/Measures": "Exchange, Shading, Probiotics; Avoid Copper if fry present",
+      "Dosage & Application": "30-50% change; dye/shade as per label; probiotics; monitor"
+    },
+    {
+      "No.": "38",
+      "Observation (External/Internal)": "Ulcers + large spleen + pale gills",
+      "Possible Disease/Condition": "Mixed Infection",
+      "Recommended Treatment/Measures": "Parasite First → Bacteria Then; Water Improve",
+      "Dosage & Application": "Salt dip/KMnO4; then Florfenicol 10-15 mg/kg/day ×5; probiotics"
+    },
+    {
+      "No.": "39",
+      "Observation (External/Internal)": "Reddish-brown layer on gills from tube well inflow",
+      "Possible Disease/Condition": "Iron Precipitation Irritation",
+      "Recommended Treatment/Measures": "Aerate Inflow, Settling Tank",
+      "Dosage & Application": "Cascade aeration; pre-settle before adding to pond"
+    },
+    {
+      "No.": "40",
+      "Observation (External/Internal)": "Belly-up floating after overfeeding; full intestines",
+      "Possible Disease/Condition": "Overfeeding/Temporary Buoyancy",
+      "Recommended Treatment/Measures": "Fasting, Small Frequent Feeds",
+      "Dosage & Application": "Stop feeding 12-24 hours; then 70-80% ration, 2-3 times daily"
+    },
+    {
+      "No.": "41",
+      "Observation (External/Internal)": "Brittle fins; slow wound healing",
+      "Possible Disease/Condition": "Vitamin C Deficiency",
+      "Recommended Treatment/Measures": "Vitamin C Premix",
+      "Dosage & Application": "500-1000 mg Vit C/kg feed ×2-4 weeks"
+    },
+    {
+      "No.": "42",
+      "Observation (External/Internal)": "Black pepper-like spots under skin",
+      "Possible Disease/Condition": "Black Spot Disease (Metacercaria)",
+      "Recommended Treatment/Measures": "Break Bird/Snail Cycle, Lime, Drying",
+      "Dosage & Application": "Dry pond; lime 1-2 kg/decimel; control snails"
+    },
+    {
+      "No.": "43",
+      "Observation (External/Internal)": "Pale gills; thin blood; slow growth",
+      "Possible Disease/Condition": "Chronic Anemia",
+      "Recommended Treatment/Measures": "Check Feed, Deworm, Vit-Min",
+      "Dosage & Application": "Fenbendazole 10 mg/kg feed ×3; vitamin-mineral premix"
+    },
+    {
+      "No.": "44",
+      "Observation (External/Internal)": "Eroded mouth edges; difficulty eating",
+      "Possible Disease/Condition": "Mouth Rot (Bacterial)",
+      "Recommended Treatment/Measures": "Medicated Feed, Povidone-Iodine",
+      "Dosage & Application": "Florfenicol 10-15 mg/kg/day ×5; 1-2% iodine on lesions (not in pond)"
+    },
+    {
+      "No.": "45",
+      "Observation (External/Internal)": "Thick gills; poor gas exchange; no parasites",
+      "Possible Disease/Condition": "Gill Hyperplasia (Irritant)",
+      "Recommended Treatment/Measures": "Water Improve, Reduce Organics, Mild KMnO4",
+      "Dosage & Application": "Siphon sludge; KMnO4 2 g/decimel; increase turnover"
+    },
+    {
+      "No.": "46",
+      "Observation (External/Internal)": "Lethargic in heat; spinning; pop-eye; hemorrhages; neurological signs",
+      "Possible Disease/Condition": "Streptococcus agalactiae/iniae",
+      "Recommended Treatment/Measures": "Florfenicol / Oxytetracycline, Vaccination (Prevention)",
+      "Dosage & Application": "Florfenicol 10-15 mg/kg/day ×5-7; consider vaccination program for future"
+    },
+    {
+      "No.": "47",
+      "Observation (External/Internal)": "Ulcers + liver/kidney abscesses; high mortality",
+      "Possible Disease/Condition": "Edwardsiella tarda/ictaluri",
+      "Recommended Treatment/Measures": "Medicated feed per antibiogram (lab sensitivity)",
+      "Dosage & Application": "Florfenicol 10-15 mg/kg/day ×5-7; lab sensitivity recommended"
+    },
+    {
+      "No.": "48",
+      "Observation (External/Internal)": "White/eroded fin edges; saddleback; more in warm water",
+      "Possible Disease/Condition": "Columnaris",
+      "Recommended Treatment/Measures": "KMnO4, OTC",
+      "Dosage & Application": "KMnO4 2 g/decimel; OTC 50-75 mg/kg/day ×5"
+    },
+    {
+      "No.": "49",
+      "Observation (External/Internal)": "Cotton-like growth on eggs in hatchery trays",
+      "Possible Disease/Condition": "Saprolegnia on Eggs",
+      "Recommended Treatment/Measures": "Hydrogen Peroxide-H2O2, Acriflavine",
+      "Dosage & Application": "H2O2 500-1000 ppm for short time; follow SOP"
+    },
+    {
+      "No.": "50",
+      "Observation (External/Internal)": "Multiple lice + ulcers on same body",
+      "Possible Disease/Condition": "Argulus + Secondary Bacteria",
+      "Recommended Treatment/Measures": "First Trichlorfon, Then Antibiotic Feed",
+      "Dosage & Application": "Trichlorfon 0.25-0.5 mg/L; then Florfenicol 10-15 mg/kg/day ×5"
+    },
+    {
+      "No.": "51",
+      "Observation (External/Internal)": "Rubbing after heavy rain/top-up; mucus; mortality",
+      "Possible Disease/Condition": "Osmotic/pH Shock",
+      "Recommended Treatment/Measures": "Salt, Agricultural Lime, Gradual Exchange",
+      "Dosage & Application": "Salt 1-2 kg/decimel; lime 1-2 kg/decimel; avoid sudden inflow"
+    },
+    {
+      "No.": "52",
+      "Observation (External/Internal)": "Mass mortality after agricultural run-off; convulsions",
+      "Possible Disease/Condition": "Organophosphate/Pyrethroid Poisoning",
+      "Recommended Treatment/Measures": "Stop Inflow, Exchange, Activated Carbon Screen",
+      "Dosage & Application": "50-80% water change; carbon 10-20 g/m³ at inlet; warn neighbors"
+    }
+  ],
+  "Organ_Examination_Guide": [
+    {
+      "No.": "1",
+      "Organ": "Skin",
+      "Healthy Condition": "Smooth, shiny, intact scales",
+      "Unhealthy/Abnormal Signs (Common)": "Ulcers/wounds, hemorrhages, cotton-like growth"
+    },
+    {
+      "No.": "2",
+      "Organ": "Eye",
+      "Healthy Condition": "Clear, bright",
+      "Unhealthy/Abnormal Signs (Common)": "Cloudy, swollen, sunken"
+    },
+    {
+      "No.": "3",
+      "Organ": "Gill",
+      "Healthy Condition": "Bright red, uniform filaments",
+      "Unhealthy/Abnormal Signs (Common)": "Pale/white (anemia), slimy (protozoa), erosion (BGD), hemorrhages (columnaris)"
+    },
+    {
+      "No.": "4",
+      "Organ": "Liver",
+      "Healthy Condition": "Reddish-brown, smooth",
+      "Unhealthy/Abnormal Signs (Common)": "Pale/fatty liver, swollen, nodules, hemorrhages"
+    },
+    {
+      "No.": "5",
+      "Organ": "Intestine",
+      "Healthy Condition": "Firm, full of digested food",
+      "Unhealthy/Abnormal Signs (Common)": "Empty, white feces, swollen, filled with mucus"
+    },
+    {
+      "No.": "6",
+      "Organ": "Spleen",
+      "Healthy Condition": "Small, reddish",
+      "Unhealthy/Abnormal Signs (Common)": "Large and dark/black"
+    },
+    {
+      "No.": "7",
+      "Organ": "Kidney",
+      "Healthy Condition": "Firm, reddish",
+      "Unhealthy/Abnormal Signs (Common)": "Swollen, dark, hemorrhagic"
+    },
+    {
+      "No.": "8",
+      "Organ": "Swim bladder",
+      "Healthy Condition": "Clear, normally inflated",
+      "Unhealthy/Abnormal Signs (Common)": "Ruptured, gas bubbles"
+    },
+    {
+      "No.": "9",
+      "Organ": "Brain",
+      "Healthy Condition": "Normal, not swollen",
+      "Unhealthy/Abnormal Signs (Common)": "Inflammation, hemorrhages"
+    },
+    {
+      "No.": "10",
+      "Organ": "Muscle",
+      "Healthy Condition": "Firm, white",
+      "Unhealthy/Abnormal Signs (Common)": "Soft, hemorrhagic spots"
+    }
+  ]
+}

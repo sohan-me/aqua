@@ -37,7 +37,18 @@ const navigation = [
   { name: 'Daily Logs', href: '/daily-logs', icon: Calendar },
   { name: 'Fish Sampling', href: '/fish-sampling', icon: Scale },
   { name: 'Mortality', href: '/mortality', icon: TrendingDown },
-  { name: 'Medical Diagnostic', href: '/medical-diagnostic', icon: Stethoscope },
+  // { name: 'Medical Diagnostic', href: '/medical-diagnostic', icon: Stethoscope },
+  // { name: 'Quick Diagnosis', href: '/quick-diagnosis', icon: Stethoscope },
+  {
+    name: 'Medical',
+    href: '/medical',
+    icon: Stethoscope,
+    submenu: [
+      { name: 'Medical Diagnostic', href: '/medical-diagnostic', icon: Stethoscope },
+      { name: 'Quick Diagnosis', href: '/quick-diagnosis', icon: Stethoscope },
+      { name: 'List of Treatment', href: '/medical-diagnostics', icon: Stethoscope },
+    ]
+  },
   { name: 'Feed Types', href: '/feed-types', icon: Package },
   { name: 'Feeding', href: '/feeding', icon: Activity },
   { name: 'Harvest', href: '/harvest', icon: TrendingUp },
