@@ -3,8 +3,8 @@
 import { useState, useMemo } from 'react';
 import { useIncomes, usePonds, useDeleteIncome } from '@/hooks/useApi';
 import { Income, Pond } from '@/lib/api';
-import { formatDate, formatNumber, extractApiData } from '@/lib/utils';
-import { DollarSign, Plus, Edit, Trash2, Eye, TrendingUp, Receipt, Users, Filter, X, Calendar } from 'lucide-react';
+import { formatDate, extractApiData } from '@/lib/utils';
+import { Plus, Edit, Trash2, Eye, TrendingUp, Receipt, Users, Filter, X, DollarSign } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 

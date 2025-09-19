@@ -230,6 +230,9 @@ export default function StockingPage() {
                     Avg Weight
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Pieces per kg
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Total Weight
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -254,6 +257,9 @@ export default function StockingPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {formatNumber(parseFloat(stocking.initial_avg_weight_kg), 4)} kg
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {stocking.pieces_per_kg ? formatNumber(parseFloat(stocking.pieces_per_kg), 2) : 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600">
                       {formatNumber(parseFloat(stocking.total_weight_kg), 3)} kg

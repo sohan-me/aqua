@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useCreateFeed, usePonds, useFeedTypes, useBiomassAnalysis } from '@/hooks/useApi';
 import { extractApiData } from '@/lib/utils';
 import { Pond, FeedType } from '@/lib/api';
-import { ArrowLeft, Save, X, Fish, Clock, Package } from 'lucide-react';
+import { ArrowLeft, Save, X, Fish } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function NewFeedingPage() {

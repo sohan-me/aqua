@@ -455,7 +455,7 @@ console.log(pond);
             className="flex flex-col items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
           >
             <AlertTriangle className="h-6 w-6 text-purple-600 mb-2" />
-            <span className="text-sm font-medium">FCR Analysis</span>
+            <span className="text-sm font-medium">Fish Sampling</span>
           </button>
         </div>
       </div>

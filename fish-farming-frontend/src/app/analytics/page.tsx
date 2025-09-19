@@ -33,7 +33,6 @@ import {
   Fish, 
   Droplets, 
   AlertTriangle,
-  Calendar,
   Filter,
   Download
 } from 'lucide-react';

@@ -28,6 +28,7 @@ export default function EditStockingPage() {
     date: '',
     pcs: '',
     total_weight_kg: '',
+    pieces_per_kg: '',
     notes: ''
   });
 
@@ -42,6 +43,7 @@ export default function EditStockingPage() {
         date: stocking.data.date || '',
         pcs: stocking.data.pcs?.toString() || '',
         total_weight_kg: stocking.data.total_weight_kg?.toString() || '',
+        pieces_per_kg: stocking.data.pieces_per_kg?.toString() || '',
         notes: stocking.data.notes || ''
       });
     }
@@ -66,6 +68,7 @@ export default function EditStockingPage() {
         date: formData.date,
         pcs: parseInt(formData.pcs),
         total_weight_kg: parseFloat(formData.total_weight_kg),
+        pieces_per_kg: parseFloat(formData.pieces_per_kg),
         notes: formData.notes
       };
 
@@ -133,7 +136,7 @@ export default function EditStockingPage() {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Stocking Information</h2>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <div>
               <label htmlFor="pond" className="block text-sm font-medium text-gray-700 mb-2">
                 Pond *
@@ -235,6 +238,24 @@ export default function EditStockingPage() {
               />
             </div>
 
+            <div>
+              <label htmlFor="pieces_per_kg" className="block text-sm font-medium text-gray-700 mb-2">
+                Pieces per kg *
+              </label>
+              <input
+                type="number"
+                id="pieces_per_kg"
+                name="pieces_per_kg"
+                required
+                min="0"
+                step="1"
+                value={formData.pieces_per_kg}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
+                placeholder="e.g., 400"
+              />
+              <p className="text-xs text-gray-500 mt-1">Number of fish pieces per kilogram</p>
+            </div>
           </div>
 
           <div className="mt-6">
@@ -254,7 +275,7 @@ export default function EditStockingPage() {
         </div>
 
         {/* Calculation Preview */}
-        {(formData.pcs && formData.total_weight_kg) && (
+        {(formData.pcs && formData.total_weight_kg && formData.pieces_per_kg) && (
           <div className="bg-blue-50 rounded-lg border border-blue-200 p-6">
             <h3 className="text-lg font-semibold text-blue-900 mb-4 flex items-center">
               <Calculator className="h-5 w-5 mr-2" />
@@ -270,7 +291,7 @@ export default function EditStockingPage() {
               <div className="bg-white rounded-md p-4 border border-blue-200">
                 <p className="text-sm font-medium text-blue-700">Pieces per kg</p>
                 <p className="text-2xl font-bold text-blue-900">
-                  {(parseInt(formData.pcs) / parseFloat(formData.total_weight_kg)).toFixed(4)} pcs/kg
+                  {parseFloat(formData.pieces_per_kg).toFixed(4)} pcs/kg
                 </p>
               </div>
               <div className="bg-white rounded-md p-4 border border-blue-200">
@@ -281,7 +302,7 @@ export default function EditStockingPage() {
               </div>
             </div>
             <p className="text-xs text-blue-600 mt-3">
-              * These values will be automatically calculated and saved
+              * These values will be saved as entered
             </p>
           </div>
         )}

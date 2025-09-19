@@ -158,7 +158,7 @@ export default function StockingDetailsPage() {
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-gray-500">Pieces per kg:</span>
-              <span className="text-sm font-medium">{stocking.data.line_pcs_per_kg} pcs/kg</span>
+              <span className="text-sm font-medium">{stocking.data.pieces_per_kg} pcs/kg</span>
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-gray-500">Initial Avg Weight:</span>

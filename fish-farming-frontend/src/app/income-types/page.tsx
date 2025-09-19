@@ -23,7 +23,6 @@ import {
   Briefcase,
   MoreHorizontal
 } from 'lucide-react';
-import { toast } from 'sonner';
 
 export default function IncomeTypesPage() {
   const { data: incomeTypesData, isLoading } = useIncomeTypes();

@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useHarvests, usePonds, useSpecies, useDeleteHarvest } from '@/hooks/useApi';
-import { formatDate, formatNumber, toNumber, extractApiData } from '@/lib/utils';
+import { formatDate, toNumber, extractApiData } from '@/lib/utils';
 import { Fish, Plus, Edit, Trash2, Eye, Scale, DollarSign, Package, Filter, X } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';

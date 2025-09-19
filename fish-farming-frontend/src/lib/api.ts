@@ -75,13 +75,32 @@ export interface Pond {
   user_username: string;
 }
 
+export interface MedicalDiagnostic {
+  id: number;
+  pond: number;
+  pond_name: string;
+  pond_area: string;
+  pond_location: string;
+  disease_name: string;
+  confidence_percentage: string;
+  recommended_treatment: string;
+  dosage_application: string;
+  selected_organs: any[];
+  selected_symptoms: any[];
+  notes: string;
+  is_applied: boolean;
+  applied_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Stocking {
   stocking_id: number;
   pond: number;
   species: number;
   date: string;
   pcs: number;
-  line_pcs_per_kg: string;
+  pieces_per_kg: string | null;
   initial_avg_weight_kg: string;
   notes: string;
   created_at: string;
@@ -317,6 +336,9 @@ export interface FeedingAdvice {
   pond_name: string;
   user_username: string;
   feed_type_name: string | null;
+  medical_considerations: string;
+  medical_warnings: string[];
+  medical_diagnostics_data: MedicalDiagnostic[];
   analysis_data?: {
     fish_count_analysis: {
       total_stocked: number;
@@ -713,5 +735,15 @@ export const apiService = {
   updateFeedingAdvice: (id: number, data: Partial<FeedingAdvice>) => api.put<FeedingAdvice>(`/feeding-advice/${id}/`, data),
   deleteFeedingAdvice: (id: number) => api.delete(`/feeding-advice/${id}/`),
   applyFeedingAdvice: (id: number) => api.post(`/feeding-advice/${id}/apply_advice/`),
+
+  // Medical Diagnostic
+  getMedicalDiagnostics: (params?: PaginationParams) => api.get<PaginatedResponse<MedicalDiagnostic>>('/medical-diagnostics/', { params }),
+  getMedicalDiagnosticById: (id: number) => api.get<MedicalDiagnostic>(`/medical-diagnostics/${id}/`),
+  createMedicalDiagnostic: (data: Partial<MedicalDiagnostic>) => api.post<MedicalDiagnostic>('/medical-diagnostics/', data),
+  updateMedicalDiagnostic: (id: number, data: Partial<MedicalDiagnostic>) => api.put<MedicalDiagnostic>(`/medical-diagnostics/${id}/`, data),
+  deleteMedicalDiagnostic: (id: number) => api.delete(`/medical-diagnostics/${id}/`),
+  applyTreatment: (id: number) => api.post(`/medical-diagnostics/${id}/apply_treatment/`),
+  getMedicalDiagnosticsByPond: (pondId: number) => api.get<MedicalDiagnostic[]>(`/medical-diagnostics/by_pond/?pond_id=${pondId}`),
+  getRecentMedicalDiagnostics: () => api.get<MedicalDiagnostic[]>('/medical-diagnostics/recent/'),
 
 };

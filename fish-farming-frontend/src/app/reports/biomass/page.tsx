@@ -93,11 +93,7 @@ export default function BiomassReportPage() {
       if (filters.startDate) params.append('start_date', filters.startDate);
       if (filters.endDate) params.append('end_date', filters.endDate);
 
-<<<<<<< HEAD
-      const response = await fetch(`http://localhost:8000/api/ fish-farming/fish-sampling/biomass_analysis/?${params}`, {
-=======
       const response = await fetch(`https://apipremiumagro.sascorporationbd.com/api/fish-farming/fish-sampling/biomass_analysis/?${params}`, {
->>>>>>> fdf8485018c78f175ef988e082f195e28f7f2afb
         headers: {
           'Authorization': `Token ${localStorage.getItem('authToken')}`,
         },

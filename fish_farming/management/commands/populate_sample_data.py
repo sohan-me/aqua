@@ -122,10 +122,10 @@ class Command(BaseCommand):
         
         # Create sample stockings based on the sheet data
         stocking_data = [
-            {'pond': pond_objects[0], 'species': species_objects[0], 'date': date(2025, 7, 14), 'pcs': 59000, 'line_pcs_per_kg': Decimal('14.41'), 'initial_avg_g': Decimal('0.017')},
-            {'pond': pond_objects[1], 'species': species_objects[0], 'date': date(2025, 4, 23), 'pcs': 125000, 'line_pcs_per_kg': Decimal('3000'), 'initial_avg_g': Decimal('0.333')},
-            {'pond': pond_objects[2], 'species': species_objects[0], 'date': date(2025, 6, 18), 'pcs': 122000, 'line_pcs_per_kg': Decimal('35'), 'initial_avg_g': Decimal('28.571')},
-            {'pond': pond_objects[0], 'species': species_objects[1], 'date': date(2025, 6, 7), 'pcs': 223000, 'line_pcs_per_kg': Decimal('57'), 'initial_avg_g': Decimal('17.544')},
+            {'pond': pond_objects[0], 'species': species_objects[0], 'date': date(2025, 7, 14), 'pcs': 59000, 'pieces_per_kg': Decimal('14.41'), 'initial_avg_g': Decimal('0.017')},
+            {'pond': pond_objects[1], 'species': species_objects[0], 'date': date(2025, 4, 23), 'pcs': 125000, 'pieces_per_kg': Decimal('3000'), 'initial_avg_g': Decimal('0.333')},
+            {'pond': pond_objects[2], 'species': species_objects[0], 'date': date(2025, 6, 18), 'pcs': 122000, 'pieces_per_kg': Decimal('35'), 'initial_avg_g': Decimal('28.571')},
+            {'pond': pond_objects[0], 'species': species_objects[1], 'date': date(2025, 6, 7), 'pcs': 223000, 'pieces_per_kg': Decimal('57'), 'initial_avg_g': Decimal('17.544')},
         ]
         
         for data in stocking_data:

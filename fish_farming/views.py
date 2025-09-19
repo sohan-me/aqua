@@ -11,7 +11,8 @@ from .models import (
     Pond, Species, Stocking, DailyLog, FeedType, Feed, SampleType, Sampling, 
     Mortality, Harvest, ExpenseType, IncomeType, Expense, Income,
     InventoryFeed, Treatment, Alert, Setting, FeedingBand, 
-    EnvAdjustment, KPIDashboard, FishSampling, FeedingAdvice, SurvivalRate
+    EnvAdjustment, KPIDashboard, FishSampling, FeedingAdvice, SurvivalRate,
+    MedicalDiagnostic
 )
 from .serializers import (
     PondSerializer, PondDetailSerializer, PondSummarySerializer,
@@ -22,7 +23,8 @@ from .serializers import (
     InventoryFeedSerializer, TreatmentSerializer, AlertSerializer,
     SettingSerializer, FeedingBandSerializer, EnvAdjustmentSerializer,
     KPIDashboardSerializer, FinancialSummarySerializer,
-    FishSamplingSerializer, FeedingAdviceSerializer, SurvivalRateSerializer
+    FishSamplingSerializer, FeedingAdviceSerializer, SurvivalRateSerializer,
+    MedicalDiagnosticSerializer
 )
 
 
@@ -1022,16 +1024,16 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
         # Generate advice for each species in the pond
         for species in species_in_pond:
             try:
-                # Check if species has fish sampling data
+                # Check if species has fish sampling data (for informational purposes)
                 has_sampling = FishSampling.objects.filter(
                     pond=pond, species=species
                 ).exists()
                 
                 if not has_sampling:
                     species_without_sampling.append(species.name)
-                    continue
                 
                 # Use the existing generate_advice logic but with species parameter
+                # This now works with both sampling data and stocking data
                 advice_data = self._generate_advice_for_species(pond, species, request)
                 if advice_data:
                     serializer = self.get_serializer(data=advice_data)
@@ -1049,10 +1051,10 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
         # Provide detailed error messages
         if not generated_advice:
             error_message = "Unable to generate feeding advice. "
-            if species_without_sampling:
-                error_message += f"Please add fish sampling data for: {', '.join(species_without_sampling)}. "
             if failed_species:
-                error_message += f"Additional issues: {', '.join(failed_species)}."
+                error_message += f"Failed to generate advice for: {', '.join(failed_species)}. "
+            if species_without_sampling:
+                error_message += f"Note: Some species ({', '.join(species_without_sampling)}) are using stocking data instead of fish sampling data for more accurate results."
             
             return Response({
                 'error': error_message,
@@ -1071,9 +1073,12 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
         
         if species_without_sampling or failed_species:
             response_data['warnings'] = {
-                'species_without_sampling': species_without_sampling,
+                'species_using_stocking_data': species_without_sampling,
                 'failed_species': failed_species
             }
+            
+            if species_without_sampling:
+                response_data['message'] += f' (Note: {len(species_without_sampling)} species using stocking data instead of fish sampling)'
         
         return Response(response_data, status=status.HTTP_201_CREATED)
     
@@ -1087,8 +1092,9 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
             pond=pond, species=species
         ).order_by('-date').first()
         
+        # 2. If no sampling data, try to work with stocking data
         if not latest_sampling:
-            return None
+            return self._generate_advice_from_stocking_data(pond, species, request)
         
         # 2. Calculate current fish count with detailed analysis
         fish_count_analysis = self._analyze_fish_population(pond, species)
@@ -1109,7 +1115,10 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
         # 7. Growth rate analysis
         growth_analysis = self._analyze_growth_patterns(pond, species)
         
-        # 8. Calculate comprehensive feeding recommendations
+        # 8. Medical diagnostic analysis
+        medical_analysis = self._analyze_medical_conditions(pond)
+        
+        # 9. Calculate comprehensive feeding recommendations
         feeding_recommendations = self._calculate_feeding_recommendations(
             estimated_fish_count,
             latest_sampling,
@@ -1117,7 +1126,8 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
             mortality_analysis,
             feeding_analysis,
             environmental_analysis,
-            growth_analysis
+            growth_analysis,
+            medical_analysis
         )
         
         # 9. Enhanced feed type and cost analysis
@@ -1143,10 +1153,12 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
             'feeding_frequency': feeding_recommendations['feeding_frequency'],
             'water_temp_c': water_quality_analysis.get('temperature'),
             'season': environmental_analysis['season'],
+            'medical_considerations': self._generate_medical_considerations(medical_analysis),
+            'medical_warnings': medical_analysis.get('medical_warnings', []),
             'notes': self._generate_comprehensive_notes(
                 pond, species, fish_count_analysis, water_quality_analysis,
                 mortality_analysis, feeding_analysis, environmental_analysis,
-                growth_analysis, feeding_recommendations
+                growth_analysis, feeding_recommendations, medical_analysis
             )
         }
         
@@ -1163,11 +1175,252 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
                 'feeding_analysis': feeding_analysis,
                 'environmental_analysis': environmental_analysis,
                 'growth_analysis': growth_analysis,
+                'medical_analysis': medical_analysis,
                 'feeding_recommendations': feeding_recommendations
             }
         })
         
         return advice_data
+    
+    def _generate_advice_from_stocking_data(self, pond, species, request):
+        """Generate feeding advice based on stocking data when fish sampling is not available"""
+        from django.db.models import Sum, Avg, Count, Max, Min
+        from datetime import timedelta
+        from decimal import Decimal
+        
+        # 1. Get latest stocking data
+        latest_stocking = Stocking.objects.filter(
+            pond=pond, species=species
+        ).order_by('-date').first()
+        
+        if not latest_stocking:
+            return None
+        
+        # 2. Calculate current fish count with detailed analysis
+        fish_count_analysis = self._analyze_fish_population(pond, species)
+        estimated_fish_count = fish_count_analysis['current_count']
+        
+        if estimated_fish_count <= 0:
+            return None
+        
+        # 3. Calculate average fish weight from stocking data
+        # Use pieces_per_kg from stocking to estimate average weight
+        if latest_stocking.pieces_per_kg and latest_stocking.pieces_per_kg > 0:
+            average_fish_weight_kg = Decimal('1.0') / latest_stocking.pieces_per_kg
+        else:
+            # Fallback: estimate based on species and time since stocking
+            days_since_stocking = (timezone.now().date() - latest_stocking.date).days
+            # Assume initial weight of 0.0025 kg (2.5g) and growth rate of 0.0001 kg/day
+            average_fish_weight_kg = Decimal('0.0025') + (Decimal('0.0001') * days_since_stocking)
+        
+        # 4. Calculate total biomass
+        total_biomass_kg = estimated_fish_count * average_fish_weight_kg
+        
+        # 5. Comprehensive water quality analysis
+        water_quality_analysis = self._analyze_water_quality(pond)
+        
+        # 6. Mortality pattern analysis
+        mortality_analysis = self._analyze_mortality_patterns(pond, species)
+        
+        # 7. Feeding pattern analysis
+        feeding_analysis = self._analyze_feeding_patterns(pond, species)
+        
+        # 8. Environmental and seasonal analysis
+        environmental_analysis = self._analyze_environmental_factors(pond)
+        
+        # 9. Growth rate analysis (simplified for stocking-based advice)
+        growth_analysis = self._analyze_growth_patterns_from_stocking(pond, species, latest_stocking)
+        
+        # 10. Medical diagnostic analysis
+        medical_analysis = self._analyze_medical_conditions(pond)
+        
+        # 11. Calculate feeding recommendations based on stocking data
+        feeding_recommendations = self._calculate_feeding_recommendations_from_stocking(
+            estimated_fish_count,
+            average_fish_weight_kg,
+            total_biomass_kg,
+            water_quality_analysis,
+            mortality_analysis,
+            feeding_analysis,
+            environmental_analysis,
+            growth_analysis,
+            medical_analysis
+        )
+        
+        # 12. Enhanced feed type and cost analysis
+        feed_analysis = self._analyze_feeding_history(pond, species)
+        if feed_analysis:
+            feeding_recommendations.update(feed_analysis)
+        
+        # 13. Add learning from previously applied advice
+        advice_learning = self._analyze_applied_advice_history(pond, species, feeding_recommendations['base_rate'])
+        if advice_learning:
+            feeding_recommendations.update(advice_learning)
+        
+        # 14. Create comprehensive feeding advice
+        advice_data = {
+            'pond': pond.id,
+            'species': species.id,
+            'date': timezone.now().date(),
+            'estimated_fish_count': estimated_fish_count,
+            'average_fish_weight_kg': average_fish_weight_kg,
+            'total_biomass_kg': total_biomass_kg,
+            'recommended_feed_kg': feeding_recommendations['recommended_feed_kg'],
+            'feeding_rate_percent': feeding_recommendations['final_rate'],
+            'feeding_frequency': feeding_recommendations['feeding_frequency'],
+            'water_temp_c': water_quality_analysis.get('temperature'),
+            'season': environmental_analysis['season'],
+            'medical_considerations': self._generate_medical_considerations(medical_analysis),
+            'medical_warnings': medical_analysis.get('medical_warnings', []),
+            'notes': self._generate_stocking_based_notes(
+                pond, species, fish_count_analysis, water_quality_analysis,
+                mortality_analysis, feeding_analysis, environmental_analysis,
+                growth_analysis, feeding_recommendations, medical_analysis,
+                latest_stocking
+            )
+        }
+        
+        # Calculate daily feed cost with enhanced cost data
+        if 'feed_cost_per_kg' in feeding_recommendations and feeding_recommendations['feed_cost_per_kg']:
+            advice_data['daily_feed_cost'] = feeding_recommendations['recommended_feed_kg'] * float(feeding_recommendations['feed_cost_per_kg'])
+        
+        # Add all analysis data for transparency
+        advice_data.update({
+            'analysis_data': {
+                'fish_count_analysis': fish_count_analysis,
+                'water_quality_analysis': water_quality_analysis,
+                'mortality_analysis': mortality_analysis,
+                'feeding_analysis': feeding_analysis,
+                'environmental_analysis': environmental_analysis,
+                'growth_analysis': growth_analysis,
+                'medical_analysis': medical_analysis,
+                'feeding_recommendations': feeding_recommendations,
+                'data_source': 'stocking_based'
+            }
+        })
+        
+        return advice_data
+    
+    def _analyze_growth_patterns_from_stocking(self, pond, species, latest_stocking):
+        """Simplified growth analysis based on stocking data"""
+        from datetime import timedelta
+        from decimal import Decimal
+        
+        days_since_stocking = (timezone.now().date() - latest_stocking.date).days
+        
+        # Estimate growth based on time since stocking
+        if latest_stocking.pieces_per_kg and latest_stocking.pieces_per_kg > 0:
+            initial_weight = Decimal('1.0') / latest_stocking.pieces_per_kg
+        else:
+            initial_weight = Decimal('0.0025')  # 2.5g default
+        
+        # Estimate current weight (simplified growth model)
+        estimated_current_weight = initial_weight + (Decimal('0.0001') * days_since_stocking)
+        
+        # Calculate daily growth rate
+        daily_growth_rate = Decimal('0.0001')  # 0.1g per day
+        
+        return {
+            'initial_weight_kg': initial_weight,
+            'estimated_current_weight_kg': estimated_current_weight,
+            'daily_growth_rate_kg': daily_growth_rate,
+            'days_since_stocking': days_since_stocking,
+            'growth_stage': 'juvenile' if estimated_current_weight < Decimal('0.01') else 'adult',
+            'data_source': 'stocking_estimated'
+        }
+    
+    def _calculate_feeding_recommendations_from_stocking(self, estimated_fish_count, average_fish_weight_kg, 
+                                                       total_biomass_kg, water_quality_analysis, 
+                                                       mortality_analysis, feeding_analysis, 
+                                                       environmental_analysis, growth_analysis, medical_analysis):
+        """Calculate feeding recommendations based on stocking data"""
+        from decimal import Decimal
+        
+        # Base feeding rate (3% of biomass as starting point)
+        base_rate = Decimal('3.0')
+        
+        # Adjust based on fish size
+        if average_fish_weight_kg < Decimal('0.01'):  # Less than 10g
+            base_rate = Decimal('5.0')  # Higher rate for small fish
+        elif average_fish_weight_kg > Decimal('0.5'):  # More than 500g
+            base_rate = Decimal('2.0')  # Lower rate for large fish
+        
+        # Temperature adjustments
+        if water_quality_analysis.get('temperature'):
+            temp = water_quality_analysis['temperature']
+            if temp < 15:
+                base_rate *= Decimal('0.5')
+            elif temp > 30:
+                base_rate *= Decimal('0.8')
+        
+        # Season adjustments
+        season = environmental_analysis.get('season', 'summer')
+        if season == 'winter':
+            base_rate *= Decimal('0.6')
+        elif season == 'summer':
+            base_rate *= Decimal('1.2')
+        
+        # Medical adjustments
+        if medical_analysis.get('medical_warnings'):
+            base_rate *= Decimal('0.8')  # Reduce feeding if health issues
+        
+        # Calculate recommended feed amount
+        recommended_feed_kg = (total_biomass_kg * base_rate) / 100
+        
+        # Determine feeding frequency
+        feeding_frequency = 2  # Default
+        if average_fish_weight_kg < Decimal('0.01'):
+            feeding_frequency = 3  # More frequent for small fish
+        elif average_fish_weight_kg > Decimal('0.5'):
+            feeding_frequency = 1  # Less frequent for large fish
+        
+        return {
+            'base_rate': base_rate,
+            'final_rate': base_rate,
+            'recommended_feed_kg': recommended_feed_kg,
+            'feeding_frequency': feeding_frequency,
+            'data_source': 'stocking_based'
+        }
+    
+    def _generate_stocking_based_notes(self, pond, species, fish_count_analysis, water_quality_analysis,
+                                     mortality_analysis, feeding_analysis, environmental_analysis,
+                                     growth_analysis, feeding_recommendations, medical_analysis, latest_stocking):
+        """Generate comprehensive notes for stocking-based feeding advice"""
+        notes = []
+        
+        # Data source note
+        notes.append("⚠️ This feeding advice is based on stocking data as fish sampling data is not available.")
+        notes.append(f"📊 Based on stocking from {latest_stocking.date} with {latest_stocking.pcs} pieces.")
+        
+        # Fish count analysis
+        if fish_count_analysis.get('survival_rate'):
+            notes.append(f"🐟 Estimated survival rate: {fish_count_analysis['survival_rate']:.1f}%")
+        
+        # Water quality
+        if water_quality_analysis.get('temperature'):
+            notes.append(f"🌡️ Water temperature: {water_quality_analysis['temperature']}°C")
+        
+        # Environmental factors
+        season = environmental_analysis.get('season', 'summer')
+        notes.append(f"🌍 Season: {season.title()}")
+        
+        # Medical considerations
+        if medical_analysis.get('medical_warnings'):
+            notes.append("⚠️ Medical warnings detected - consider consulting a fish health specialist.")
+        
+        # Growth analysis
+        if growth_analysis.get('days_since_stocking'):
+            days = growth_analysis['days_since_stocking']
+            notes.append(f"📈 Days since stocking: {days} days")
+        
+        # Recommendations
+        notes.append(f"💡 Recommended feeding rate: {feeding_recommendations['final_rate']}% of biomass")
+        notes.append(f"🍽️ Feeding frequency: {feeding_recommendations['feeding_frequency']} times per day")
+        
+        # Data limitations
+        notes.append("📝 Note: For more accurate feeding advice, consider conducting fish sampling to get current weight and growth data.")
+        
+        return "\n".join(notes)
     
     def _analyze_feeding_history(self, pond, species):
         """Analyze feeding history to recommend optimal feed type and cost"""
@@ -1647,6 +1900,125 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
         
         return growth_analysis
     
+    def _analyze_medical_conditions(self, pond):
+        """Analyze medical conditions and their impact on feeding"""
+        from datetime import timedelta
+        from .models import MedicalDiagnostic
+        
+        # Get recent medical diagnostics (last 30 days)
+        recent_diagnostics = MedicalDiagnostic.objects.filter(
+            pond=pond,
+            created_at__gte=timezone.now() - timedelta(days=30)
+        ).order_by('-created_at')
+        
+        medical_analysis = {
+            'active_diseases': [],
+            'disease_severity': 'none',
+            'feeding_adjustments': [],
+            'medical_warnings': [],
+            'recommended_feed_changes': [],
+            'treatment_considerations': []
+        }
+        
+        if recent_diagnostics.exists():
+            for diagnostic in recent_diagnostics:
+                disease_info = {
+                    'disease_name': diagnostic.disease_name,
+                    'confidence': float(diagnostic.confidence_percentage),
+                    'is_applied': diagnostic.is_applied,
+                    'created_at': diagnostic.created_at,
+                    'treatment': diagnostic.recommended_treatment,
+                    'dosage': diagnostic.dosage_application
+                }
+                medical_analysis['active_diseases'].append(disease_info)
+                
+                # Determine disease severity and feeding adjustments
+                confidence = float(diagnostic.confidence_percentage)
+                if confidence >= 80:
+                    medical_analysis['disease_severity'] = 'high'
+                    medical_analysis['feeding_adjustments'].append({
+                        'type': 'reduce_feed',
+                        'percentage': 0.5,
+                        'reason': f'High confidence disease: {diagnostic.disease_name}'
+                    })
+                    medical_analysis['medical_warnings'].append(
+                        f'⚠️ উচ্চ ঝুঁকি: {diagnostic.disease_name} - খাদ্য পরিমাণ ৫০% কমিয়ে দিন'
+                    )
+                elif confidence >= 60:
+                    medical_analysis['disease_severity'] = 'medium'
+                    medical_analysis['feeding_adjustments'].append({
+                        'type': 'reduce_feed',
+                        'percentage': 0.7,
+                        'reason': f'Medium confidence disease: {diagnostic.disease_name}'
+                    })
+                    medical_analysis['medical_warnings'].append(
+                        f'⚠️ মাঝারি ঝুঁকি: {diagnostic.disease_name} - খাদ্য পরিমাণ ৩০% কমিয়ে দিন'
+                    )
+                else:
+                    medical_analysis['disease_severity'] = 'low'
+                    medical_analysis['feeding_adjustments'].append({
+                        'type': 'monitor',
+                        'percentage': 1.0,
+                        'reason': f'Low confidence disease: {diagnostic.disease_name}'
+                    })
+                    medical_analysis['medical_warnings'].append(
+                        f'ℹ️ নিম্ন ঝুঁকি: {diagnostic.disease_name} - নিবিড় পর্যবেক্ষণ করুন'
+                    )
+                
+                # Disease-specific feeding recommendations
+                disease_name = diagnostic.disease_name.lower()
+                if any(keyword in disease_name for keyword in ['bacterial', 'infection', 'septicemia']):
+                    medical_analysis['recommended_feed_changes'].append(
+                        'ব্যাকটেরিয়াজনিত রোগ - উচ্চ প্রোটিন খাদ্য দিন এবং খাদ্য পরিমাণ কমিয়ে দিন'
+                    )
+                elif any(keyword in disease_name for keyword in ['parasite', 'worm', 'gill']):
+                    medical_analysis['recommended_feed_changes'].append(
+                        'পরজীবী রোগ - খাদ্য পরিমাণ কমিয়ে দিন এবং নিয়মিত পর্যবেক্ষণ করুন'
+                    )
+                elif any(keyword in disease_name for keyword in ['fungal', 'mold']):
+                    medical_analysis['recommended_feed_changes'].append(
+                        'ছত্রাকজনিত রোগ - খাদ্য গুণমান পরীক্ষা করুন এবং পরিমাণ কমিয়ে দিন'
+                    )
+                
+                # Treatment considerations
+                if diagnostic.is_applied:
+                    medical_analysis['treatment_considerations'].append(
+                        f'চিকিৎসা প্রয়োগ হয়েছে: {diagnostic.recommended_treatment}'
+                    )
+                else:
+                    medical_analysis['treatment_considerations'].append(
+                        f'চিকিৎসা প্রয়োগ প্রয়োজন: {diagnostic.recommended_treatment}'
+                    )
+        
+        return medical_analysis
+    
+    def _generate_medical_considerations(self, medical_analysis):
+        """Generate medical considerations text for feeding advice"""
+        considerations = []
+        
+        if medical_analysis['active_diseases']:
+            considerations.append("চিকিৎসা সংক্রান্ত বিবেচনা:")
+            
+            for disease in medical_analysis['active_diseases']:
+                status = "প্রয়োগ হয়েছে" if disease['is_applied'] else "প্রয়োগ প্রয়োজন"
+                considerations.append(
+                    f"- {disease['disease_name']} ({disease['confidence']:.0f}% নিশ্চিত) - {status}"
+                )
+            
+            if medical_analysis['recommended_feed_changes']:
+                considerations.append("\nখাদ্য সংক্রান্ত সুপারিশ:")
+                for change in medical_analysis['recommended_feed_changes']:
+                    considerations.append(f"- {change}")
+            
+            if medical_analysis['treatment_considerations']:
+                considerations.append("\nচিকিৎসা সংক্রান্ত বিবেচনা:")
+                for consideration in medical_analysis['treatment_considerations']:
+                    considerations.append(f"- {consideration}")
+        else:
+            considerations.append("কোনো সক্রিয় রোগ নেই - স্বাভাবিক খাদ্য পরিকল্পনা অনুসরণ করুন")
+        
+        return "\n".join(considerations)
+    
     def _get_feeding_stage(self, avg_weight_g):
         """Get feeding stage information based on fish weight using scientific feeding table"""
         
@@ -2071,8 +2443,30 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
         
         return adjustments
     
+    def _calculate_medical_adjustments(self, medical_analysis):
+        """Calculate feeding adjustments based on medical conditions"""
+        medical_adjustment = 0
+        
+        if medical_analysis['disease_severity'] == 'high':
+            # Reduce feeding by 50% for high severity diseases
+            medical_adjustment = -50
+        elif medical_analysis['disease_severity'] == 'medium':
+            # Reduce feeding by 30% for medium severity diseases
+            medical_adjustment = -30
+        elif medical_analysis['disease_severity'] == 'low':
+            # Reduce feeding by 10% for low severity diseases
+            medical_adjustment = -10
+        
+        # Apply additional adjustments based on specific feeding recommendations
+        for adjustment in medical_analysis.get('feeding_adjustments', []):
+            if adjustment['type'] == 'reduce_feed':
+                # Use the most severe reduction
+                medical_adjustment = min(medical_adjustment, (adjustment['percentage'] - 1) * 100)
+        
+        return medical_adjustment
+    
     def _calculate_feeding_recommendations(self, fish_count, latest_sampling, water_quality, 
-                                         mortality, feeding, environmental, growth):
+                                         mortality, feeding, environmental, growth, medical):
         """Calculate feeding recommendations using scientific formulas based on %BW/day"""
         
         # Get fish weight in grams
@@ -2092,6 +2486,11 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
         adjustments = self._calculate_feeding_adjustments(
             water_quality, mortality, growth, environmental, feeding
         )
+        
+        # Apply medical adjustments
+        medical_adjustment = self._calculate_medical_adjustments(medical)
+        adjustments['medical_adjustment'] = medical_adjustment
+        adjustments['total_adjustment'] += medical_adjustment
         
         # Calculate final feeding rate with adjustments
         adjustment_factor = 1 + (adjustments['total_adjustment'] / 100)
@@ -2115,7 +2514,7 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
         }
     
     def _generate_comprehensive_notes(self, pond, species, fish_analysis, water_quality, 
-                                    mortality, feeding, environmental, growth, recommendations):
+                                    mortality, feeding, environmental, growth, recommendations, medical=None):
         """Generate detailed notes explaining the recommendations"""
         
         notes = [
@@ -2182,6 +2581,33 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
             f"Temperature trend: {environmental['temperature_trend']}",
             f"Seasonal factors: {', '.join(environmental['seasonal_factors'])}",
             "",
+        ]
+        
+        # Add medical considerations if available
+        if medical and medical.get('active_diseases'):
+            notes.extend([
+                "=== MEDICAL CONSIDERATIONS ===",
+                f"Disease severity: {medical['disease_severity'].title()}",
+                f"Active diseases: {len(medical['active_diseases'])}",
+            ])
+            
+            for disease in medical['active_diseases']:
+                status = "Applied" if disease['is_applied'] else "Pending"
+                notes.append(f"• {disease['disease_name']} ({disease['confidence']:.0f}% confidence) - {status}")
+            
+            if medical.get('medical_warnings'):
+                notes.append("Medical warnings:")
+                for warning in medical['medical_warnings']:
+                    notes.append(f"• {warning}")
+            
+            if medical.get('recommended_feed_changes'):
+                notes.append("Feed recommendations:")
+                for change in medical['recommended_feed_changes']:
+                    notes.append(f"• {change}")
+            
+            notes.append("")
+        
+        notes.extend([
             "=== RECOMMENDATIONS ===",
             f"Recommended feeding rate: {recommendations['final_rate']:.1f}% of biomass",
             f"Daily feed amount: {recommendations['recommended_feed_kg']:.2f} kg",
@@ -2193,8 +2619,15 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
             f"Mortality risk level: {recommendations['adjustments']['mortality']:+.0f}%",
             f"Growth quality: {recommendations['adjustments']['growth']:+.0f}%",
             f"Seasonal impact: {recommendations['adjustments']['seasonal']:+.0f}%",
+        ])
+        
+        # Add medical adjustment if available
+        if medical and 'medical_adjustment' in recommendations['adjustments']:
+            notes.append(f"Medical conditions impact: {recommendations['adjustments']['medical_adjustment']:+.0f}%")
+        
+        notes.extend([
             f"Total adjustment: {recommendations['adjustments']['total_adjustment']:+.0f}%",
-        ]
+        ])
         
         return '\n'.join(notes)
 
@@ -2666,3 +3099,50 @@ class TargetBiomassViewSet(viewsets.ViewSet):
             return Response({
                 'error': f'Failed to calculate target biomass: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class MedicalDiagnosticViewSet(viewsets.ModelViewSet):
+    """ViewSet for medical diagnostic results"""
+    queryset = MedicalDiagnostic.objects.all()
+    serializer_class = MedicalDiagnosticSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return MedicalDiagnostic.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+    
+    @action(detail=True, methods=['post'])
+    def apply_treatment(self, request, pk=None):
+        """Mark a diagnostic result as applied"""
+        diagnostic = self.get_object()
+        diagnostic.is_applied = True
+        diagnostic.save()
+        
+        return Response({
+            'message': 'Treatment applied successfully',
+            'applied_at': diagnostic.applied_at
+        }, status=status.HTTP_200_OK)
+    
+    @action(detail=False, methods=['get'])
+    def by_pond(self, request):
+        """Get diagnostics for a specific pond"""
+        pond_id = request.query_params.get('pond_id')
+        if not pond_id:
+            return Response({'error': 'pond_id parameter is required'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        diagnostics = self.get_queryset().filter(pond_id=pond_id)
+        serializer = self.get_serializer(diagnostics, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def recent(self, request):
+        """Get recent diagnostics (last 30 days)"""
+        from datetime import timedelta
+        thirty_days_ago = timezone.now() - timedelta(days=30)
+        
+        diagnostics = self.get_queryset().filter(created_at__gte=thirty_days_ago)
+        serializer = self.get_serializer(diagnostics, many=True)
+        return Response(serializer.data)

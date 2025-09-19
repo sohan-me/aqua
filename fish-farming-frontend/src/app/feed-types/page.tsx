@@ -22,7 +22,6 @@ import {
   Droplets,
   Zap
 } from 'lucide-react';
-import { toast } from 'sonner';
 
 export default function FeedTypesPage() {
   const { data: feedTypesData, isLoading } = useFeedTypes();

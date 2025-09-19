@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { usePonds, useSpecies } from '@/hooks/useApi';
 import { Pond, Species } from '@/lib/api';
 import { extractApiData } from '@/lib/utils';
@@ -11,7 +11,6 @@ import {
   Package,
   TrendingUp,
   Clock,
-  Fish,
   Scale,
   AlertCircle,
   CheckCircle
@@ -64,11 +63,7 @@ export default function TargetBiomassPage() {
 
     setIsLoading(true);
     try {
-<<<<<<< HEAD
-      const response = await fetch('http://localhost:8000/api/ fish-farming/target-biomass/calculate/', {
-=======
       const response = await fetch('https://apipremiumagro.sascorporationbd.com/api/fish-farming/target-biomass/calculate/', {
->>>>>>> fdf8485018c78f175ef988e082f195e28f7f2afb
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -112,8 +107,6 @@ export default function TargetBiomassPage() {
     setResult(null);
   };
 
-  const selectedPond = ponds.find(p => p.id.toString() === form.pondId);
-  const selectedSpecies = species.find(s => s.id.toString() === form.speciesId);
 
   return (
     <div className="space-y-6">

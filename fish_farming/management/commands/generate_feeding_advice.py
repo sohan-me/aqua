@@ -109,188 +109,50 @@ class Command(BaseCommand):
         if not Stocking.objects.filter(pond=pond, species=species).exists():
             return False
         
-        # Need at least one fish sampling record
-        if not FishSampling.objects.filter(pond=pond, species=species).exists():
-            return False
-        
+        # Can work with either fish sampling data OR just stocking data
+        # Fish sampling data is preferred but not required
         return True
 
     def generate_advice_data(self, pond, species):
         """Generate comprehensive feeding advice data"""
-        today = timezone.now().date()
+        from fish_farming.views import FeedingAdviceViewSet
+        from django.contrib.auth.models import User
         
-        # 1. Get latest stocking data
-        latest_stocking = Stocking.objects.filter(
-            pond=pond, species=species
-        ).order_by('-date').first()
+        # Use the new feeding advice generation logic from views
+        viewset = FeedingAdviceViewSet()
         
-        # 2. Get latest fish sampling data
-        latest_sampling = FishSampling.objects.filter(
-            pond=pond, species=species
-        ).order_by('-date').first()
+        # Get a user (use the first superuser or create a system user)
+        user = User.objects.filter(is_superuser=True).first()
+        if not user:
+            user = User.objects.first()
         
-        # 3. Calculate current fish count
-        total_stocked = Stocking.objects.filter(
-            pond=pond, species=species
-        ).aggregate(total=Sum('pcs'))['total'] or 0
+        if not user:
+            return None
         
-        total_mortality = Mortality.objects.filter(
-            pond=pond, species=species
-        ).aggregate(total=Sum('count'))['total'] or 0
+        # Generate advice using the new method
+        advice_data = viewset._generate_advice_for_species(pond, species, None)
         
-        total_harvested = Harvest.objects.filter(
-            pond=pond, species=species
-        ).aggregate(total=Sum('total_count'))['total'] or 0
+        if not advice_data:
+            return None
         
-        estimated_fish_count = total_stocked - total_mortality - total_harvested
-        
-        # 4. Get environmental data
-        latest_log = DailyLog.objects.filter(pond=pond).order_by('-date').first()
-        latest_water_sample = Sampling.objects.filter(pond=pond).order_by('-date').first()
-        
-        # 5. Analyze recent feeding patterns
-        recent_feeding = Feed.objects.filter(
-            pond=pond, species=species
-        ).order_by('-date')[:7]  # Last 7 days
-        
-        avg_daily_feed = recent_feeding.aggregate(
-            avg=Avg('feed_amount_kg')
-        )['avg'] or 0
-        
-        # 6. Analyze mortality patterns
-        recent_mortality = Mortality.objects.filter(
-            pond=pond, species=species,
-            date__gte=today - timedelta(days=30)
-        ).aggregate(total=Sum('count'))['total'] or 0
-        
-        # 7. Determine season
-        current_month = timezone.now().month
-        if current_month in [12, 1, 2]:
-            season = 'winter'
-        elif current_month in [3, 4, 5]:
-            season = 'spring'
-        elif current_month in [6, 7, 8]:
-            season = 'summer'
-        else:
-            season = 'autumn'
-        
-        # 8. Calculate growth rate
-        previous_sampling = FishSampling.objects.filter(
-            pond=pond, species=species
-        ).order_by('-date')[1:2].first()
-        
-        growth_rate_kg_per_day = 0
-        if previous_sampling:
-            days_diff = (latest_sampling.date - previous_sampling.date).days
-            if days_diff > 0:
-                weight_diff = latest_sampling.average_weight_kg - previous_sampling.average_weight_kg
-                growth_rate_kg_per_day = weight_diff / days_diff
-        
-        # 9. Analyze harvest patterns
-        recent_harvests = Harvest.objects.filter(
-            pond=pond, species=species,
-            date__gte=today - timedelta(days=90)
-        ).aggregate(
-            total_weight=Sum('total_weight_kg'),
-            total_count=Sum('total_count'),
-            avg_price=Avg('price_per_kg')
-        )
-        
-        # 10. Calculate feed conversion ratio
-        total_feed_used = Feed.objects.filter(
-            pond=pond, species=species,
-            date__gte=latest_stocking.date
-        ).aggregate(total=Sum('feed_amount_kg'))['total'] or 0
-        
-        fcr = 0
-        if total_harvested > 0 and total_feed_used > 0:
-            fcr = total_feed_used / total_harvested
-        
-        # 11. Calculate feeding rate based on biomass
-        total_biomass_kg = estimated_fish_count * latest_sampling.average_weight_kg
-        
-        # Base feeding rate by season
-        base_rates = {
-            'winter': 1.0,  # 1% of biomass
-            'spring': 2.0,  # 2% of biomass
-            'summer': 3.0,  # 3% of biomass
-            'autumn': 2.5,  # 2.5% of biomass
-        }
-        
-        base_rate = base_rates.get(season, 2.0)
-        
-        # Adjust based on growth rate
-        if growth_rate_kg_per_day > 0.01:  # Good growth
-            base_rate *= 1.2
-        elif growth_rate_kg_per_day < 0.005:  # Slow growth
-            base_rate *= 0.8
-        
-        # Adjust based on mortality
-        if recent_mortality > estimated_fish_count * 0.05:  # High mortality
-            base_rate *= 0.7
-        
-        recommended_feed_kg = (total_biomass_kg * base_rate) / 100
-        
-        # 12. Generate comprehensive notes
-        notes_parts = [
-            f"Generated on {timezone.now().strftime('%Y-%m-%d %H:%M')}",
-            f"=== FISH DATA ===",
-            f"Latest fish sampling: {latest_sampling.average_weight_kg} kg avg weight",
-            f"Current fish count: {estimated_fish_count} (stocked: {total_stocked}, mortality: {total_mortality}, harvested: {total_harvested})",
-            f"Growth rate: {growth_rate_kg_per_day:.4f} kg/day",
-            f"=== ENVIRONMENTAL DATA ===",
-            f"Season: {season.title()}",
-        ]
-        
-        if latest_log:
-            notes_parts.append(f"Latest daily log: {latest_log.date}")
-            if latest_log.water_temp_c:
-                notes_parts.append(f"Water temp: {latest_log.water_temp_c}°C")
-            if latest_log.ph:
-                notes_parts.append(f"pH: {latest_log.ph}")
-        
-        if latest_water_sample:
-            notes_parts.append(f"Latest water sample: {latest_water_sample.date}")
-            if latest_water_sample.ph:
-                notes_parts.append(f"Water pH: {latest_water_sample.ph}")
-            if latest_water_sample.temperature_c:
-                notes_parts.append(f"Water temp: {latest_water_sample.temperature_c}°C")
-            if latest_water_sample.dissolved_oxygen:
-                notes_parts.append(f"Dissolved oxygen: {latest_water_sample.dissolved_oxygen} mg/L")
-        
-        notes_parts.extend([
-            f"=== FEEDING DATA ===",
-            f"Recent avg daily feed: {avg_daily_feed:.2f} kg",
-            f"Total feed used since stocking: {total_feed_used:.2f} kg",
-            f"Feed conversion ratio: {fcr:.2f}",
-            f"=== PRODUCTION DATA ===",
-        ])
-        
-        if recent_harvests['total_weight']:
-            notes_parts.append(f"Recent harvests (90 days): {recent_harvests['total_weight']:.2f} kg")
-            if recent_harvests['avg_price']:
-                notes_parts.append(f"Average harvest price: ₹{recent_harvests['avg_price']:.2f}/kg")
-        
-        if recent_mortality > 0:
-            notes_parts.append(f"Recent mortality (30 days): {recent_mortality} fish")
-        
-        notes_parts.extend([
-            f"=== RECOMMENDATIONS ===",
-            f"Based on {season} season and current biomass",
-            f"Recommended feeding rate: {base_rate:.1f}% of biomass",
-            f"Estimated daily feed requirement: {recommended_feed_kg:.2f} kg"
-        ])
-        
+        # Convert to the format expected by the management command
         return {
-            'user': pond.user,
-            'estimated_fish_count': estimated_fish_count,
-            'average_fish_weight_kg': latest_sampling.average_weight_kg,
-            'total_biomass_kg': total_biomass_kg,
-            'recommended_feed_kg': recommended_feed_kg,
-            'feeding_rate_percent': base_rate,
-            'feeding_frequency': 'twice_daily',
-            'water_temp_c': latest_log.water_temp_c if latest_log else None,
-            'season': season,
-            'notes': '\n'.join(notes_parts),
-            'is_applied': False,
+            'pond': pond,
+            'species': species,
+            'user': user,
+            'date': advice_data['date'],
+            'estimated_fish_count': advice_data['estimated_fish_count'],
+            'average_fish_weight_kg': advice_data['average_fish_weight_kg'],
+            'total_biomass_kg': advice_data['total_biomass_kg'],
+            'recommended_feed_kg': advice_data['recommended_feed_kg'],
+            'feeding_rate_percent': advice_data['feeding_rate_percent'],
+            'feeding_frequency': advice_data['feeding_frequency'],
+            'water_temp_c': advice_data.get('water_temp_c'),
+            'season': advice_data.get('season', 'summer'),
+            'medical_considerations': advice_data.get('medical_considerations', ''),
+            'medical_warnings': advice_data.get('medical_warnings', []),
+            'notes': advice_data.get('notes', ''),
+            'feed_type': advice_data.get('feed_type'),
+            'feed_cost_per_kg': advice_data.get('feed_cost_per_kg'),
+            'daily_feed_cost': advice_data.get('daily_feed_cost')
         }

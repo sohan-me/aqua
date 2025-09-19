@@ -24,7 +24,6 @@ import {
   Settings,
   MoreHorizontal
 } from 'lucide-react';
-import { toast } from 'sonner';
 
 export default function ExpenseTypesPage() {
   const { data: expenseTypesData, isLoading } = useExpenseTypes();

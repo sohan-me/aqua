@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useCreateExpense, usePonds, useExpenseTypes, useSpecies } from '@/hooks/useApi';
 import { extractApiData } from '@/lib/utils';
 import { Pond, ExpenseType, Species } from '@/lib/api';
-import { ArrowLeft, Save, X, DollarSign, Receipt, Building2 } from 'lucide-react';
+import { ArrowLeft, Save, X, Receipt, Building2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function NewExpensePage() {

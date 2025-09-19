@@ -25,6 +25,7 @@ import {
   ChevronRight,
   Target,
   CreditCard,
+  Stethoscope,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -36,6 +37,7 @@ const navigation = [
   { name: 'Daily Logs', href: '/daily-logs', icon: Calendar },
   { name: 'Fish Sampling', href: '/fish-sampling', icon: Scale },
   { name: 'Mortality', href: '/mortality', icon: TrendingDown },
+  { name: 'Medical Diagnostic', href: '/medical-diagnostic', icon: Stethoscope },
   { name: 'Feed Types', href: '/feed-types', icon: Package },
   { name: 'Feeding', href: '/feeding', icon: Activity },
   { name: 'Harvest', href: '/harvest', icon: TrendingUp },

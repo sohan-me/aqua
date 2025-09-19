@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useCreateDailyLog, usePonds } from '@/hooks/useApi';
 import { extractApiData } from '@/lib/utils';
 import { Pond } from '@/lib/api';
-import { ArrowLeft, Save, X, Calendar, Thermometer, Droplets, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Save, X, Droplets } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function NewDailyLogPage() {

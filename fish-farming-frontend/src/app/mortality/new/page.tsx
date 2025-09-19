@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useCreateMortality, usePonds, useSpecies } from '@/hooks/useApi';
 import { extractApiData } from '@/lib/utils';
 import { Pond, Species } from '@/lib/api';
-import { ArrowLeft, Save, X, Fish, TrendingDown, AlertTriangle, Weight } from 'lucide-react';
+import { ArrowLeft, Save, X, Fish, TrendingDown, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function NewMortalityPage() {

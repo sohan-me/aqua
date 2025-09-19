@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useCreateIncome, usePonds, useIncomeTypes, useSpecies } from '@/hooks/useApi';
 import { extractApiData } from '@/lib/utils';
 import { Pond, IncomeType, Species } from '@/lib/api';
-import { ArrowLeft, Save, X, DollarSign, Receipt, Users } from 'lucide-react';
+import { ArrowLeft, Save, X, Receipt, Users } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function NewIncomePage() {

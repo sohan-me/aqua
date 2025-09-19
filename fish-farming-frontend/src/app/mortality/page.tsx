@@ -1,9 +1,8 @@
 'use client';
 
-import { useState } from 'react';
 import { useMortalities, usePonds, useDeleteMortality, useStocking } from '@/hooks/useApi';
 import { Mortality, Pond, Stocking } from '@/lib/api';
-import { formatDate, formatNumber, formatWeight, extractApiData } from '@/lib/utils';
+import { formatDate, formatWeight, extractApiData } from '@/lib/utils';
 import { 
   Fish, 
   Plus, 
@@ -25,7 +24,6 @@ export default function MortalityPage() {
   const deleteMortality = useDeleteMortality();
   
   const mortalities = extractApiData<Mortality>(mortalitiesData);
-  const ponds = extractApiData<Pond>(pondsData);
   const stockings = extractApiData<Stocking>(stockingData);
 
   const handleDelete = async (id: number, pondName: string, count: number, date: string) => {

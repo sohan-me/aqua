@@ -1,10 +1,9 @@
 'use client';
 
-import { useState } from 'react';
 import { useFeeds, usePonds, useDeleteFeed, useFeedTypes } from '@/hooks/useApi';
 import { Feed, Pond, FeedType } from '@/lib/api';
-import { formatDate, formatNumber, extractApiData } from '@/lib/utils';
-import { Fish, Plus, Edit, Trash2, Eye, Clock, Package } from 'lucide-react';
+import { formatDate, extractApiData } from '@/lib/utils';
+import { Fish, Plus, Edit, Trash2, Eye, Package, Clock } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 
@@ -15,7 +14,6 @@ export default function FeedingPage() {
   const deleteFeed = useDeleteFeed();
   
   const feeds = extractApiData<Feed>(feedsData);
-  const ponds = extractApiData<Pond>(pondsData);
   const feedTypes = extractApiData<FeedType>(feedTypesData);
 
   const handleDelete = async (id: number, pondName: string, feedTypeName: string, date: string) => {
