@@ -199,7 +199,7 @@ export interface Mortality {
   pond: number;
   date: string;
   count: number;
-  avg_weight_g: string;
+  avg_weight_kg: string;
   cause: string;
   notes: string;
   created_at: string;

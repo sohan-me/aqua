@@ -119,7 +119,7 @@ export default function MortalityDetailsPage() {
                   <div>
                     <p className="text-sm text-gray-500">Average Weight</p>
                     <p className="text-lg font-semibold text-gray-900">
-                      {mortality.avg_weight_g ? `${formatWeight(parseFloat(mortality.avg_weight_g) / 1000)} kg` : 'N/A'}
+                      {mortality.avg_weight_kg ? `${formatWeight(parseFloat(mortality.avg_weight_kg))} kg` : 'N/A'}
                     </p>
                   </div>
                 </div>
@@ -169,14 +169,14 @@ export default function MortalityDetailsPage() {
               <div className="text-center p-4 bg-blue-50 rounded-lg">
                 <p className="text-sm text-blue-600 font-medium">Total Weight Loss</p>
                 <p className="text-2xl font-bold text-blue-900">
-                  {mortality.avg_weight_g ? `${formatWeight((parseFloat(mortality.avg_weight_g) * mortality.count) / 1000)} kg` : 'N/A'}
+                  {mortality.avg_weight_kg ? `${formatWeight((parseFloat(mortality.avg_weight_kg) * mortality.count))} kg` : 'N/A'}
                 </p>
               </div>
               
               <div className="text-center p-4 bg-gray-50 rounded-lg">
                 <p className="text-sm text-gray-600 font-medium">Average Weight per Fish</p>
                 <p className="text-xl font-semibold text-gray-900">
-                  {mortality.avg_weight_g ? `${formatWeight(parseFloat(mortality.avg_weight_g) / 1000)} kg` : 'N/A'}
+                  {mortality.avg_weight_kg ? `${formatWeight(parseFloat(mortality.avg_weight_kg))} kg` : 'N/A'}
                 </p>
               </div>
             </div>
