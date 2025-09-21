@@ -75,7 +75,7 @@ export function downloadCSV(csvContent: string, filename: string): void {
  * Formats currency for CSV export (removes currency symbols for better Excel compatibility)
  */
 export function formatCurrencyForCSV(amount: number): string {
-  return amount.toFixed(2);
+  return amount.toFixed(4);
 }
 
 /**

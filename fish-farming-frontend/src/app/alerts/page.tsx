@@ -1,7 +1,8 @@
 'use client';
 
 import { useAlerts, useResolveAlert } from '@/hooks/useApi';
-import { formatDateTime, getSeverityColor } from '@/lib/utils';
+import { Alert } from '@/lib/api';
+import { formatDateTime, getSeverityColor, extractApiData } from '@/lib/utils';
 import { AlertTriangle, CheckCircle, Filter, Eye } from 'lucide-react';
 import { useState } from 'react';
 import Link from 'next/link';
@@ -9,7 +10,7 @@ import Link from 'next/link';
 export default function AlertsPage() {
   const { data: alertsData, isLoading } = useAlerts();
   const resolveAlertMutation = useResolveAlert();
-  const alerts = alertsData?.data || [];
+  const alerts = extractApiData<Alert>(alertsData);
   
   const [filter, setFilter] = useState('all');
 

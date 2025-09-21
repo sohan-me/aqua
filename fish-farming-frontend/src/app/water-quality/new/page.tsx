@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCreateSampling, usePonds, useSampleTypes } from '@/hooks/useApi';
+import { extractApiData } from '@/lib/utils';
+import { Pond, SampleType } from '@/lib/api';
 import { ArrowLeft, Save, X, Droplets, Thermometer, TestTube, Fish } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -12,8 +14,8 @@ export default function NewWaterQualityPage() {
   const { data: pondsData } = usePonds();
   const { data: sampleTypesData } = useSampleTypes();
   
-  const ponds = pondsData?.data || [];
-  const sampleTypes = sampleTypesData?.data || [];
+  const ponds = extractApiData<Pond>(pondsData);
+  const sampleTypes = extractApiData<SampleType>(sampleTypesData);
 
   const [formData, setFormData] = useState({
     pond: '',

@@ -9,10 +9,22 @@ import {
   useFeeds, 
   useHarvests, 
   useExpenses, 
-  useIncomes,
-  useAlerts,
-  useMortalities 
+  useIncomes, 
+  useAlerts, 
+  useMortalities
 } from '@/hooks/useApi';
+import {
+  Pond,
+  Stocking,
+  DailyLog,
+  Sampling,
+  Feed,
+  Harvest,
+  Expense,
+  Income,
+  Alert,
+  Mortality
+} from '@/lib/api';
 import { 
   BarChart3, 
   TrendingUp, 
@@ -21,12 +33,11 @@ import {
   Fish, 
   Droplets, 
   AlertTriangle,
-  Calendar,
   Filter,
   Download
 } from 'lucide-react';
 import { downloadCSV, formatCurrencyForCSV, formatDateForCSV, sanitizeFilename } from '@/lib/exportUtils';
-import { formatWeight } from '@/lib/utils';
+import { formatWeight, extractApiData } from '@/lib/utils';
 import { toast } from 'sonner';
 
 export default function AnalyticsPage() {
@@ -48,16 +59,16 @@ export default function AnalyticsPage() {
     endDate: ''
   });
 
-  const allPonds = pondsData?.data || [];
-  const allStockings = stockingData?.data || [];
-  const allDailyLogs = dailyLogsData?.data || [];
-  const allSamplings = samplingsData?.data || [];
-  const allFeeds = feedsData?.data || [];
-  const allHarvests = harvestsData?.data || [];
-  const allExpenses = expensesData?.data || [];
-  const allIncomes = incomesData?.data || [];
-  const allAlerts = alertsData?.data || [];
-  const allMortality = mortalityData?.data || [];
+  const allPonds = extractApiData<Pond>(pondsData);
+  const allStockings = extractApiData<Stocking>(stockingData);
+  const allDailyLogs = extractApiData<DailyLog>(dailyLogsData);
+  const allSamplings = extractApiData<Sampling>(samplingsData);
+  const allFeeds = extractApiData<Feed>(feedsData);
+  const allHarvests = extractApiData<Harvest>(harvestsData);
+  const allExpenses = extractApiData<Expense>(expensesData);
+  const allIncomes = extractApiData<Income>(incomesData);
+  const allAlerts = extractApiData<Alert>(alertsData);
+  const allMortality = extractApiData<Mortality>(mortalityData);
 
   // Filter data based on selected pond
   const ponds = allPonds;
@@ -310,7 +321,7 @@ export default function AnalyticsPage() {
     },
     {
       title: 'Feed Conversion Ratio',
-      value: fcr.toFixed(2),
+      value: fcr.toFixed(4),
       change: 'kg feed/kg fish',
       icon: BarChart3,
       color: fcr <= 2.0 ? 'green' : fcr <= 2.5 ? 'yellow' : 'red',
@@ -334,7 +345,7 @@ export default function AnalyticsPage() {
     },
     {
       title: 'Avg Feed Cost per KG',
-      value: `৳${avgFeedCostPerKg.toFixed(2)}`,
+      value: `৳${avgFeedCostPerKg.toFixed(4)}`,
       change: 'per kg',
       icon: BarChart3,
       color: avgFeedCostPerKg <= 40 ? 'green' : avgFeedCostPerKg <= 60 ? 'yellow' : 'red',
@@ -350,7 +361,7 @@ export default function AnalyticsPage() {
     },
     {
       title: 'Avg Feeding Rate',
-      value: `${avgFeedingRate.toFixed(2)}%`,
+      value: `${avgFeedingRate.toFixed(4)}%`,
       change: 'of biomass',
       icon: BarChart3,
       color: avgFeedingRate >= 2 && avgFeedingRate <= 4 ? 'green' : avgFeedingRate < 2 ? 'yellow' : 'red',
@@ -434,7 +445,7 @@ export default function AnalyticsPage() {
     csvContent += `Total Revenue,${formatCurrencyForCSV(totalRevenue)},from harvests\n`;
     csvContent += `Total Expenses,${formatCurrencyForCSV(totalExpenses)},operational costs\n`;
     csvContent += `Net Profit,${formatCurrencyForCSV(netProfit)},${netProfit >= 0 ? 'profit' : 'loss'}\n`;
-    csvContent += `Feed Conversion Ratio,${fcr.toFixed(2)},kg feed/kg fish\n`;
+    csvContent += `Feed Conversion Ratio,${fcr.toFixed(4)},kg feed/kg fish\n`;
     csvContent += `Survival Rate,${survivalRate.toFixed(1)}%,fish survival\n`;
     csvContent += `Total Mortality,${totalMortality.toLocaleString()},fish lost\n`;
     csvContent += `Total Feed Cost,${formatCurrencyForCSV(totalFeedCost)},feed expenses\n`;
@@ -626,17 +637,17 @@ export default function AnalyticsPage() {
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <span className="text-gray-600">Total Income</span>
-              <span className="text-green-600 font-semibold">৳{totalIncome.toLocaleString()}</span>
+              <span className="text-green-600 font-semibold">৳{totalIncome.toFixed(4)}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-gray-600">Total Expenses</span>
-              <span className="text-red-600 font-semibold">৳{totalExpenses.toLocaleString()}</span>
+              <span className="text-red-600 font-semibold">৳{totalExpenses.toFixed(4)}</span>
             </div>
             <hr className="border-gray-200" />
             <div className="flex justify-between items-center">
               <span className="text-gray-900 font-semibold">Net Profit</span>
               <span className={`font-semibold ${netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                ৳{netProfit.toLocaleString()}
+                ৳{netProfit.toFixed(4)}
               </span>
             </div>
             <div className="flex justify-between items-center">
@@ -648,12 +659,12 @@ export default function AnalyticsPage() {
             <hr className="border-gray-200" />
             <div className="flex justify-between items-center">
               <span className="text-gray-600">Total Feed Cost</span>
-              <span className="text-orange-600 font-semibold">৳{totalFeedCost.toLocaleString()}</span>
+              <span className="text-orange-600 font-semibold">৳{totalFeedCost.toFixed(4)}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-gray-600">Avg Feed Cost per KG</span>
               <span className={`font-semibold ${avgFeedCostPerKg <= 40 ? 'text-green-600' : avgFeedCostPerKg <= 60 ? 'text-yellow-600' : 'text-red-600'}`}>
-                ৳{avgFeedCostPerKg.toFixed(2)}
+                ৳{avgFeedCostPerKg.toFixed(4)}
               </span>
             </div>
           </div>
@@ -679,7 +690,7 @@ export default function AnalyticsPage() {
             <div className="flex justify-between items-center">
               <span className="text-gray-600">Feed Conversion Ratio</span>
               <span className={`font-semibold ${fcr <= 2.0 ? 'text-green-600' : fcr <= 2.5 ? 'text-yellow-600' : 'text-red-600'}`}>
-                {fcr.toFixed(2)}
+                {fcr.toFixed(4)}
               </span>
             </div>
           </div>
@@ -701,7 +712,7 @@ export default function AnalyticsPage() {
                   <p className="text-xs text-gray-500">{harvest.pond_name} - {formatWeight(toNumber(harvest.total_weight_kg))} kg</p>
                 </div>
               </div>
-              <span className="text-sm text-green-600 font-semibold">৳{toNumber(harvest.total_revenue)}</span>
+              <span className="text-sm text-green-600 font-semibold">৳{toNumber(harvest.total_revenue).toFixed(4)}</span>
             </div>
           ))}
           {mortality.slice(0, 3).map((mortality) => (

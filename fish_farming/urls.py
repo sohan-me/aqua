@@ -27,6 +27,7 @@ router.register(r'kpi-dashboard', views.KPIDashboardViewSet)
 router.register(r'fish-sampling', views.FishSamplingViewSet)
 router.register(r'feeding-advice', views.FeedingAdviceViewSet)
 router.register(r'survival-rates', views.SurvivalRateViewSet)
+router.register(r'medical-diagnostics', views.MedicalDiagnosticViewSet)
 router.register(r'target-biomass', views.TargetBiomassViewSet, basename='target-biomass')
 
 urlpatterns = [

@@ -7,6 +7,8 @@ import {
   useUpdateFeedType, 
   useDeleteFeedType 
 } from '@/hooks/useApi';
+import { extractApiData } from '@/lib/utils';
+import { FeedType } from '@/lib/api';
 import { 
   Plus, 
   Edit, 
@@ -20,7 +22,6 @@ import {
   Droplets,
   Zap
 } from 'lucide-react';
-import { toast } from 'sonner';
 
 export default function FeedTypesPage() {
   const { data: feedTypesData, isLoading } = useFeedTypes();
@@ -28,7 +29,7 @@ export default function FeedTypesPage() {
   const updateFeedType = useUpdateFeedType();
   const deleteFeedType = useDeleteFeedType();
 
-  const feedTypes = feedTypesData?.data || [];
+  const feedTypes = extractApiData<FeedType>(feedTypesData);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [formData, setFormData] = useState({

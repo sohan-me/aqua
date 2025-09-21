@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useSamplingById, useUpdateSampling, usePonds } from '@/hooks/useApi';
+import { extractApiData } from '@/lib/utils';
+import { Pond } from '@/lib/api';
 import { ArrowLeft, Save, X, Droplets, Thermometer, TestTube, Fish } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -15,7 +17,7 @@ export default function EditWaterQualityPage() {
   const { data: pondsData } = usePonds();
   const updateSampling = useUpdateSampling();
   
-  const ponds = pondsData?.data || [];
+  const ponds = extractApiData<Pond>(pondsData);
 
   const [formData, setFormData] = useState({
     pond: '',

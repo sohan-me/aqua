@@ -3,7 +3,9 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCreateMortality, usePonds, useSpecies } from '@/hooks/useApi';
-import { ArrowLeft, Save, X, Fish, TrendingDown, AlertTriangle, Weight } from 'lucide-react';
+import { extractApiData } from '@/lib/utils';
+import { Pond, Species } from '@/lib/api';
+import { ArrowLeft, Save, X, Fish, TrendingDown, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function NewMortalityPage() {
@@ -12,8 +14,8 @@ export default function NewMortalityPage() {
   const { data: pondsData } = usePonds();
   const { data: speciesData } = useSpecies();
   
-  const ponds = pondsData?.data || [];
-  const species = speciesData?.data || [];
+  const ponds = extractApiData<Pond>(pondsData);
+  const species = extractApiData<Species>(speciesData);
 
   const [formData, setFormData] = useState({
     pond: '',

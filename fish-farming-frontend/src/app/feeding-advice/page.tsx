@@ -1,8 +1,9 @@
 'use client';
 
-import { useFeedingAdvice, useDeleteFeedingAdvice, useApplyFeedingAdvice, useGenerateFeedingAdvice, usePonds } from '@/hooks/useApi';
-import { formatDate, formatWeight } from '@/lib/utils';
-import { Lightbulb, Plus, Eye, Edit, Trash2, Calendar, CheckCircle, Clock } from 'lucide-react';
+import { useFeedingAdvice, useDeleteFeedingAdvice, useApplyFeedingAdvice, useAutoGenerateFeedingAdvice, usePonds } from '@/hooks/useApi';
+import { FeedingAdvice, Pond } from '@/lib/api';
+import { formatDate, formatWeight, extractApiData } from '@/lib/utils';
+import { Lightbulb, Plus, Eye, Edit, Trash2, Calendar, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -12,12 +13,13 @@ export default function FeedingAdvicePage() {
   const { data: pondsData } = usePonds();
   const deleteAdvice = useDeleteFeedingAdvice();
   const applyAdvice = useApplyFeedingAdvice();
-  const generateAdvice = useGenerateFeedingAdvice();
+  const generateAdvice = useAutoGenerateFeedingAdvice();
   const [filterPond, setFilterPond] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [selectedPondForGeneration, setSelectedPondForGeneration] = useState('');
   
-  const advice = adviceData?.data || [];
+  const advice = extractApiData<FeedingAdvice>(adviceData);
+  const ponds = extractApiData<Pond>(pondsData);
   
   const filteredAdvice = advice.filter(item => {
     const pondMatch = filterPond === 'all' || item.pond.toString() === filterPond;
@@ -52,7 +54,7 @@ export default function FeedingAdvicePage() {
     }
     
     try {
-      await generateAdvice.mutateAsync({ pond_id: parseInt(selectedPondForGeneration) });
+      await generateAdvice.mutateAsync({ pond: parseInt(selectedPondForGeneration) });
       setSelectedPondForGeneration('');
     } catch (error) {
       // Error is handled by the hook
@@ -84,7 +86,7 @@ export default function FeedingAdvicePage() {
               required
             >
               <option value="">Select Pond *</option>
-              {pondsData?.data?.map((pond: any) => (
+              {ponds.map((pond) => (
                 <option key={pond.id} value={pond.id}>
                   {pond.name}
                 </option>
@@ -203,9 +205,8 @@ export default function FeedingAdvicePage() {
                       <p className="text-sm text-gray-500">Feed Per Session</p>
                       <p className="text-lg font-semibold text-gray-900">
                         {(() => {
-                          // @ts-expect-error TypeScript strict mode issue with parseFloat division
-                          const feedPerSession = parseFloat(item.recommended_feed_kg) / parseFloat(item.feeding_frequency);
-                          return formatWeight(feedPerSession.toString());
+                          const feedPerSession = parseFloat(item.recommended_feed_kg) / item.feeding_frequency;
+                          return feedPerSession.toFixed(4);
                         })()} kg
                       </p>
                     </div>
@@ -240,6 +241,53 @@ export default function FeedingAdvicePage() {
                           </p>
                         </div>
                       </div>
+                      
+                      {/* Medical Warnings */}
+                      {item.medical_warnings && item.medical_warnings.length > 0 && (
+                        <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                          <div className="flex items-center mb-2">
+                            <div className="flex-shrink-0">
+                              <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                              </svg>
+                            </div>
+                            <div className="ml-3">
+                              <h4 className="text-sm font-medium text-red-800">Medical Warnings</h4>
+                            </div>
+                          </div>
+                          <div className="ml-8">
+                            <ul className="text-sm text-red-700 space-y-1">
+                              {item.medical_warnings.map((warning, index) => (
+                                <li key={index} className="flex items-start">
+                                  <span className="flex-shrink-0 h-1.5 w-1.5 bg-red-400 rounded-full mt-2 mr-2"></span>
+                                  {warning}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Medical Considerations */}
+                      {item.medical_considerations && (
+                        <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                          <div className="flex items-center mb-2">
+                            <div className="flex-shrink-0">
+                              <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                              </svg>
+                            </div>
+                            <div className="ml-3">
+                              <h4 className="text-sm font-medium text-blue-800">Medical Considerations</h4>
+                            </div>
+                          </div>
+                          <div className="ml-8">
+                            <p className="text-sm text-blue-700 whitespace-pre-line">
+                              {item.medical_considerations}
+                            </p>
+                          </div>
+                        </div>
+                      )}
                       
                       {/* Scientific Feeding Information */}
                       {item.analysis_data.feeding_recommendations && (
@@ -287,7 +335,7 @@ export default function FeedingAdvicePage() {
                   {item.daily_feed_cost && (
                     <div className="mb-2">
                       <span className="text-sm text-gray-600">
-                        <strong>Daily Feed Cost:</strong> ৳{parseFloat(item.daily_feed_cost).toFixed(2)}
+                        <strong>Daily Feed Cost:</strong> ৳{parseFloat(item.daily_feed_cost).toFixed(4)}
                       </span>
                     </div>
                   )}

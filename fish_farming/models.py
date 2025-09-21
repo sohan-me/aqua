@@ -55,7 +55,8 @@ class Pond(models.Model):
 
 class Species(models.Model):
     """Fish species model"""
-    name = models.CharField(max_length=100, unique=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='species')
+    name = models.CharField(max_length=100)
     scientific_name = models.CharField(max_length=150, blank=True, null=True)
     description = models.TextField(blank=True)
     optimal_temp_min = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
@@ -67,6 +68,7 @@ class Species(models.Model):
     class Meta:
         ordering = ['name']
         verbose_name_plural = 'Species'
+        unique_together = ['user', 'name']
     
     def __str__(self):
         return self.name
@@ -93,8 +95,8 @@ class Stocking(models.Model):
         return f"{self.pond.name} - {self.species.name} ({self.date})"
     
     def save(self, *args, **kwargs):
-        # Auto-calculate pieces_per_kg if pcs and total_weight_kg are provided and pieces_per_kg is not already set
-        if self.pcs and self.total_weight_kg and self.total_weight_kg > 0 and not self.pieces_per_kg:
+        # Auto-calculate pieces_per_kg if pcs and total_weight_kg are provided
+        if self.pcs and self.total_weight_kg and self.total_weight_kg > 0:
             self.pieces_per_kg = self.pcs / self.total_weight_kg
         
         # Auto-calculate initial_avg_weight_kg if we have both pcs and total_weight_kg
@@ -787,6 +789,22 @@ class FeedingAdvice(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='feeding_advice')
     date = models.DateField()
     
+    # Medical diagnostic integration
+    medical_diagnostics = models.ManyToManyField(
+        'MedicalDiagnostic', 
+        blank=True, 
+        related_name='feeding_advice',
+        help_text="Related medical diagnostics that influenced this feeding advice"
+    )
+    medical_considerations = models.TextField(
+        blank=True, 
+        help_text="Medical considerations and adjustments made to feeding advice"
+    )
+    medical_warnings = models.JSONField(
+        default=list, 
+        help_text="Medical warnings and recommendations for this feeding advice"
+    )
+    
     # Fish data
     estimated_fish_count = models.PositiveIntegerField(help_text="Estimated number of fish in pond")
     average_fish_weight_kg = models.DecimalField(max_digits=15, decimal_places=10, default=0, help_text="Average fish weight in kg")
@@ -922,4 +940,51 @@ class SurvivalRate(models.Model):
         # Calculate total mortality and harvested
         self.total_mortality = self.initial_stocked - self.current_alive - self.total_harvested
         
+        super().save(*args, **kwargs)
+
+
+class MedicalDiagnostic(models.Model):
+    """Medical diagnostic results for fish diseases"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='medical_diagnostics')
+    pond = models.ForeignKey(Pond, on_delete=models.CASCADE, related_name='medical_diagnostics')
+    
+    # Disease information
+    disease_name = models.CharField(max_length=200, help_text="Possible Disease")
+    confidence_percentage = models.DecimalField(
+        max_digits=5, 
+        decimal_places=2, 
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text="Confidence percentage (0-100)"
+    )
+    
+    # Treatment information
+    recommended_treatment = models.TextField(help_text="Recommended Treatment")
+    dosage_application = models.TextField(help_text="Dosage and Application")
+    
+    # Additional information
+    selected_organs = models.JSONField(default=list, help_text="Selected organs for diagnosis")
+    selected_symptoms = models.JSONField(default=list, help_text="Selected symptoms for diagnosis")
+    notes = models.TextField(blank=True, help_text="Additional notes")
+    
+    # Status
+    is_applied = models.BooleanField(default=False, help_text="Whether treatment has been applied")
+    applied_at = models.DateTimeField(null=True, blank=True, help_text="When treatment was applied")
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = "Medical Diagnostic"
+        verbose_name_plural = "Medical Diagnostics"
+    
+    def __str__(self):
+        return f"{self.pond.name} - {self.disease_name} ({self.created_at.date()})"
+    
+    def save(self, *args, **kwargs):
+        # Set applied_at when is_applied becomes True
+        if self.is_applied and not self.applied_at:
+            from django.utils import timezone
+            self.applied_at = timezone.now()
         super().save(*args, **kwargs)

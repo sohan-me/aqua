@@ -4,7 +4,8 @@ from .models import (
     Pond, Species, Stocking, DailyLog, FeedType, Feed, SampleType, Sampling, 
     Mortality, Harvest, ExpenseType, IncomeType, Expense, Income,
     InventoryFeed, Treatment, Alert, Setting, FeedingBand, 
-    EnvAdjustment, KPIDashboard, FishSampling, FeedingAdvice, SurvivalRate
+    EnvAdjustment, KPIDashboard, FishSampling, FeedingAdvice, SurvivalRate,
+    MedicalDiagnostic
 )
 
 
@@ -16,9 +17,12 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class SpeciesSerializer(serializers.ModelSerializer):
+    user_username = serializers.CharField(source='user.username', read_only=True)
+    
     class Meta:
         model = Species
         fields = '__all__'
+        read_only_fields = ['user', 'created_at']
 
 
 class PondSerializer(serializers.ModelSerializer):
@@ -277,6 +281,31 @@ class FishSamplingSerializer(serializers.ModelSerializer):
         model = FishSampling
         fields = '__all__'
         read_only_fields = ['user', 'average_weight_kg', 'fish_per_kg', 'condition_factor', 'growth_rate_kg_per_day', 'biomass_difference_kg', 'created_at', 'updated_at']
+    
+    def validate(self, data):
+        """Custom validation to provide better error messages for unique constraint violations"""
+        pond = data.get('pond')
+        species = data.get('species')
+        date = data.get('date')
+        
+        # Check for existing fish sampling with same pond, species, and date
+        existing_sampling = FishSampling.objects.filter(
+            pond=pond,
+            species=species,
+            date=date
+        )
+        
+        # If updating, exclude the current instance
+        if self.instance:
+            existing_sampling = existing_sampling.exclude(id=self.instance.id)
+        
+        if existing_sampling.exists():
+            species_name = species.name if species else "Mixed species"
+            raise serializers.ValidationError({
+                'non_field_errors': [f'Fish sampling for {pond.name} - {species_name} on {date} already exists. Please choose a different date or update the existing record.']
+            })
+        
+        return data
 
 
 # Feeding Advice serializers
@@ -285,11 +314,18 @@ class FeedingAdviceSerializer(serializers.ModelSerializer):
     species_name = serializers.CharField(source='species.name', read_only=True)
     user_username = serializers.CharField(source='user.username', read_only=True)
     feed_type_name = serializers.CharField(source='feed_type.name', read_only=True)
+    medical_diagnostics_data = serializers.SerializerMethodField()
     
     class Meta:
         model = FeedingAdvice
         fields = '__all__'
         read_only_fields = ['user', 'total_biomass_kg', 'recommended_feed_kg', 'feeding_rate_percent', 'daily_feed_cost', 'created_at', 'updated_at']
+    
+    def get_medical_diagnostics_data(self, obj):
+        """Get related medical diagnostics data"""
+        from .models import MedicalDiagnostic
+        diagnostics = obj.medical_diagnostics.all()
+        return MedicalDiagnosticSerializer(diagnostics, many=True).data
 
 
 # Survival Rate serializers
@@ -301,3 +337,20 @@ class SurvivalRateSerializer(serializers.ModelSerializer):
         model = SurvivalRate
         fields = '__all__'
         read_only_fields = ['survival_rate_percent', 'total_mortality', 'total_survival_kg', 'created_at', 'updated_at']
+
+
+# Medical Diagnostic serializers
+class MedicalDiagnosticSerializer(serializers.ModelSerializer):
+    pond_name = serializers.CharField(source='pond.name', read_only=True)
+    pond_area = serializers.DecimalField(source='pond.area_decimal', max_digits=8, decimal_places=3, read_only=True)
+    pond_location = serializers.CharField(source='pond.location', read_only=True)
+    
+    class Meta:
+        model = MedicalDiagnostic
+        fields = '__all__'
+        read_only_fields = ['user', 'created_at', 'updated_at', 'applied_at']
+    
+    def create(self, validated_data):
+        # Automatically set the user from the request
+        validated_data['user'] = self.context['request'].user
+        return super().create(validated_data)

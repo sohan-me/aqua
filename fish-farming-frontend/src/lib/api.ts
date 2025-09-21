@@ -40,12 +40,31 @@ api.interceptors.response.use(
   }
 );
 
+// Pagination Types
+export interface PaginatedResponse<T> {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: T[];
+}
+
+export interface PaginationParams {
+  page?: number;
+  page_size?: number;
+}
+
 // API Types
 export interface Species {
   id: number;
+  user: number;
+  user_username: string;
   name: string;
   scientific_name: string;
   description: string;
+  optimal_temp_min?: number;
+  optimal_temp_max?: number;
+  optimal_ph_min?: number;
+  optimal_ph_max?: number;
   created_at: string;
 }
 
@@ -62,13 +81,32 @@ export interface Pond {
   user_username: string;
 }
 
+export interface MedicalDiagnostic {
+  id: number;
+  pond: number;
+  pond_name: string;
+  pond_area: string;
+  pond_location: string;
+  disease_name: string;
+  confidence_percentage: string;
+  recommended_treatment: string;
+  dosage_application: string;
+  selected_organs: any[];
+  selected_symptoms: any[];
+  notes: string;
+  is_applied: boolean;
+  applied_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Stocking {
   stocking_id: number;
   pond: number;
   species: number;
   date: string;
   pcs: number;
-  line_pcs_per_kg: string;
+  pieces_per_kg: string | null;
   initial_avg_weight_kg: string;
   notes: string;
   created_at: string;
@@ -161,7 +199,7 @@ export interface Mortality {
   pond: number;
   date: string;
   count: number;
-  avg_weight_g: string;
+  avg_weight_kg: string;
   cause: string;
   notes: string;
   created_at: string;
@@ -304,6 +342,9 @@ export interface FeedingAdvice {
   pond_name: string;
   user_username: string;
   feed_type_name: string | null;
+  medical_considerations: string;
+  medical_warnings: string[];
+  medical_diagnostics_data: MedicalDiagnostic[];
   analysis_data?: {
     fish_count_analysis: {
       total_stocked: number;
@@ -486,13 +527,15 @@ export interface Harvest {
   pond: number;
   date: string;
   total_weight_kg: string;
-  total_count: number;
-  avg_weight_g: string | null;
+  total_count: number | null;
+  pieces_per_kg: string | null;
   price_per_kg: string | null;
+  avg_weight_kg: string;
   total_revenue: string | null;
   notes: string;
   created_at: string;
   pond_name: string;
+  species_name: string;
 }
 
 export interface PondSummary {
@@ -553,14 +596,14 @@ export const apiService = {
   },
 
   // Species
-  getSpecies: () => api.get<Species[]>('/species/'),
+  getSpecies: (params?: PaginationParams) => api.get<PaginatedResponse<Species>>('/species/', { params }),
   getSpeciesById: (id: number) => api.get<Species>(`/species/${id}/`),
   createSpecies: (data: Partial<Species>) => api.post<Species>('/species/', data),
   updateSpecies: (id: number, data: Partial<Species>) => api.put<Species>(`/species/${id}/`, data),
   deleteSpecies: (id: number) => api.delete(`/species/${id}/`),
 
   // Ponds
-  getPonds: () => api.get<Pond[]>('/ponds/'),
+  getPonds: (params?: PaginationParams) => api.get<PaginatedResponse<Pond>>('/ponds/', { params }),
   getPondById: (id: number) => api.get<Pond>(`/ponds/${id}/`),
   getPondSummary: (id: number) => api.get<PondSummary>(`/ponds/${id}/summary/`),
   getPondFinancialSummary: (id: number) => api.get<FinancialSummary>(`/ponds/${id}/financial_summary/`),
@@ -569,14 +612,14 @@ export const apiService = {
   deletePond: (id: number) => api.delete(`/ponds/${id}/`),
 
   // Stocking
-  getStocking: () => api.get<Stocking[]>('/stocking/'),
+  getStocking: (params?: PaginationParams) => api.get<PaginatedResponse<Stocking>>('/stocking/', { params }),
   getStockingById: (id: number) => api.get<Stocking>(`/stocking/${id}/`),
   createStocking: (data: Partial<Stocking>) => api.post<Stocking>('/stocking/', data),
   updateStocking: (id: number, data: Partial<Stocking>) => api.put<Stocking>(`/stocking/${id}/`, data),
   deleteStocking: (id: number) => api.delete(`/stocking/${id}/`),
 
   // Daily Logs
-  getDailyLogs: () => api.get<DailyLog[]>('/daily-logs/'),
+  getDailyLogs: (params?: PaginationParams) => api.get<PaginatedResponse<DailyLog>>('/daily-logs/', { params }),
   getDailyLogById: (id: number) => api.get<DailyLog>(`/daily-logs/${id}/`),
   createDailyLog: (data: Partial<DailyLog>) => api.post<DailyLog>('/daily-logs/', data),
   updateDailyLog: (id: number, data: Partial<DailyLog>) => api.put<DailyLog>(`/daily-logs/${id}/`, data),
@@ -590,28 +633,28 @@ export const apiService = {
   deleteSampleType: (id: number) => api.delete(`/sample-types/${id}/`),
 
   // Water Quality Sampling
-  getSamplings: () => api.get<Sampling[]>('/sampling/'),
+  getSamplings: (params?: PaginationParams) => api.get<PaginatedResponse<Sampling>>('/sampling/', { params }),
   getSamplingById: (id: number) => api.get<Sampling>(`/sampling/${id}/`),
   createSampling: (data: Partial<Sampling>) => api.post<Sampling>('/sampling/', data),
   updateSampling: (id: number, data: Partial<Sampling>) => api.put<Sampling>(`/sampling/${id}/`, data),
   deleteSampling: (id: number) => api.delete(`/sampling/${id}/`),
 
   // Mortality Tracking
-  getMortalities: () => api.get<Mortality[]>('/mortality/'),
+  getMortalities: (params?: PaginationParams) => api.get<PaginatedResponse<Mortality>>('/mortality/', { params }),
   getMortalityById: (id: number) => api.get<Mortality>(`/mortality/${id}/`),
   createMortality: (data: Partial<Mortality>) => api.post<Mortality>('/mortality/', data),
   updateMortality: (id: number, data: Partial<Mortality>) => api.put<Mortality>(`/mortality/${id}/`, data),
   deleteMortality: (id: number) => api.delete(`/mortality/${id}/`),
 
   // Feed Types
-  getFeedTypes: () => api.get<FeedType[]>('/feed-types/'),
+  getFeedTypes: (params?: PaginationParams) => api.get<PaginatedResponse<FeedType>>('/feed-types/', { params }),
   getFeedTypeById: (id: number) => api.get<FeedType>(`/feed-types/${id}/`),
   createFeedType: (data: Partial<FeedType>) => api.post<FeedType>('/feed-types/', data),
   updateFeedType: (id: number, data: Partial<FeedType>) => api.put<FeedType>(`/feed-types/${id}/`, data),
   deleteFeedType: (id: number) => api.delete(`/feed-types/${id}/`),
 
   // Feeds
-  getFeeds: () => api.get<Feed[]>('/feeds/'),
+  getFeeds: (params?: PaginationParams) => api.get<PaginatedResponse<Feed>>('/feeds/', { params }),
   getFeedById: (id: number) => api.get<Feed>(`/feeds/${id}/`),
   createFeed: (data: Partial<Feed>) => api.post<Feed>('/feeds/', data),
   updateFeed: (id: number, data: Partial<Feed>) => api.put<Feed>(`/feeds/${id}/`, data),
@@ -632,21 +675,21 @@ export const apiService = {
   deleteFeedingBand: (id: number) => api.delete(`/feeding-bands/${id}/`),
 
   // Harvests
-  getHarvests: () => api.get<Harvest[]>('/harvests/'),
+  getHarvests: (params?: PaginationParams) => api.get<PaginatedResponse<Harvest>>('/harvests/', { params }),
   getHarvestById: (id: number) => api.get<Harvest>(`/harvests/${id}/`),
   createHarvest: (data: Partial<Harvest>) => api.post<Harvest>('/harvests/', data),
   updateHarvest: (id: number, data: Partial<Harvest>) => api.put<Harvest>(`/harvests/${id}/`, data),
   deleteHarvest: (id: number) => api.delete(`/harvests/${id}/`),
 
   // Expenses
-  getExpenses: () => api.get<Expense[]>('/expenses/'),
+  getExpenses: (params?: PaginationParams) => api.get<PaginatedResponse<Expense>>('/expenses/', { params }),
   getExpenseById: (id: number) => api.get<Expense>(`/expenses/${id}/`),
   createExpense: (data: Partial<Expense>) => api.post<Expense>('/expenses/', data),
   updateExpense: (id: number, data: Partial<Expense>) => api.put<Expense>(`/expenses/${id}/`, data),
   deleteExpense: (id: number) => api.delete(`/expenses/${id}/`),
 
   // Income
-  getIncomes: () => api.get<Income[]>('/incomes/'),
+  getIncomes: (params?: PaginationParams) => api.get<PaginatedResponse<Income>>('/incomes/', { params }),
   getIncomeById: (id: number) => api.get<Income>(`/incomes/${id}/`),
   createIncome: (data: Partial<Income>) => api.post<Income>('/incomes/', data),
   updateIncome: (id: number, data: Partial<Income>) => api.put<Income>(`/incomes/${id}/`, data),
@@ -672,7 +715,7 @@ export const apiService = {
   resolveAlert: (id: number) => api.post(`/alerts/${id}/resolve/`),
 
   // Fish Sampling
-  getFishSampling: () => api.get<FishSampling[]>('/fish-sampling/'),
+  getFishSampling: (params?: PaginationParams) => api.get<PaginatedResponse<FishSampling>>('/fish-sampling/', { params }),
   getFishSamplingById: (id: number) => api.get<FishSampling>(`/fish-sampling/${id}/`),
   createFishSampling: (data: Partial<FishSampling>) => api.post<FishSampling>('/fish-sampling/', data),
   updateFishSampling: (id: number, data: Partial<FishSampling>) => api.put<FishSampling>(`/fish-sampling/${id}/`, data),
@@ -685,7 +728,7 @@ export const apiService = {
   },
 
   // Feeding Advice
-  getFeedingAdvice: () => api.get<FeedingAdvice[]>('/feeding-advice/'),
+  getFeedingAdvice: (params?: PaginationParams) => api.get<PaginatedResponse<FeedingAdvice>>('/feeding-advice/', { params }),
   getFeedingAdviceById: (id: number) => api.get<FeedingAdvice>(`/feeding-advice/${id}/`),
   createFeedingAdvice: (data: Partial<FeedingAdvice>) => api.post<FeedingAdvice>('/feeding-advice/', data),
   generateFeedingAdvice: (data: { pond_id: number }) => api.post<FeedingAdvice>('/feeding-advice/generate_advice/', data),
@@ -698,5 +741,15 @@ export const apiService = {
   updateFeedingAdvice: (id: number, data: Partial<FeedingAdvice>) => api.put<FeedingAdvice>(`/feeding-advice/${id}/`, data),
   deleteFeedingAdvice: (id: number) => api.delete(`/feeding-advice/${id}/`),
   applyFeedingAdvice: (id: number) => api.post(`/feeding-advice/${id}/apply_advice/`),
+
+  // Medical Diagnostic
+  getMedicalDiagnostics: (params?: PaginationParams) => api.get<PaginatedResponse<MedicalDiagnostic>>('/medical-diagnostics/', { params }),
+  getMedicalDiagnosticById: (id: number) => api.get<MedicalDiagnostic>(`/medical-diagnostics/${id}/`),
+  createMedicalDiagnostic: (data: Partial<MedicalDiagnostic>) => api.post<MedicalDiagnostic>('/medical-diagnostics/', data),
+  updateMedicalDiagnostic: (id: number, data: Partial<MedicalDiagnostic>) => api.put<MedicalDiagnostic>(`/medical-diagnostics/${id}/`, data),
+  deleteMedicalDiagnostic: (id: number) => api.delete(`/medical-diagnostics/${id}/`),
+  applyTreatment: (id: number) => api.post(`/medical-diagnostics/${id}/apply_treatment/`),
+  getMedicalDiagnosticsByPond: (pondId: number) => api.get<MedicalDiagnostic[]>(`/medical-diagnostics/by_pond/?pond_id=${pondId}`),
+  getRecentMedicalDiagnostics: () => api.get<MedicalDiagnostic[]>('/medical-diagnostics/recent/'),
 
 };

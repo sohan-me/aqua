@@ -7,6 +7,8 @@ import {
   useUpdateIncomeType, 
   useDeleteIncomeType 
 } from '@/hooks/useApi';
+import { extractApiData } from '@/lib/utils';
+import { IncomeType } from '@/lib/api';
 import { 
   Plus, 
   Edit, 
@@ -21,7 +23,6 @@ import {
   Briefcase,
   MoreHorizontal
 } from 'lucide-react';
-import { toast } from 'sonner';
 
 export default function IncomeTypesPage() {
   const { data: incomeTypesData, isLoading } = useIncomeTypes();
@@ -29,7 +30,7 @@ export default function IncomeTypesPage() {
   const updateIncomeType = useUpdateIncomeType();
   const deleteIncomeType = useDeleteIncomeType();
 
-  const incomeTypes = incomeTypesData?.data || [];
+  const incomeTypes = extractApiData<IncomeType>(incomeTypesData);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [formData, setFormData] = useState({

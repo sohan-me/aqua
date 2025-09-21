@@ -1,8 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCreateStocking, usePonds, useSpecies } from '@/hooks/useApi';
+import { extractApiData } from '@/lib/utils';
+import { Pond, Species } from '@/lib/api';
 import { ArrowLeft, Save, X, Fish, Calculator, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
@@ -13,8 +15,8 @@ export default function NewStockingPage() {
   const { data: pondsData } = usePonds();
   const { data: speciesData } = useSpecies();
   
-  const ponds = pondsData?.data || [];
-  const species = speciesData?.data || [];
+  const ponds = extractApiData<Pond>(pondsData);
+  const species = extractApiData<Species>(speciesData);
 
   const [formData, setFormData] = useState({
     pond: '',
@@ -22,13 +24,44 @@ export default function NewStockingPage() {
     date: new Date().toISOString().split('T')[0],
     pcs: '',
     total_weight_kg: '',
+    pieces_per_kg: '',
+    avg_weight_grams: '',
     notes: ''
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isPiecesPerKgAutoCalculated, setIsPiecesPerKgAutoCalculated] = useState(false);
+
+  // Auto-calculate pieces per kg and average weight in grams when pieces and total weight are provided
+  useEffect(() => {
+    if (formData.pcs && formData.total_weight_kg) {
+      const pieces = parseFloat(formData.pcs);
+      const totalWeight = parseFloat(formData.total_weight_kg);
+      
+      if (pieces > 0 && totalWeight > 0) {
+        const calculatedPiecesPerKg = pieces / totalWeight;
+        const calculatedAvgWeightGrams = (totalWeight / pieces) * 1000; // Convert kg to grams
+        
+        setFormData(prev => ({
+          ...prev,
+          pieces_per_kg: calculatedPiecesPerKg.toFixed(4),
+          avg_weight_grams: calculatedAvgWeightGrams.toFixed(2)
+        }));
+        setIsPiecesPerKgAutoCalculated(true);
+      }
+    } else {
+      setIsPiecesPerKgAutoCalculated(false);
+    }
+  }, [formData.pcs, formData.total_weight_kg]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
+    
+    // If user manually changes pieces_per_kg, disable auto-calculation
+    if (name === 'pieces_per_kg') {
+      setIsPiecesPerKgAutoCalculated(false);
+    }
+    
     setFormData(prev => ({
       ...prev,
       [name]: value
@@ -46,6 +79,8 @@ export default function NewStockingPage() {
         date: formData.date,
         pcs: parseInt(formData.pcs),
         total_weight_kg: parseFloat(formData.total_weight_kg),
+        pieces_per_kg: parseFloat(formData.pieces_per_kg),
+        avg_weight_grams: parseFloat(formData.avg_weight_grams),
         notes: formData.notes
       };
 
@@ -87,7 +122,7 @@ export default function NewStockingPage() {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Stocking Information</h2>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <div>
               <label htmlFor="pond" className="block text-sm font-medium text-gray-700 mb-2">
                 Pond *
@@ -170,7 +205,7 @@ export default function NewStockingPage() {
                 placeholder="e.g., 1000"
               />
             </div>
-
+            
             <div>
               <label htmlFor="total_weight_kg" className="block text-sm font-medium text-gray-700 mb-2">
                 Total Weight (kg) *
@@ -181,7 +216,7 @@ export default function NewStockingPage() {
                 name="total_weight_kg"
                 required
                 min="0"
-                step="0.001"
+                step="0.0001"
                 value={formData.total_weight_kg}
                 onChange={handleInputChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
@@ -189,6 +224,23 @@ export default function NewStockingPage() {
               />
               <p className="text-xs text-gray-500 mt-1">Total weight of all fish in kilograms</p>
             </div>
+
+            <div>
+              <label htmlFor="avg_weight_grams" className="block text-sm font-medium text-gray-700 mb-2">
+                Average Weight per Fish (grams)
+              </label>
+              <input
+                type="number"
+                id="avg_weight_grams"
+                name="avg_weight_grams"
+                readOnly
+                value={formData.avg_weight_grams}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-600 cursor-not-allowed"
+                placeholder="Auto-calculated"
+              />
+              <p className="text-xs text-gray-500 mt-1">Automatically calculated from pieces and total weight</p>
+            </div>
+
           </div>
 
           <div className="mt-6">
@@ -208,13 +260,16 @@ export default function NewStockingPage() {
         </div>
 
         {/* Calculated Values Display */}
-        {(formData.pcs && formData.total_weight_kg) && (
+        {(formData.pcs && formData.total_weight_kg && formData.pieces_per_kg) && (
           <div className="bg-blue-50 rounded-lg border border-blue-200 p-6">
             <h3 className="text-lg font-semibold text-blue-900 mb-4 flex items-center">
               <Calculator className="h-5 w-5 mr-2" />
               Calculation Preview
+              {isPiecesPerKgAutoCalculated && (
+                <span className="ml-2 text-sm font-normal text-blue-600">(Auto-calculated)</span>
+              )}
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div className="bg-white rounded-md p-4 border border-blue-200">
                 <p className="text-sm font-medium text-blue-700">Total Weight</p>
                 <p className="text-2xl font-bold text-blue-900">
@@ -223,19 +278,26 @@ export default function NewStockingPage() {
               </div>
               <div className="bg-white rounded-md p-4 border border-blue-200">
                 <p className="text-sm font-medium text-blue-700">Pieces per kg</p>
-                <p className="text-2xl font-bold text-blue-900">
-                  {(parseInt(formData.pcs) / parseFloat(formData.total_weight_kg)).toFixed(4)} pcs/kg
+                <p className="text-xl font-bold text-blue-900">
+                  {parseFloat(formData.pieces_per_kg).toFixed(4)} pcs/kg
                 </p>
+                {isPiecesPerKgAutoCalculated && (
+                  <p className="text-xs text-blue-600 mt-1">Auto-calculated</p>
+                )}
               </div>
               <div className="bg-white rounded-md p-4 border border-blue-200">
                 <p className="text-sm font-medium text-blue-700">Average Weight per Fish</p>
-                <p className="text-2xl font-bold text-blue-900">
+                <p className="text-xl font-bold text-blue-900">
                   {(parseFloat(formData.total_weight_kg) / parseInt(formData.pcs)).toFixed(4)} kg
                 </p>
               </div>
+              
             </div>
             <p className="text-xs text-blue-600 mt-3">
-              * These values will be automatically calculated and saved
+              {isPiecesPerKgAutoCalculated 
+                ? '* Pieces per kg is automatically calculated from pieces ÷ total weight'
+                : '* These values will be saved as entered'
+              }
             </p>
           </div>
         )}

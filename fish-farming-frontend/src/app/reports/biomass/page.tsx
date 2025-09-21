@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { usePonds, useSpecies } from '@/hooks/useApi';
+import { Pond, Species } from '@/lib/api';
+import { extractApiData } from '@/lib/utils';
 import { 
   BarChart3, 
   Calendar, 
@@ -69,8 +71,8 @@ export default function BiomassReportPage() {
   const { data: pondsData } = usePonds();
   const { data: speciesData } = useSpecies();
   
-  const ponds = pondsData?.data || [];
-  const species = speciesData?.data || [];
+  const ponds = extractApiData<Pond>(pondsData);
+  const species = extractApiData<Species>(speciesData);
   
   const [filters, setFilters] = useState<BiomassFilters>({
     pondId: 'all',
@@ -91,7 +93,7 @@ export default function BiomassReportPage() {
       if (filters.startDate) params.append('start_date', filters.startDate);
       if (filters.endDate) params.append('end_date', filters.endDate);
 
-      const response = await fetch(`https://apipremiumagro.sascorporationbd.com/api/ fish-farming/fish-sampling/biomass_analysis/?${params}`, {
+      const response = await fetch(`https://apipremiumagro.sascorporationbd.com/api/fish-farming/fish-sampling/biomass_analysis/?${params}`, {
         headers: {
           'Authorization': `Token ${localStorage.getItem('authToken')}`,
         },

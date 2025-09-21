@@ -1,8 +1,9 @@
 'use client';
 
-import { formatDateTime } from '@/lib/utils';
+import { formatDateTime, extractApiData } from '@/lib/utils';
 import { AlertTriangle, DollarSign, Fish, Calendar } from 'lucide-react';
 import { useAlerts, useExpenses, useIncomes, useStocking, useHarvests, useDailyLogs } from '@/hooks/useApi';
+import { Alert, Expense, Income, Stocking, Harvest, DailyLog } from '@/lib/api';
 
 interface ActivityItem {
   id: string;
@@ -70,12 +71,12 @@ export function RecentActivity() {
   const { data: harvestsData } = useHarvests();
   const { data: dailyLogsData } = useDailyLogs();
 
-  const alerts = alertsData?.data || [];
-  const expenses = expensesData?.data || [];
-  const incomes = incomesData?.data || [];
-  const stockings = stockingData?.data || [];
-  const harvests = harvestsData?.data || [];
-  const dailyLogs = dailyLogsData?.data || [];
+  const alerts = extractApiData<Alert>(alertsData);
+  const expenses = extractApiData<Expense>(expensesData);
+  const incomes = extractApiData<Income>(incomesData);
+  const stockings = extractApiData<Stocking>(stockingData);
+  const harvests = extractApiData<Harvest>(harvestsData);
+  const dailyLogs = extractApiData<DailyLog>(dailyLogsData);
 
   // Helper function to safely convert to number
   const toNumber = (value: string | number | null | undefined): number => {
@@ -103,7 +104,7 @@ export function RecentActivity() {
       id: `expense-${expense.id}`,
       type: 'expense' as const,
       title: 'Expense Recorded',
-      description: `${expense.pond_name} - ৳${toNumber(expense.amount).toFixed(2)} for ${expense.expense_type_name}`,
+      description: `${expense.pond_name} - ৳${toNumber(expense.amount).toFixed(4)} for ${expense.expense_type_name}`,
       timestamp: expense.date
     })),
     // Recent incomes
@@ -111,7 +112,7 @@ export function RecentActivity() {
       id: `income-${income.id}`,
       type: 'income' as const,
       title: 'Income Recorded',
-      description: `${income.pond_name} - ৳${toNumber(income.amount).toFixed(2)} from ${income.income_type_name}`,
+      description: `${income.pond_name} - ৳${toNumber(income.amount).toFixed(4)} from ${income.income_type_name}`,
       timestamp: income.date
     })),
     // Recent harvests
@@ -119,7 +120,7 @@ export function RecentActivity() {
       id: `harvest-${harvest.id}`,
       type: 'harvest' as const,
       title: 'Harvest Completed',
-      description: `${harvest.pond_name} - ${toNumber(harvest.total_weight_kg).toFixed(1)} kg for ৳${toNumber(harvest.total_revenue).toFixed(2)}`,
+      description: `${harvest.pond_name} - ${toNumber(harvest.total_weight_kg).toFixed(1)} kg for ৳${toNumber(harvest.total_revenue).toFixed(4)}`,
       timestamp: harvest.date
     })),
     // Recent stockings

@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { useFcrAnalysis } from '@/hooks/useApi';
 import { usePonds } from '@/hooks/useApi';
 import { useSpecies } from '@/hooks/useApi';
-import { formatDate } from '@/lib/utils';
+import { Pond, Species } from '@/lib/api';
+import { formatDate, extractApiData } from '@/lib/utils';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -34,8 +35,8 @@ export default function FcrReportPage() {
   const { data: pondsData } = usePonds();
   const { data: speciesData } = useSpecies();
   
-  const ponds = pondsData?.data || [];
-  const species = speciesData?.data || [];
+  const ponds = extractApiData<Pond>(pondsData);
+  const species = extractApiData<Species>(speciesData);
 
   // Safe data access helpers - FCR analysis data is wrapped in 'data' property by useApiQuery
   const fcrSummary = fcrData?.data?.summary || {

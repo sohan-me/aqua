@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useStocking, useSpecies, usePonds, useDeleteStocking } from '@/hooks/useApi';
-import { formatDate, formatNumber } from '@/lib/utils';
-import { Fish, Plus, Package, Edit, Trash2, Eye } from 'lucide-react';
+import { Stocking, Species, Pond } from '@/lib/api';
+import { formatDate, formatNumber, extractApiData } from '@/lib/utils';
+import { Fish, Plus, Package, Edit, Trash2, Eye, Filter, X, Calendar } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 
@@ -13,9 +14,41 @@ export default function StockingPage() {
   const { data: pondsData } = usePonds();
   const deleteStocking = useDeleteStocking();
   
-  const stockings = stockingData?.data || [];
-  const species = speciesData?.data || [];
-  const ponds = pondsData?.data || [];
+  const stockings = extractApiData<Stocking>(stockingData);
+  const species = extractApiData<Species>(speciesData);
+  const ponds = extractApiData<Pond>(pondsData);
+
+  // Date range and pond filtering state
+  const [dateRange, setDateRange] = useState({
+    startDate: '',
+    endDate: ''
+  });
+  const [filterPond, setFilterPond] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Filter stockings based on date range and pond
+  const filteredStockings = useMemo(() => {
+    return stockings.filter(stocking => {
+      // Date range filtering
+      const stockingDate = new Date(stocking.date);
+      const startDate = dateRange.startDate ? new Date(dateRange.startDate) : null;
+      const endDate = dateRange.endDate ? new Date(dateRange.endDate) : null;
+
+      let dateMatch = true;
+      if (startDate && endDate) {
+        dateMatch = stockingDate >= startDate && stockingDate <= endDate;
+      } else if (startDate) {
+        dateMatch = stockingDate >= startDate;
+      } else if (endDate) {
+        dateMatch = stockingDate <= endDate;
+      }
+
+      // Pond filtering
+      const pondMatch = !filterPond || stocking.pond === parseInt(filterPond);
+
+      return dateMatch && pondMatch;
+    });
+  }, [stockings, dateRange, filterPond]);
 
   const handleDelete = async (id: number, pondName: string, speciesName: string) => {
     if (window.confirm(`Are you sure you want to delete the stocking record for ${speciesName} in ${pondName}? This action cannot be undone.`)) {
@@ -52,12 +85,106 @@ export default function StockingPage() {
         </Link>
       </div>
 
+      {/* Filter Section */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-2">
+            <Filter className="h-5 w-5 text-gray-400" />
+            <h3 className="text-lg font-medium text-gray-900">Filter Stocking Records</h3>
+          </div>
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            {showFilters ? 'Hide Filters' : 'Show Filters'}
+          </button>
+        </div>
+
+        {showFilters && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Start Date
+              </label>
+              <input
+                type="date"
+                value={dateRange.startDate}
+                onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500  text-gray-900 placeholder-gray-500 bg-white" 
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                End Date
+              </label>
+              <input
+                type="date"
+                value={dateRange.endDate}
+                onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500  text-gray-900 placeholder-gray-500 bg-white" 
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Filter by Pond
+              </label>
+              <select
+                value={filterPond}
+                onChange={(e) => setFilterPond(e.target.value)}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500  text-gray-900 placeholder-gray-500 bg-white"
+              >
+                <option value="">All Ponds</option>
+                {ponds.map((pond) => (
+                  <option key={pond.id} value={pond.id}>
+                    {pond.name} ({pond.area_decimal} decimal)
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-end">
+              <button
+                onClick={() => {
+                  setDateRange({ startDate: '', endDate: '' });
+                  setFilterPond('');
+                }}
+                className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                <X className="h-4 w-4 mr-2" />
+                Clear Filters
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Active Filters Summary */}
+        {(dateRange.startDate || dateRange.endDate || filterPond) && (
+          <div className="mt-4 p-3 bg-blue-50 rounded-md">
+            <div className="flex items-center">
+              <Filter className="h-4 w-4 text-blue-400 mr-2" />
+              <span className="text-sm text-blue-700">
+                Showing stocking records{' '}
+                {dateRange.startDate || dateRange.endDate ? (
+                  <>
+                    from{' '}
+                    {dateRange.startDate ? formatDate(dateRange.startDate) : 'beginning'} to{' '}
+                    {dateRange.endDate ? formatDate(dateRange.endDate) : 'now'}
+                  </>
+                ) : null}
+                {dateRange.startDate || dateRange.endDate ? ' and ' : ''}
+                {filterPond && `for Pond: ${ponds.find(p => p.id === parseInt(filterPond))?.name || 'Unknown'}`}
+                {' '}({filteredStockings.length} records)
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Summary Card */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-lg font-semibold text-gray-900">Total Stocking Records</h3>
-            <p className="text-3xl font-bold text-blue-600">{stockings.length}</p>
+            <p className="text-3xl font-bold text-blue-600">{filteredStockings.length}</p>
           </div>
           <div className="rounded-full bg-blue-100 p-3">
             <Package className="h-8 w-8 text-blue-600" />
@@ -66,7 +193,7 @@ export default function StockingPage() {
       </div>
 
       {/* Stocking List */}
-      {stockings.length === 0 ? (
+      {filteredStockings.length === 0 ? (
         <div className="text-center py-12">
           <Fish className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900">No stocking records</h3>
@@ -103,6 +230,9 @@ export default function StockingPage() {
                     Avg Weight
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Pieces per kg
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Total Weight
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -111,7 +241,7 @@ export default function StockingPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {stockings.map((stocking) => (
+                {filteredStockings.map((stocking) => (
                   <tr key={stocking.stocking_id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {formatDate(stocking.date)}
@@ -127,6 +257,9 @@ export default function StockingPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {formatNumber(parseFloat(stocking.initial_avg_weight_kg), 4)} kg
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {stocking.pieces_per_kg ? formatNumber(parseFloat(stocking.pieces_per_kg), 2) : 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600">
                       {formatNumber(parseFloat(stocking.total_weight_kg), 3)} kg

@@ -1,6 +1,8 @@
 'use client';
 
 import { usePonds, useFeedTypes, useFeedingAdviceById, useUpdateFeedingAdvice } from '@/hooks/useApi';
+import { extractApiData } from '@/lib/utils';
+import { Pond, FeedType } from '@/lib/api';
 import { Lightbulb, ArrowLeft, Calculator } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -21,8 +23,8 @@ export default function EditFeedingAdvicePage({ params }: PageProps) {
   const { data: feedTypesData } = useFeedTypes();
   const { data: advice, isLoading: adviceLoading } = useFeedingAdviceById(adviceId);
   const updateAdvice = useUpdateFeedingAdvice();
-  const ponds = pondsData?.data || [];
-  const feedTypes = feedTypesData?.data || [];
+  const ponds = extractApiData<Pond>(pondsData);
+  const feedTypes = extractApiData<FeedType>(feedTypesData);
   
   const [formData, setFormData] = useState({
     pond: '',
@@ -361,7 +363,7 @@ export default function EditFeedingAdvicePage({ params }: PageProps) {
               <div>
                 <p className="text-sm text-blue-700">Recommended Feed</p>
                 <p className="text-xl font-semibold text-blue-900">
-                  {preview.recommendedFeed.toFixed(2)} kg/day
+                  {preview.recommendedFeed.toFixed(4)} kg/day
                 </p>
               </div>
             </div>
@@ -369,7 +371,7 @@ export default function EditFeedingAdvicePage({ params }: PageProps) {
               <div className="mt-4">
                 <p className="text-sm text-blue-700">Daily Feed Cost</p>
                 <p className="text-xl font-semibold text-blue-900">
-                  ৳{preview.dailyCost.toFixed(2)}
+                  ৳{preview.dailyCost.toFixed(4)}
                 </p>
               </div>
             )}

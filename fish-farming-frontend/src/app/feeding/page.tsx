@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
 import { useFeeds, usePonds, useDeleteFeed, useFeedTypes } from '@/hooks/useApi';
-import { formatDate, formatNumber } from '@/lib/utils';
-import { Fish, Plus, Edit, Trash2, Eye, Clock, Package } from 'lucide-react';
+import { Feed, Pond, FeedType } from '@/lib/api';
+import { formatDate, extractApiData } from '@/lib/utils';
+import { Fish, Plus, Edit, Trash2, Eye, Package, Clock } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 
@@ -13,9 +13,8 @@ export default function FeedingPage() {
   const { data: feedTypesData } = useFeedTypes();
   const deleteFeed = useDeleteFeed();
   
-  const feeds = feedsData?.data || [];
-  const ponds = pondsData?.data || [];
-  const feedTypes = feedTypesData?.data || [];
+  const feeds = extractApiData<Feed>(feedsData);
+  const feedTypes = extractApiData<FeedType>(feedTypesData);
 
   const handleDelete = async (id: number, pondName: string, feedTypeName: string, date: string) => {
     if (window.confirm(`Are you sure you want to delete the feeding record for ${pondName} (${feedTypeName}) on ${formatDate(date)}? This action cannot be undone.`)) {
@@ -93,7 +92,7 @@ export default function FeedingPage() {
             <div>
               <h3 className="text-lg font-semibold text-gray-900">Total Feed Cost</h3>
               <p className="text-3xl font-bold text-blue-600">
-                ৳{feeds.reduce((sum, feed) => sum + parseFloat(feed.total_cost || '0'), 0).toFixed(2)}
+                ৳{feeds.reduce((sum, feed) => sum + parseFloat(feed.total_cost || '0'), 0).toFixed(4)}
               </p>
             </div>
             <div className="rounded-full bg-blue-100 p-3">
@@ -229,13 +228,13 @@ export default function FeedingPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                        {feed.amount_kg} kg
+                        {parseFloat(feed.amount_kg).toFixed(4)} kg
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {feed.total_cost ? (
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                          ৳{parseFloat(feed.total_cost).toFixed(2)}
+                          ৳{parseFloat(feed.total_cost).toFixed(4)}
                         </span>
                       ) : (
                         <span className="text-gray-400">N/A</span>

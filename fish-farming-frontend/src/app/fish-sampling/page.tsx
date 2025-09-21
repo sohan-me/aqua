@@ -1,47 +1,54 @@
 'use client';
 
-import { useFishSampling, useDeleteFishSampling } from '@/hooks/useApi';
-import { formatDate } from '@/lib/utils';
-import { Scale, Plus, Eye, Edit, Trash2, Calendar, BarChart3 } from 'lucide-react';
+import { useFishSampling, useDeleteFishSampling, useSpecies, usePonds } from '@/hooks/useApi';
+import { Pond, Species } from '@/lib/api';
+import { formatDate, extractApiData } from '@/lib/utils';
+import { Scale, Plus, Eye, Edit, Trash2, Calendar, X } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
+import Pagination from '@/components/Pagination';
 
 export default function FishSamplingPage() {
-  const { data: samplingData, isLoading } = useFishSampling();
-  const deleteSampling = useDeleteFishSampling();
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [filterPond, setFilterPond] = useState('all');
-  const [biomassSummary, setBiomassSummary] = useState<any>(null);
+  const [filterSpecies, setFilterSpecies] = useState('all');
   
-  const samplings = samplingData?.data || [];
+  // Call API without parameters since it returns all data
+  const { data: samplingData, isLoading } = useFishSampling();
+  console.log(samplingData);
+  const { data: speciesData } = useSpecies();
+  const { data: pondsData } = usePonds();
+  const deleteSampling = useDeleteFishSampling();
   
-  const filteredSamplings = filterPond === 'all' 
-    ? samplings 
-    : samplings.filter(sampling => sampling.pond.toString() === filterPond);
-
-  // Fetch biomass summary
+  // Handle both array and paginated response formats
+  const rawData = samplingData?.data;
+  const allSamplings = Array.isArray(rawData) ? rawData : (rawData as any)?.results || [];
+  console.log(allSamplings);
+  
+  // Apply client-side filtering
+  const filteredSamplings = allSamplings.filter((sampling: any) => {
+    const pondMatch = filterPond === 'all' || sampling.pond.toString() === filterPond;
+    const speciesMatch = filterSpecies === 'all' || sampling.species?.toString() === filterSpecies;
+    return pondMatch && speciesMatch;
+  });
+  
+  // Apply client-side pagination
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
+  const samplings = filteredSamplings.slice(startIndex, endIndex);
+  
+  const totalItems = filteredSamplings.length;
+  const totalPages = Math.ceil(totalItems / pageSize);
+  const species = extractApiData<Species>(speciesData);
+  const ponds = extractApiData<Pond>(pondsData);
+  
+  // Reset to first page when filters change
   useEffect(() => {
-    const fetchBiomassSummary = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        const response = await fetch('/api/fish-farming/fish-sampling/biomass_analysis/', {
-          headers: {
-            'Authorization': `Token ${token}`,
-            'Content-Type': 'application/json',
-          },
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          setBiomassSummary(data);
-        }
-      } catch (error) {
-        console.error('Failed to fetch biomass summary:', error);
-      }
-    };
+    setCurrentPage(1);
+  }, [filterPond, filterSpecies]);
 
-    fetchBiomassSummary();
-  }, [samplings]);
 
   const handleDelete = async (id: number) => {
     if (window.confirm('Are you sure you want to delete this fish sampling record?')) {
@@ -63,10 +70,10 @@ export default function FishSamplingPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="md:flex justify-between items-center space-y-4 md:space-y-0">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Fish Sampling</h1>
-          <p className="text-gray-600">Monitor fish growth and health through regular sampling</p>
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Fish Sampling</h1>
+          <p className="text-sm md:text-base text-gray-600">Monitor fish growth and health through regular sampling</p>
         </div>
         <Link
           href="/fish-sampling/new"
@@ -80,101 +87,81 @@ export default function FishSamplingPage() {
       {/* Filter */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
         <div className="flex items-center space-x-4">
-          <Scale className="h-5 w-5 text-gray-400" />
-          <select
-            value={filterPond}
-            onChange={(e) => setFilterPond(e.target.value)}
-            className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="all">All Ponds</option>
-            {Array.from(new Set(samplings.map(s => s.pond_name))).map(pondName => (
-              <option key={pondName} value={samplings.find(s => s.pond_name === pondName)?.pond}>
-                {pondName}
-              </option>
-            ))}
-          </select>
+          <Scale className="h-5 w-5 text-gray-400 hidden md:block" />
+          <div className="md:flex items-center space-x-4 space-y-4 md:space-y-0 w-full">
+            <div className="w-full">
+              {/* <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Pond</label> */}
+              <select
+                value={filterPond}
+                onChange={(e) => setFilterPond(e.target.value)}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="all">All Ponds</option>
+                {ponds.map((pond) => (
+                  <option key={pond.id} value={pond.id}>
+                    {pond.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="w-full">
+              {/* <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Species</label> */}
+              <select
+                value={filterSpecies}
+                onChange={(e) => setFilterSpecies(e.target.value)}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="all">All Species</option>
+                {species.map(speciesItem => (
+                  <option key={speciesItem.id} value={speciesItem.id}>
+                    {speciesItem.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-end w-full">
+              <button
+                onClick={() => {
+                  setFilterPond('all');
+                  setFilterSpecies('all');
+                }}
+                className="w-full inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                <X className="h-4 w-4 mr-1" />
+                Clear Filters
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Biomass Summary */}
-      {biomassSummary && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center mb-4">
-            <BarChart3 className="h-6 w-6 text-indigo-600 mr-2" />
-            <h2 className="text-lg font-semibold text-gray-900">Current Biomass Summary</h2>
+      {/* Active Filters Summary */}
+      {(filterPond !== 'all' || filterSpecies !== 'all') && (
+        <div className="bg-blue-50 rounded-lg border border-blue-200 p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <span className="text-sm font-medium text-blue-800">Active Filters:</span>
+              {filterPond !== 'all' && (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                  Pond: {ponds.find(p => p.id.toString() === filterPond)?.name}
+                </span>
+              )}
+              {filterSpecies !== 'all' && (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                  Species: {species.find(s => s.id.toString() === filterSpecies)?.name}
+                </span>
+              )}
+            </div>
+            <span className="text-sm text-blue-600">
+              Showing {samplings.length} of {totalItems} filtered records
+            </span>
           </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-indigo-50 rounded-lg p-4">
-              <div className="flex items-center">
-                <Scale className="h-8 w-8 text-indigo-600" />
-                <div className="ml-3">
-                  <h3 className="text-sm font-medium text-indigo-600">Total Current Biomass</h3>
-                  <p className="text-2xl font-bold text-indigo-900">
-                    {biomassSummary.summary?.total_current_biomass_kg?.toFixed(1) || '0.0'} kg
-                  </p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-green-50 rounded-lg p-4">
-              <div className="flex items-center">
-                <BarChart3 className="h-8 w-8 text-green-600" />
-                <div className="ml-3">
-                  <h3 className="text-sm font-medium text-green-600">Total Growth</h3>
-                  <p className="text-2xl font-bold text-green-900">
-                    {biomassSummary.summary?.total_biomass_gain_kg?.toFixed(1) || '0.0'} kg
-                  </p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-blue-50 rounded-lg p-4">
-              <div className="flex items-center">
-                <Calendar className="h-8 w-8 text-blue-600" />
-                <div className="ml-3">
-                  <h3 className="text-sm font-medium text-blue-600">Total Samplings</h3>
-                  <p className="text-2xl font-bold text-blue-900">
-                    {biomassSummary.summary?.total_samplings || 0}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          {/* Detailed breakdown */}
-          {biomassSummary.pond_species_biomass && Object.keys(biomassSummary.pond_species_biomass).length > 0 && (
-            <div className="mt-6">
-              <h3 className="text-md font-semibold text-gray-900 mb-3">Biomass by Pond & Species</h3>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pond - Species</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Initial (kg)</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Growth (kg)</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Total (kg)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {Object.entries(biomassSummary.pond_species_biomass).map(([pondSpecies, data]: [string, any]) => (
-                      <tr key={pondSpecies}>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{pondSpecies}</td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600">{data.initial_biomass.toFixed(1)}</td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-green-600">{data.growth_biomass.toFixed(1)}</td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm font-bold text-indigo-600">{data.current_biomass.toFixed(1)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
+
       {/* Sampling Records */}
-      {filteredSamplings.length === 0 ? (
+      {samplings.length === 0 ? (
         <div className="text-center py-12">
           <Scale className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900">No fish sampling records</h3>
@@ -191,7 +178,7 @@ export default function FishSamplingPage() {
         </div>
       ) : (
         <div className="grid gap-6">
-          {filteredSamplings.map((sampling) => (
+          {samplings.map((sampling: any) => (
             <div key={sampling.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
@@ -200,6 +187,11 @@ export default function FishSamplingPage() {
                     <h3 className="text-lg font-semibold text-gray-900">
                       {sampling.pond_name}
                     </h3>
+                    {sampling.species_name && (
+                      <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                        {sampling.species_name}
+                      </span>
+                    )}
                     <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
                       {sampling.sample_size} fish sampled
                     </span>
@@ -289,6 +281,19 @@ export default function FishSamplingPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Pagination */}
+      {totalItems > 0 && (
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          itemsPerPage={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={setPageSize}
+          showPageSizeSelector={true}
+        />
       )}
     </div>
   );
