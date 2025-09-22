@@ -15,9 +15,9 @@ export default function NewExpensePage() {
   const { data: expenseTypesData } = useExpenseTypes();
   const { data: speciesData } = useSpecies();
   
-  const ponds = extractApiData<Pond>(pondsData);
-  const expenseTypes = extractApiData<ExpenseType>(expenseTypesData);
-  const species = extractApiData<Species>(speciesData);
+  const ponds = extractApiData<Pond>(pondsData?.data);
+  const expenseTypes = extractApiData<ExpenseType>(expenseTypesData?.data);
+  const species = extractApiData<Species>(speciesData?.data);
 
   const [formData, setFormData] = useState({
     pond: '',

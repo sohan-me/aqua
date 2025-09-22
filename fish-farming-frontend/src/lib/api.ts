@@ -69,9 +69,9 @@ export interface Species {
 }
 
 export interface Pond {
-  id: number;
+  pond_id: number;
   name: string;
-  area_decimal: string;
+  water_area_decimal: string;
   depth_ft: string;
   volume_m3: string;
   location: string;
@@ -115,15 +115,6 @@ export interface Stocking {
   total_weight_kg: string;
 }
 
-export interface SampleType {
-  id: number;
-  name: string;
-  description: string;
-  icon: string;
-  color: string;
-  is_active: boolean;
-  created_at: string;
-}
 
 export interface Sampling {
   id: number;
@@ -437,6 +428,17 @@ export interface BiomassAnalysis {
     total_samplings: number;
     samplings_with_biomass_data: number;
   };
+  load_analysis: {
+    total_area_sqm: number;
+    overall_load_kg_per_sqm: number;
+    pond_loads: Array<{
+      pond_name: string;
+      area_sqm: number;
+      area_decimal: number;
+      total_biomass_kg: number;
+      load_kg_per_sqm: number;
+    }>;
+  };
   pond_summary: Record<string, {
     total_gain: number;
     total_loss: number;
@@ -570,6 +572,215 @@ export interface FinancialSummary {
   }>;
 }
 
+// Business Management Types
+export interface Customer {
+  customer_id: number;
+  user: number;
+  name: string;
+  type: 'internal_pond' | 'external_buyer';
+  contact_person: string;
+  phone: string;
+  email: string;
+  address: string;
+  status: 'active' | 'inactive';
+  notes: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PaymentTerms {
+  terms_id: number;
+  name: string;
+  day_count: number;
+  description: string;
+  created_at: string;
+}
+
+export interface VendorCategory {
+  vendor_category_id: number;
+  name: string;
+  description: string;
+  parent_id: number | null;
+  created_at: string;
+}
+
+export interface Vendor {
+  vendor_id: number;
+  user: number;
+  name: string;
+  contact_person: string;
+  phone: string;
+  email: string;
+  address: string;
+  terms_default: number | null;
+  terms_default_name?: string;
+  memo: string;
+  active: boolean;
+  created_at: string;
+  vendor_categories: Array<{
+    vendor_category_id: number;
+    name: string;
+  }>;
+}
+
+export interface Item {
+  item_id: number;
+  user: number;
+  name: string;
+  item_type: string;
+  uom: string;
+  income_account: number | null;
+  expense_account: number | null;
+  asset_account: number | null;
+  is_species: boolean;
+  is_feed: boolean;
+  is_medicine: boolean;
+  description: string;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+  user_username: string;
+  income_account_name: string | null;
+  expense_account_name: string | null;
+  asset_account_name: string | null;
+}
+
+export interface Bill {
+  bill_id: number;
+  user: number;
+  vendor_id: number;
+  vendor_name?: string;
+  bill_number: string;
+  bill_date: string;
+  due_date: string;
+  terms_id: number;
+  terms_name?: string;
+  memo: string;
+  total_amount: number;
+  paid_amount: number;
+  balance_due: number;
+  status: 'draft' | 'open' | 'paid' | 'cancelled';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Invoice {
+  invoice_id: number;
+  user: number;
+  customer_id: number;
+  customer_name?: string;
+  invoice_number: string;
+  invoice_date: string;
+  due_date: string;
+  terms_id: number;
+  terms_name?: string;
+  memo: string;
+  total_amount: number;
+  paid_amount: number;
+  balance_due: number;
+  status: 'draft' | 'open' | 'paid' | 'cancelled';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InventoryTransaction {
+  transaction_id: number;
+  user: number;
+  transaction_type: 'in' | 'out' | 'transfer';
+  transaction_date: string;
+  reference: string;
+  memo: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StockingEvent {
+  stocking_id: number;
+  user: number;
+  pond_id: number;
+  pond_name?: string;
+  event_date: string;
+  supplier_vendor_id: number | null;
+  supplier_vendor_name?: string;
+  line_summary: string;
+  memo: string;
+  created_at: string;
+  total_fish: number;
+  total_weight: number;
+  total_cost: number;
+}
+
+export interface StockingLine {
+  stocking_line_id: number;
+  stocking_id: number;
+  item_id: number;
+  item_name?: string;
+  qty_pcs: number;
+  pcs_per_kg_at_stocking: number;
+  weight_kg: number | null;
+  unit_cost: number | null;
+  total_cost: number;
+}
+
+export interface FeedingEvent {
+  feeding_event_id: number;
+  user: number;
+  pond_id: number;
+  pond_name?: string;
+  event_date: string;
+  memo: string;
+  created_at: string;
+  total_feed_kg: number;
+  total_cost: number;
+}
+
+export interface MedicineEvent {
+  medicine_event_id: number;
+  user: number;
+  pond_id: number;
+  pond_name?: string;
+  event_date: string;
+  memo: string;
+  created_at: string;
+  total_cost: number;
+}
+
+export interface OtherPondEvent {
+  other_event_id: number;
+  user: number;
+  pond_id: number;
+  pond_name?: string;
+  event_date: string;
+  event_type: string;
+  memo: string;
+  created_at: string;
+}
+
+export interface Employee {
+  employee_id: number;
+  user: number;
+  name: string;
+  position: string;
+  hire_date: string;
+  salary: number;
+  status: 'active' | 'inactive';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PayrollRun {
+  payroll_run_id: number;
+  user: number;
+  run_date: string;
+  period_start: string;
+  period_end: string;
+  total_gross: number;
+  total_deductions: number;
+  total_net: number;
+  status: 'draft' | 'approved' | 'paid';
+  created_at: string;
+}
+
 // API Functions
 export const apiService = {
   // Authentication
@@ -625,12 +836,6 @@ export const apiService = {
   updateDailyLog: (id: number, data: Partial<DailyLog>) => api.put<DailyLog>(`/daily-logs/${id}/`, data),
   deleteDailyLog: (id: number) => api.delete(`/daily-logs/${id}/`),
 
-  // Sample Types
-  getSampleTypes: () => api.get<SampleType[]>('/sample-types/'),
-  getSampleTypeById: (id: number) => api.get<SampleType>(`/sample-types/${id}/`),
-  createSampleType: (data: Partial<SampleType>) => api.post<SampleType>('/sample-types/', data),
-  updateSampleType: (id: number, data: Partial<SampleType>) => api.put<SampleType>(`/sample-types/${id}/`, data),
-  deleteSampleType: (id: number) => api.delete(`/sample-types/${id}/`),
 
   // Water Quality Sampling
   getSamplings: (params?: PaginationParams) => api.get<PaginatedResponse<Sampling>>('/sampling/', { params }),
@@ -751,5 +956,106 @@ export const apiService = {
   applyTreatment: (id: number) => api.post(`/medical-diagnostics/${id}/apply_treatment/`),
   getMedicalDiagnosticsByPond: (pondId: number) => api.get<MedicalDiagnostic[]>(`/medical-diagnostics/by_pond/?pond_id=${pondId}`),
   getRecentMedicalDiagnostics: () => api.get<MedicalDiagnostic[]>('/medical-diagnostics/recent/'),
+
+  // Business Management APIs
+  // Customers
+  getCustomers: (params?: PaginationParams) => api.get<PaginatedResponse<Customer>>('/customers/', { params }),
+  getCustomerById: (id: number) => api.get<Customer>(`/customers/${id}/`),
+  createCustomer: (data: Partial<Customer>) => api.post<Customer>('/customers/', data),
+  updateCustomer: (id: number, data: Partial<Customer>) => api.put<Customer>(`/customers/${id}/`, data),
+  deleteCustomer: (id: number) => api.delete(`/customers/${id}/`),
+
+  // Payment Terms
+  getPaymentTerms: () => api.get<PaymentTerms[]>('/payment-terms/'),
+  getPaymentTermById: (id: number) => api.get<PaymentTerms>(`/payment-terms/${id}/`),
+  createPaymentTerm: (data: Partial<PaymentTerms>) => api.post<PaymentTerms>('/payment-terms/', data),
+  updatePaymentTerm: (id: number, data: Partial<PaymentTerms>) => api.put<PaymentTerms>(`/payment-terms/${id}/`, data),
+  deletePaymentTerm: (id: number) => api.delete(`/payment-terms/${id}/`),
+
+  // Vendors
+  getVendors: (params?: PaginationParams) => api.get<PaginatedResponse<Vendor>>('/vendors/', { params }),
+  getVendorById: (id: number) => api.get<Vendor>(`/vendors/${id}/`),
+  createVendor: (data: Partial<Vendor>) => api.post<Vendor>('/vendors/', data),
+  updateVendor: (id: number, data: Partial<Vendor>) => api.put<Vendor>(`/vendors/${id}/`, data),
+  deleteVendor: (id: number) => api.delete(`/vendors/${id}/`),
+
+  // Vendor Categories
+  getVendorCategories: () => api.get<VendorCategory[]>('/vendor-categories/'),
+  getVendorCategoryById: (id: number) => api.get<VendorCategory>(`/vendor-categories/${id}/`),
+  createVendorCategory: (data: Partial<VendorCategory>) => api.post<VendorCategory>('/vendor-categories/', data),
+  updateVendorCategory: (id: number, data: Partial<VendorCategory>) => api.put<VendorCategory>(`/vendor-categories/${id}/`, data),
+  deleteVendorCategory: (id: number) => api.delete(`/vendor-categories/${id}/`),
+
+  // Items
+  getItems: (params?: PaginationParams) => api.get<PaginatedResponse<Item>>('/items/', { params }),
+  getItemById: (id: number) => api.get<Item>(`/items/${id}/`),
+  createItem: (data: Partial<Item>) => api.post<Item>('/items/', data),
+  updateItem: (id: number, data: Partial<Item>) => api.put<Item>(`/items/${id}/`, data),
+  deleteItem: (id: number) => api.delete(`/items/${id}/`),
+
+  // Bills
+  getBills: (params?: PaginationParams) => api.get<PaginatedResponse<Bill>>('/bills/', { params }),
+  getBillById: (id: number) => api.get<Bill>(`/bills/${id}/`),
+  createBill: (data: Partial<Bill>) => api.post<Bill>('/bills/', data),
+  updateBill: (id: number, data: Partial<Bill>) => api.put<Bill>(`/bills/${id}/`, data),
+  deleteBill: (id: number) => api.delete(`/bills/${id}/`),
+
+  // Invoices
+  getInvoices: (params?: PaginationParams) => api.get<PaginatedResponse<Invoice>>('/invoices/', { params }),
+  getInvoiceById: (id: number) => api.get<Invoice>(`/invoices/${id}/`),
+  createInvoice: (data: Partial<Invoice>) => api.post<Invoice>('/invoices/', data),
+  updateInvoice: (id: number, data: Partial<Invoice>) => api.put<Invoice>(`/invoices/${id}/`, data),
+  deleteInvoice: (id: number) => api.delete(`/invoices/${id}/`),
+
+  // Inventory Transactions
+  getInventoryTransactions: (params?: PaginationParams) => api.get<PaginatedResponse<InventoryTransaction>>('/inventory-transactions/', { params }),
+  getInventoryTransactionById: (id: number) => api.get<InventoryTransaction>(`/inventory-transactions/${id}/`),
+  createInventoryTransaction: (data: Partial<InventoryTransaction>) => api.post<InventoryTransaction>('/inventory-transactions/', data),
+  updateInventoryTransaction: (id: number, data: Partial<InventoryTransaction>) => api.put<InventoryTransaction>(`/inventory-transactions/${id}/`, data),
+  deleteInventoryTransaction: (id: number) => api.delete(`/inventory-transactions/${id}/`),
+
+  // Stocking Events
+  getStockingEvents: (params?: PaginationParams) => api.get<PaginatedResponse<StockingEvent>>('/stocking-events/', { params }),
+  getStockingEventById: (id: number) => api.get<StockingEvent>(`/stocking-events/${id}/`),
+  createStockingEvent: (data: Partial<StockingEvent>) => api.post<StockingEvent>('/stocking-events/', data),
+  updateStockingEvent: (id: number, data: Partial<StockingEvent>) => api.put<StockingEvent>(`/stocking-events/${id}/`, data),
+  deleteStockingEvent: (id: number) => api.delete(`/stocking-events/${id}/`),
+  getStockingEventLines: (id: number) => api.get<StockingLine[]>(`/stocking-events/${id}/lines/`),
+  addStockingEventLine: (id: number, data: Partial<StockingLine>) => api.post<StockingLine>(`/stocking-events/${id}/add_line/`, data),
+
+  // Feeding Events
+  getFeedingEvents: (params?: PaginationParams) => api.get<PaginatedResponse<FeedingEvent>>('/feeding-events/', { params }),
+  getFeedingEventById: (id: number) => api.get<FeedingEvent>(`/feeding-events/${id}/`),
+  createFeedingEvent: (data: Partial<FeedingEvent>) => api.post<FeedingEvent>('/feeding-events/', data),
+  updateFeedingEvent: (id: number, data: Partial<FeedingEvent>) => api.put<FeedingEvent>(`/feeding-events/${id}/`, data),
+  deleteFeedingEvent: (id: number) => api.delete(`/feeding-events/${id}/`),
+
+  // Medicine Events
+  getMedicineEvents: (params?: PaginationParams) => api.get<PaginatedResponse<MedicineEvent>>('/medicine-events/', { params }),
+  getMedicineEventById: (id: number) => api.get<MedicineEvent>(`/medicine-events/${id}/`),
+  createMedicineEvent: (data: Partial<MedicineEvent>) => api.post<MedicineEvent>('/medicine-events/', data),
+  updateMedicineEvent: (id: number, data: Partial<MedicineEvent>) => api.put<MedicineEvent>(`/medicine-events/${id}/`, data),
+  deleteMedicineEvent: (id: number) => api.delete(`/medicine-events/${id}/`),
+
+  // Other Pond Events
+  getOtherPondEvents: (params?: PaginationParams) => api.get<PaginatedResponse<OtherPondEvent>>('/other-pond-events/', { params }),
+  getOtherPondEventById: (id: number) => api.get<OtherPondEvent>(`/other-pond-events/${id}/`),
+  createOtherPondEvent: (data: Partial<OtherPondEvent>) => api.post<OtherPondEvent>('/other-pond-events/', data),
+  updateOtherPondEvent: (id: number, data: Partial<OtherPondEvent>) => api.put<OtherPondEvent>(`/other-pond-events/${id}/`, data),
+  deleteOtherPondEvent: (id: number) => api.delete(`/other-pond-events/${id}/`),
+
+  // Employees
+  getEmployees: (params?: PaginationParams) => api.get<PaginatedResponse<Employee>>('/employees/', { params }),
+  getEmployeeById: (id: number) => api.get<Employee>(`/employees/${id}/`),
+  createEmployee: (data: Partial<Employee>) => api.post<Employee>('/employees/', data),
+  updateEmployee: (id: number, data: Partial<Employee>) => api.put<Employee>(`/employees/${id}/`, data),
+  deleteEmployee: (id: number) => api.delete(`/employees/${id}/`),
+
+  // Payroll Runs
+  getPayrollRuns: (params?: PaginationParams) => api.get<PaginatedResponse<PayrollRun>>('/payroll-runs/', { params }),
+  getPayrollRunById: (id: number) => api.get<PayrollRun>(`/payroll-runs/${id}/`),
+  createPayrollRun: (data: Partial<PayrollRun>) => api.post<PayrollRun>('/payroll-runs/', data),
+  updatePayrollRun: (id: number, data: Partial<PayrollRun>) => api.put<PayrollRun>(`/payroll-runs/${id}/`, data),
+  deletePayrollRun: (id: number) => api.delete(`/payroll-runs/${id}/`),
 
 };

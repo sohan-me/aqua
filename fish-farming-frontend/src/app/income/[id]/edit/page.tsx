@@ -18,8 +18,8 @@ export default function EditIncomePage() {
   const { data: incomeTypesData } = useIncomeTypes();
   const updateIncome = useUpdateIncome();
   
-  const ponds = extractApiData<Pond>(pondsData);
-  const incomeTypes = extractApiData<IncomeType>(incomeTypesData);
+  const ponds = extractApiData<Pond>(pondsData?.data);
+  const incomeTypes = extractApiData<IncomeType>(incomeTypesData?.data);
 
   const [formData, setFormData] = useState({
     pond: '',

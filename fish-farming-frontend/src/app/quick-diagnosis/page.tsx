@@ -33,7 +33,7 @@ export default function QuickDiagnosisPage() {
 
   // Fetch real ponds data from API
   const { data: pondsData, isLoading: pondsLoading } = usePonds();
-  const ponds = extractApiData<Pond>(pondsData);
+  const ponds = extractApiData<Pond>(pondsData?.data);
 
   // Get all possible symptoms from medical data
   const allSymptoms = [
@@ -398,21 +398,21 @@ export default function QuickDiagnosisPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {ponds.map(pond => (
                   <Button
-                    key={pond.id}
-                    variant={selectedPond?.id === pond.id ? "default" : "outline"}
+                    key={pond.pond_id}
+                    variant={selectedPond?.pond_id === pond.pond_id ? "default" : "outline"}
                     onClick={() => setSelectedPond(pond)}
                     className={`h-auto p-4 flex flex-col items-start gap-2 text-left ${
-                      selectedPond?.id === pond.id 
+                      selectedPond?.pond_id === pond.pond_id 
                         ? 'bg-blue-600 hover:bg-blue-700 text-white' 
                         : 'bg-white hover:bg-gray-50 text-gray-800 border-gray-300'
                     }`}
                   >
-                    <div className={`font-semibold ${selectedPond?.id === pond.id ? 'text-white' : 'text-gray-800'}`}>{pond.name}</div>
-                    <div className={`text-sm flex items-center gap-1 ${selectedPond?.id === pond.id ? 'text-white opacity-90' : 'text-gray-700'}`}>
+                    <div className={`font-semibold ${selectedPond?.pond_id === pond.pond_id ? 'text-white' : 'text-gray-800'}`}>{pond.name}</div>
+                    <div className={`text-sm flex items-center gap-1 ${selectedPond?.pond_id === pond.pond_id ? 'text-white opacity-90' : 'text-gray-700'}`}>
                       <Fish className="h-3 w-3" />
-                      Area: {parseFloat(pond.area_decimal).toFixed(3)} decimel
+                      Area: {parseFloat(pond.water_area_decimal).toFixed(3)} decimal
                     </div>
-                    <div className={`text-sm flex items-center gap-1 ${selectedPond?.id === pond.id ? 'text-white opacity-90' : 'text-gray-700'}`}>
+                    <div className={`text-sm flex items-center gap-1 ${selectedPond?.pond_id === pond.pond_id ? 'text-white opacity-90' : 'text-gray-700'}`}>
                       <MapPin className="h-3 w-3" />
                       {pond.location || 'Location not specified'}
                     </div>

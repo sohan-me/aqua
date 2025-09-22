@@ -40,12 +40,12 @@ export default function ReportsPage() {
   const { data: stockingData } = useStocking();
   const { data: feedsData } = useFeeds();
 
-  const ponds = extractApiData<Pond>(pondsData);
-  const expenses = extractApiData<Expense>(expensesData);
-  const incomes = extractApiData<Income>(incomesData);
-  const harvests = extractApiData<Harvest>(harvestsData);
-  const stockings = extractApiData<Stocking>(stockingData);
-  const feeds = extractApiData<Feed>(feedsData);
+  const ponds = extractApiData<Pond>(pondsData?.data);
+  const expenses = extractApiData<Expense>(expensesData?.data);
+  const incomes = extractApiData<Income>(incomesData?.data);
+  const harvests = extractApiData<Harvest>(harvestsData?.data);
+  const stockings = extractApiData<Stocking>(stockingData?.data);
+  const feeds = extractApiData<Feed>(feedsData?.data);
 
   const [filters, setFilters] = useState<ReportFilters>({
     pondId: 'all',

@@ -18,8 +18,8 @@ export default function FeedingAdvicePage() {
   const [filterStatus, setFilterStatus] = useState('all');
   const [selectedPondForGeneration, setSelectedPondForGeneration] = useState('');
   
-  const advice = extractApiData<FeedingAdvice>(adviceData);
-  const ponds = extractApiData<Pond>(pondsData);
+  const advice = extractApiData<FeedingAdvice>(adviceData?.data);
+  const ponds = extractApiData<Pond>(pondsData?.data);
   
   const filteredAdvice = advice.filter(item => {
     const pondMatch = filterPond === 'all' || item.pond.toString() === filterPond;
@@ -87,7 +87,7 @@ export default function FeedingAdvicePage() {
             >
               <option value="">Select Pond *</option>
               {ponds.map((pond) => (
-                <option key={pond.id} value={pond.id}>
+                <option key={pond.pond_id} value={pond.pond_id}>
                   {pond.name}
                 </option>
               ))}

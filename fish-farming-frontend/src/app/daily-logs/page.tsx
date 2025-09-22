@@ -12,7 +12,7 @@ export default function DailyLogsPage() {
   const { data: pondsData } = usePonds();
   const deleteDailyLog = useDeleteDailyLog();
   
-  const dailyLogs = extractApiData<DailyLog>(dailyLogsData);
+  const dailyLogs = extractApiData<DailyLog>(dailyLogsData?.data);
 
   const handleDelete = async (id: number, pondName: string, date: string) => {
     if (window.confirm(`Are you sure you want to delete the daily log for ${pondName} on ${formatDate(date)}? This action cannot be undone.`)) {

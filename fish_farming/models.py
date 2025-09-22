@@ -3,16 +3,1020 @@ from django.contrib.auth.models import User
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db.models import Sum
 from decimal import Decimal
+from mptt.models import MPTTModel, TreeForeignKey
 
+
+# ===================== CORE MASTER DATA =====================
+
+class Customer(models.Model):
+    """Customer model - includes own ponds & 3rd-party buyers"""
+    CUSTOMER_TYPE_CHOICES = [
+        ('internal_pond', 'Internal Pond'),
+        ('external_buyer', 'External Buyer'),
+    ]
+    
+    customer_id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='customers')
+    name = models.CharField(max_length=200, help_text="e.g., Digonta, Mynuddin, Ashari-1, Ashari-2")
+    type = models.CharField(max_length=20, choices=CUSTOMER_TYPE_CHOICES)
+    contact_person = models.CharField(max_length=100, blank=True)
+    phone = models.CharField(max_length=50, blank=True)
+    email = models.EmailField(blank=True)
+    address = models.TextField(blank=True)
+    status = models.CharField(max_length=20, choices=[
+        ('active', 'Active'),
+        ('inactive', 'Inactive'),
+    ], default='active')
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['name']
+        unique_together = ['user', 'name']
+    
+    def __str__(self):
+        return f"{self.name} ({self.get_type_display()})"
+
+
+class PaymentTerms(models.Model):
+    """Payment terms for bills and invoices"""
+    terms_id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=100, unique=True, help_text="e.g., Net 30, Due on receipt")
+    day_count = models.PositiveIntegerField(help_text="Number of days for payment")
+    description = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['name']
+        verbose_name_plural = 'Payment Terms'
+    
+    def __str__(self):
+        return self.name
+
+
+class VendorCategory(MPTTModel):
+    """Vendor categories: Feed Company, Equipment Supplier, etc. - Hierarchical structure"""
+    vendor_category_id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=100)
+    parent = TreeForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='children')
+    description = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class MPTTMeta:
+        order_insertion_by = ['name']
+    
+    class Meta:
+        ordering = ['tree_id', 'lft']
+        verbose_name_plural = 'Vendor Categories'
+        unique_together = ['name', 'parent']  # Same name allowed at different levels
+    
+    def __str__(self):
+        return f"{self.name}" if not self.parent else f"{self.parent} > {self.name}"
+
+
+class Vendor(models.Model):
+    """Vendor model for suppliers"""
+    vendor_id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='vendors')
+    name = models.CharField(max_length=200)
+    contact_person = models.CharField(max_length=100, blank=True)
+    phone = models.CharField(max_length=50, blank=True)
+    email = models.EmailField(blank=True)
+    address = models.TextField(blank=True)
+    terms_default = models.ForeignKey(PaymentTerms, on_delete=models.SET_NULL, null=True, blank=True, related_name='vendors')
+    memo = models.TextField(blank=True)
+    active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    # Many-to-many relationship with categories
+    categories = models.ManyToManyField(VendorCategory, through='VendorVendorCategory', blank=True)
+    
+    class Meta:
+        ordering = ['name']
+        unique_together = ['user', 'name']
+    
+    def __str__(self):
+        return self.name
+
+
+class VendorVendorCategory(models.Model):
+    """Many-to-many relationship between Vendor and VendorCategory"""
+    vendor = models.ForeignKey(Vendor, on_delete=models.CASCADE)
+    vendor_category = models.ForeignKey(VendorCategory, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        unique_together = ['vendor', 'vendor_category']
+    
+    def __str__(self):
+        return f"{self.vendor.name} - {self.vendor_category.name}"
+
+
+class ItemCategory(MPTTModel):
+    """Hierarchical item categories for organizing items"""
+    item_category_id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='item_categories')
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    parent = TreeForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='children')
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class MPTTMeta:
+        order_insertion_by = ['name']
+    
+    class Meta:
+        verbose_name = 'Item Category'
+        verbose_name_plural = 'Item Categories'
+        unique_together = ['user', 'name', 'parent']
+    
+    def __str__(self):
+        return self.name
+
+
+class Account(MPTTModel):
+    """Chart of Accounts - Hierarchical structure"""
+    ACCOUNT_TYPE_CHOICES = [
+        ('Income', 'Income'),
+        ('Expense', 'Expense'),
+        ('COGS', 'Cost of Goods Sold'),
+        ('Bank', 'Bank'),
+        ('Credit Card', 'Credit Card'),
+        ('Accounts Receivable', 'Accounts Receivable'),
+        ('Accounts Payable', 'Accounts Payable'),
+        ('Other Current Asset', 'Other Current Asset'),
+        ('Other Asset', 'Other Asset'),
+        ('Other Current Liability', 'Other Current Liability'),
+        ('Long Term Liability', 'Long Term Liability'),
+        ('Equity', 'Equity'),
+        ('Fixed Asset', 'Fixed Asset'),
+        ('Other Income', 'Other Income'),
+        ('Other Expense', 'Other Expense'),
+    ]
+    
+    account_id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='accounts')
+    name = models.CharField(max_length=200)
+    code = models.CharField(max_length=50, blank=True)
+    account_type = models.CharField(max_length=50, choices=ACCOUNT_TYPE_CHOICES)
+    parent = TreeForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='children')
+    description = models.TextField(blank=True)
+    active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class MPTTMeta:
+        order_insertion_by = ['account_type', 'code', 'name']
+    
+    class Meta:
+        ordering = ['tree_id', 'lft']
+        unique_together = ['user', 'name', 'parent']  # Same name allowed at different levels
+    
+    def __str__(self):
+        return f"{self.code} - {self.name}" if self.code else self.name
+
+
+class Item(models.Model):
+    """Items & services (inventory & non-inventory)"""
+    ITEM_TYPE_CHOICES = [
+        ('inventory_part', 'Inventory Part'),
+        ('non_inventory', 'Non-Inventory'),
+        ('service', 'Service'),
+        ('payment', 'Payment'),
+        ('discount', 'Discount'),
+    ]
+    
+    item_id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='items')
+    name = models.CharField(max_length=200, help_text="Tilapia, Rui, Feed X, Medicine Y, Net, Boat Rent, etc.")
+    item_type = models.CharField(max_length=20, choices=ITEM_TYPE_CHOICES)
+    uom = models.CharField(max_length=20, help_text="kg, pcs, pack, hr, etc.")
+    category = models.ForeignKey(ItemCategory, on_delete=models.SET_NULL, null=True, blank=True, related_name='items')
+    income_account = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, blank=True, related_name='income_items')
+    expense_account = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, blank=True, related_name='expense_items')
+    asset_account = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, blank=True, related_name='asset_items')
+    
+    # Quick filters
+    is_species = models.BooleanField(default=False)
+    is_feed = models.BooleanField(default=False)
+    is_medicine = models.BooleanField(default=False)
+    
+    # Feed-specific fields
+    protein_content = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, help_text="Protein content % (for feeds)")
+    feed_stage = models.CharField(max_length=50, blank=True, help_text="Feed stage: Starter, Grower, Finisher, etc.")
+    
+    # Pricing
+    cost_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, help_text="Cost price per unit")
+    selling_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, help_text="Selling price per unit")
+    
+    description = models.TextField(blank=True)
+    active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['name']
+        unique_together = ['user', 'name']
+    
+    def __str__(self):
+        return self.name
+
+
+class ItemPrice(models.Model):
+    """Item pricing"""
+    item_price_id = models.AutoField(primary_key=True)
+    item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='prices')
+    effective_date = models.DateField()
+    price = models.DecimalField(max_digits=12, decimal_places=2)
+    currency = models.CharField(max_length=3, default='BDT')
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-effective_date']
+        unique_together = ['item', 'effective_date']
+    
+    def __str__(self):
+        return f"{self.item.name} - {self.price} ({self.effective_date})"
+
+
+# ===================== ACCOUNTING MODELS =====================
+
+class JournalEntry(models.Model):
+    """Journal Entry - backbone for full audit trail"""
+    SOURCE_CHOICES = [
+        ('BILL', 'Bill'),
+        ('BILL_PAYMENT', 'Bill Payment'),
+        ('INVOICE', 'Invoice'),
+        ('CUST_PAYMENT', 'Customer Payment'),
+        ('DEPOSIT', 'Deposit'),
+        ('CHECK', 'Check'),
+        ('INVENTORY', 'Inventory'),
+        ('STOCKING_FEED_MED', 'Stocking/Feed/Medicine'),
+        ('MANUAL', 'Manual Entry'),
+    ]
+    
+    je_id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='journal_entries')
+    date = models.DateField()
+    memo = models.TextField(blank=True)
+    source = models.CharField(max_length=20, choices=SOURCE_CHOICES)
+    source_id = models.PositiveIntegerField(null=True, blank=True, help_text="ID of the source document")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-date', '-created_at']
+        verbose_name_plural = 'Journal Entries'
+    
+    def __str__(self):
+        return f"JE-{self.je_id} ({self.date}) - {self.get_source_display()}"
+
+
+class JournalLine(models.Model):
+    """Journal Line - individual debit/credit entries"""
+    jl_id = models.AutoField(primary_key=True)
+    journal_entry = models.ForeignKey(JournalEntry, on_delete=models.CASCADE, related_name='lines')
+    account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name='journal_lines')
+    debit = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    credit = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    
+    # Optional references for job costing
+    customer = models.ForeignKey(Customer, on_delete=models.SET_NULL, null=True, blank=True, related_name='journal_lines')
+    vendor = models.ForeignKey(Vendor, on_delete=models.SET_NULL, null=True, blank=True, related_name='journal_lines')
+    pond = models.ForeignKey('Pond', on_delete=models.SET_NULL, null=True, blank=True, related_name='journal_lines')
+    item = models.ForeignKey(Item, on_delete=models.SET_NULL, null=True, blank=True, related_name='journal_lines')
+    
+    memo = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['journal_entry', 'jl_id']
+    
+    def __str__(self):
+        return f"JL-{self.jl_id} - {self.account.name} (D:{self.debit} C:{self.credit})"
+    
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        if self.debit > 0 and self.credit > 0:
+            raise ValidationError("A journal line cannot have both debit and credit amounts")
+        if self.debit == 0 and self.credit == 0:
+            raise ValidationError("A journal line must have either a debit or credit amount")
+
+
+class Bill(models.Model):
+    """Accounts Payable - Bills"""
+    bill_id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='bills')
+    vendor = models.ForeignKey(Vendor, on_delete=models.CASCADE, related_name='bills')
+    bill_no = models.CharField(max_length=100, help_text="Vendor reference number")
+    bill_date = models.DateField()
+    due_date = models.DateField()
+    terms = models.ForeignKey(PaymentTerms, on_delete=models.SET_NULL, null=True, blank=True)
+    memo = models.TextField(blank=True)
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    open_balance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-bill_date', '-created_at']
+    
+    def __str__(self):
+        return f"Bill-{self.bill_id} - {self.vendor.name} ({self.bill_date})"
+
+
+class BillLine(models.Model):
+    """Bill Line Items"""
+    bill_line_id = models.AutoField(primary_key=True)
+    bill = models.ForeignKey(Bill, on_delete=models.CASCADE, related_name='lines')
+    is_item = models.BooleanField(default=False, help_text="True if this line is for an item, False for expense")
+    
+    # Expense mode fields
+    expense_account = models.ForeignKey(Account, on_delete=models.CASCADE, null=True, blank=True, related_name='bill_expense_lines')
+    amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    pond = models.ForeignKey('Pond', on_delete=models.SET_NULL, null=True, blank=True, related_name='bill_expense_lines')
+    
+    # Item mode fields
+    item = models.ForeignKey(Item, on_delete=models.CASCADE, null=True, blank=True, related_name='bill_lines')
+    description = models.CharField(max_length=200, blank=True)
+    qty = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    cost = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    line_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    
+    line_memo = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['bill', 'bill_line_id']
+    
+    def __str__(self):
+        if self.is_item:
+            return f"{self.item.name} - {self.qty} @ {self.cost}"
+        else:
+            return f"{self.expense_account.name} - {self.amount}"
+
+
+class BillPayment(models.Model):
+    """Bill Payments"""
+    bill_payment_id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='bill_payments')
+    payment_date = models.DateField()
+    payment_account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name='bill_payments')
+    memo = models.TextField(blank=True)
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-payment_date', '-created_at']
+    
+    def __str__(self):
+        return f"Bill Payment-{self.bill_payment_id} ({self.payment_date})"
+
+
+class BillPaymentApply(models.Model):
+    """Bill Payment Applications - many bills per payment"""
+    bill_payment_apply_id = models.AutoField(primary_key=True)
+    bill_payment = models.ForeignKey(BillPayment, on_delete=models.CASCADE, related_name='applies')
+    bill = models.ForeignKey(Bill, on_delete=models.CASCADE, related_name='payment_applies')
+    amount_applied = models.DecimalField(max_digits=12, decimal_places=2)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['bill_payment', 'bill']
+        unique_together = ['bill_payment', 'bill']
+    
+    def __str__(self):
+        return f"Apply {self.amount_applied} to Bill-{self.bill.bill_id}"
+
+
+class Invoice(models.Model):
+    """Accounts Receivable - Invoices"""
+    invoice_id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='invoices')
+    customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='invoices')
+    invoice_no = models.CharField(max_length=100, help_text="Auto-generated invoice number")
+    invoice_date = models.DateField()
+    terms = models.ForeignKey(PaymentTerms, on_delete=models.SET_NULL, null=True, blank=True)
+    memo = models.TextField(blank=True)
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    open_balance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-invoice_date', '-created_at']
+        unique_together = ['user', 'invoice_no']
+    
+    def __str__(self):
+        return f"Invoice-{self.invoice_no} - {self.customer.name} ({self.invoice_date})"
+    
+    def save(self, *args, **kwargs):
+        if not self.invoice_no:
+            # Auto-generate invoice number
+            last_invoice = Invoice.objects.filter(user=self.user).order_by('-invoice_id').first()
+            if last_invoice and last_invoice.invoice_no.isdigit():
+                next_num = int(last_invoice.invoice_no) + 1
+            else:
+                next_num = 1
+            self.invoice_no = str(next_num).zfill(6)
+        super().save(*args, **kwargs)
+
+
+class InvoiceLine(models.Model):
+    """Invoice Line Items"""
+    invoice_line_id = models.AutoField(primary_key=True)
+    invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name='lines')
+    item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='invoice_lines')
+    description = models.CharField(max_length=200, blank=True)
+    qty = models.DecimalField(max_digits=10, decimal_places=2)
+    rate = models.DecimalField(max_digits=12, decimal_places=2)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['invoice', 'invoice_line_id']
+    
+    def __str__(self):
+        return f"{self.item.name} - {self.qty} @ {self.rate}"
+    
+    def save(self, *args, **kwargs):
+        # Auto-calculate amount
+        self.amount = self.qty * self.rate
+        super().save(*args, **kwargs)
+
+
+class CustomerPayment(models.Model):
+    """Customer Payments"""
+    cust_payment_id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='customer_payments')
+    customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='payments')
+    payment_date = models.DateField()
+    amount_total = models.DecimalField(max_digits=12, decimal_places=2)
+    memo = models.TextField(blank=True)
+    deposit_account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name='customer_payments', help_text="Set to Undeposited Funds at receipt time")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-payment_date', '-created_at']
+    
+    def __str__(self):
+        return f"Payment-{self.cust_payment_id} - {self.customer.name} ({self.payment_date})"
+
+
+class CustomerPaymentApply(models.Model):
+    """Customer Payment Applications"""
+    cust_payment_apply_id = models.AutoField(primary_key=True)
+    customer_payment = models.ForeignKey(CustomerPayment, on_delete=models.CASCADE, related_name='applies')
+    invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name='payment_applies')
+    amount_applied = models.DecimalField(max_digits=12, decimal_places=2)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['customer_payment', 'invoice']
+        unique_together = ['customer_payment', 'invoice']
+    
+    def __str__(self):
+        return f"Apply {self.amount_applied} to Invoice-{self.invoice.invoice_no}"
+
+
+class Deposit(models.Model):
+    """Deposits - move from Undeposited Funds to Bank"""
+    deposit_id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='deposits')
+    deposit_date = models.DateField()
+    bank_account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name='deposits')
+    memo = models.TextField(blank=True)
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-deposit_date', '-created_at']
+    
+    def __str__(self):
+        return f"Deposit-{self.deposit_id} ({self.deposit_date})"
+
+
+class DepositLine(models.Model):
+    """Deposit Lines - each line moves a CustomerPayment to Bank account"""
+    deposit_line_id = models.AutoField(primary_key=True)
+    deposit = models.ForeignKey(Deposit, on_delete=models.CASCADE, related_name='lines')
+    customer_payment = models.ForeignKey(CustomerPayment, on_delete=models.CASCADE, related_name='deposit_lines')
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['deposit', 'deposit_line_id']
+        unique_together = ['deposit', 'customer_payment']
+    
+    def __str__(self):
+        return f"Deposit {self.amount} from Payment-{self.customer_payment.cust_payment_id}"
+
+
+class Check(models.Model):
+    """Checks for payments"""
+    PAYEE_TYPE_CHOICES = [
+        ('VENDOR', 'Vendor'),
+        ('EMPLOYEE', 'Employee'),
+        ('OTHER', 'Other'),
+    ]
+    
+    check_id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='checks')
+    check_no = models.CharField(max_length=50, help_text="Auto-generated check number")
+    bank_account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name='checks')
+    payee_type = models.CharField(max_length=10, choices=PAYEE_TYPE_CHOICES)
+    vendor = models.ForeignKey(Vendor, on_delete=models.SET_NULL, null=True, blank=True, related_name='checks')
+    employee = models.ForeignKey('Employee', on_delete=models.SET_NULL, null=True, blank=True, related_name='checks')
+    payee_name = models.CharField(max_length=200, blank=True, help_text="If OTHER")
+    check_date = models.DateField()
+    address_text = models.TextField(blank=True)
+    memo = models.TextField(blank=True)
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-check_date', '-created_at']
+        unique_together = ['user', 'check_no']
+    
+    def __str__(self):
+        return f"Check-{self.check_no} ({self.check_date})"
+    
+    def save(self, *args, **kwargs):
+        if not self.check_no:
+            # Auto-generate check number
+            last_check = Check.objects.filter(user=self.user).order_by('-check_id').first()
+            if last_check and last_check.check_no.isdigit():
+                next_num = int(last_check.check_no) + 1
+            else:
+                next_num = 1
+            self.check_no = str(next_num).zfill(6)
+        super().save(*args, **kwargs)
+
+
+class CheckExpenseLine(models.Model):
+    """Check Expense Lines - if paying expenses directly"""
+    check_expense_line_id = models.AutoField(primary_key=True)
+    check_obj = models.ForeignKey(Check, on_delete=models.CASCADE, related_name='expense_lines')
+    expense_account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name='check_expense_lines')
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    memo = models.TextField(blank=True)
+    pond = models.ForeignKey('Pond', on_delete=models.SET_NULL, null=True, blank=True, related_name='check_expense_lines')
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['check_obj', 'check_expense_line_id']
+    
+    def __str__(self):
+        return f"{self.expense_account.name} - {self.amount}"
+
+
+class CheckItemLine(models.Model):
+    """Check Item Lines - if paying for items directly"""
+    check_item_line_id = models.AutoField(primary_key=True)
+    check_obj = models.ForeignKey(Check, on_delete=models.CASCADE, related_name='item_lines')
+    item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='check_lines')
+    description = models.CharField(max_length=200, blank=True)
+    qty = models.DecimalField(max_digits=10, decimal_places=2)
+    cost = models.DecimalField(max_digits=12, decimal_places=2)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    pond = models.ForeignKey('Pond', on_delete=models.SET_NULL, null=True, blank=True, related_name='check_item_lines')
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['check_obj', 'check_item_line_id']
+    
+    def __str__(self):
+        return f"{self.item.name} - {self.qty} @ {self.cost}"
+    
+    def save(self, *args, **kwargs):
+        # Auto-calculate amount
+        self.amount = self.qty * self.cost
+        super().save(*args, **kwargs)
+
+
+# ===================== INVENTORY MODELS =====================
+
+class InventoryTransaction(models.Model):
+    """Inventory Transactions"""
+    TXN_TYPE_CHOICES = [
+        ('RECEIPT_WITH_BILL', 'Receipt with Bill'),
+        ('RECEIPT_NO_BILL', 'Receipt without Bill'),
+        ('ADJUSTMENT', 'Adjustment'),
+        ('ISSUE_TO_POND', 'Issue to Pond'),
+    ]
+    
+    inv_txn_id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='inventory_transactions')
+    txn_type = models.CharField(max_length=20, choices=TXN_TYPE_CHOICES)
+    txn_date = models.DateField()
+    memo = models.TextField(blank=True)
+    
+    # Linkage to source documents
+    bill = models.ForeignKey(Bill, on_delete=models.SET_NULL, null=True, blank=True, related_name='inventory_transactions')
+    check_obj = models.ForeignKey(Check, on_delete=models.SET_NULL, null=True, blank=True, related_name='inventory_transactions')
+    journal_entry = models.ForeignKey(JournalEntry, on_delete=models.SET_NULL, null=True, blank=True, related_name='inventory_transactions')
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-txn_date', '-created_at']
+    
+    def __str__(self):
+        return f"InvTxn-{self.inv_txn_id} - {self.get_txn_type_display()} ({self.txn_date})"
+
+
+class InventoryTransactionLine(models.Model):
+    """Inventory Transaction Lines"""
+    inv_txn_line_id = models.AutoField(primary_key=True)
+    inventory_transaction = models.ForeignKey(InventoryTransaction, on_delete=models.CASCADE, related_name='lines')
+    item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='inventory_lines')
+    qty = models.DecimalField(max_digits=10, decimal_places=2, help_text="Positive for receipt, negative for issue")
+    unit_cost = models.DecimalField(max_digits=12, decimal_places=2)
+    pond = models.ForeignKey('Pond', on_delete=models.SET_NULL, null=True, blank=True, related_name='inventory_lines')
+    memo = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['inventory_transaction', 'inv_txn_line_id']
+    
+    def __str__(self):
+        return f"{self.item.name} - {self.qty} @ {self.unit_cost}"
+
+
+# ===================== ITEM SALES & ISSUES =====================
+
+class ItemSales(models.Model):
+    """Item sales/issues from inventory to customers or ponds"""
+    SALE_TYPE_CHOICES = [
+        ('to_customer', 'To Customer'),
+        ('to_pond', 'To Pond'),
+        ('internal_use', 'Internal Use'),
+    ]
+    
+    sale_id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='item_sales')
+    sale_type = models.CharField(max_length=20, choices=SALE_TYPE_CHOICES)
+    sale_date = models.DateField()
+    
+    # Customer (for external sales)
+    customer = models.ForeignKey(Customer, on_delete=models.SET_NULL, null=True, blank=True, related_name='item_sales')
+    
+    # Pond (for internal pond usage)
+    pond = models.ForeignKey('Pond', on_delete=models.SET_NULL, null=True, blank=True, related_name='item_sales')
+    
+    # Invoice reference (if sold to customer)
+    invoice = models.ForeignKey('Invoice', on_delete=models.SET_NULL, null=True, blank=True, related_name='item_sales')
+    
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    memo = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-sale_date', '-created_at']
+    
+    def __str__(self):
+        if self.customer:
+            return f"Sale-{self.sale_id} to {self.customer.name} ({self.sale_date})"
+        elif self.pond:
+            return f"Sale-{self.sale_id} to {self.pond.name} ({self.sale_date})"
+        else:
+            return f"Sale-{self.sale_id} - Internal Use ({self.sale_date})"
+
+
+class ItemSalesLine(models.Model):
+    """Item sales line items"""
+    sale_line_id = models.AutoField(primary_key=True)
+    item_sale = models.ForeignKey(ItemSales, on_delete=models.CASCADE, related_name='lines')
+    item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='sales_lines')
+    qty = models.DecimalField(max_digits=10, decimal_places=2, help_text="Quantity sold/issued")
+    unit_price = models.DecimalField(max_digits=12, decimal_places=2, help_text="Selling price per unit")
+    total_price = models.DecimalField(max_digits=12, decimal_places=2, help_text="Total line amount")
+    
+    # Inventory transaction link (for automatic deduction)
+    inv_txn_line = models.ForeignKey(InventoryTransactionLine, on_delete=models.SET_NULL, null=True, blank=True, related_name='sales_lines')
+    
+    memo = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['item_sale', 'sale_line_id']
+    
+    def __str__(self):
+        return f"{self.item.name} - {self.qty} @ {self.unit_price}"
+    
+    def save(self, *args, **kwargs):
+        # Auto-calculate total price
+        self.total_price = self.qty * self.unit_price
+        super().save(*args, **kwargs)
+
+
+# ===================== AQUACULTURE OPERATIONS =====================
+
+class StockingEvent(models.Model):
+    """Stocking events for fish species only"""
+    stocking_id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='stocking_events')
+    pond = models.ForeignKey('Pond', on_delete=models.CASCADE, related_name='stocking_events')
+    event_date = models.DateField()
+    line_summary = models.TextField(blank=True, help_text="Optional summary of stocking lines")
+    memo = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-event_date', '-created_at']
+    
+    def __str__(self):
+        return f"Stocking-{self.stocking_id} - {self.pond.name} ({self.event_date})"
+
+
+class StockingLine(models.Model):
+    """Stocking line items"""
+    stocking_line_id = models.AutoField(primary_key=True)
+    stocking_event = models.ForeignKey(StockingEvent, on_delete=models.CASCADE, related_name='lines')
+    item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='stocking_lines', help_text="Species/fry item")
+    qty_pcs = models.PositiveIntegerField(help_text="Number of pieces stocked")
+    pcs_per_kg_at_stocking = models.DecimalField(max_digits=15, decimal_places=10, null=True, blank=True, help_text="Pieces per kg at stocking")
+    weight_kg = models.DecimalField(max_digits=15, decimal_places=10, null=True, blank=True)
+    unit_cost = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    memo = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['stocking_event', 'stocking_line_id']
+    
+    def __str__(self):
+        return f"{self.item.name} - {self.qty_pcs} pcs ({self.stocking_event.event_date})"
+
+
+class FeedingEvent(models.Model):
+    """Feeding events for operational logging"""
+    feeding_id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='feeding_events')
+    pond = models.ForeignKey('Pond', on_delete=models.CASCADE, related_name='feeding_events')
+    event_date = models.DateField()
+    memo = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-event_date', '-created_at']
+    
+    def __str__(self):
+        return f"Feeding-{self.feeding_id} - {self.pond.customer.name} ({self.event_date})"
+
+
+class FeedingLine(models.Model):
+    """Feeding line items"""
+    feeding_line_id = models.AutoField(primary_key=True)
+    feeding_event = models.ForeignKey(FeedingEvent, on_delete=models.CASCADE, related_name='lines')
+    item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='feeding_lines', help_text="Feed item")
+    qty = models.DecimalField(max_digits=10, decimal_places=2, help_text="Quantity in kg")
+    unit_cost = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    
+    # Optional water parameters snapshot for AI logic provenance
+    water_temp_c = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    water_ph = models.DecimalField(max_digits=3, decimal_places=1, null=True, blank=True)
+    water_do = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    
+    # Optional inventory transaction link
+    inv_txn_line = models.ForeignKey(InventoryTransactionLine, on_delete=models.SET_NULL, null=True, blank=True, related_name='feeding_lines')
+    
+    memo = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['feeding_event', 'feeding_line_id']
+    
+    def __str__(self):
+        return f"{self.item.name} - {self.qty}kg ({self.feeding_event.event_date})"
+    
+    def save(self, *args, **kwargs):
+        # Create inventory transaction to deduct feed from inventory
+        if not self.inv_txn_line and self.item.is_feed:
+            from django.utils import timezone
+            
+            # Create inventory transaction for feeding
+            inv_txn = InventoryTransaction.objects.create(
+                user=self.feeding_event.user,
+                txn_type='ISSUE_TO_POND',
+                txn_date=self.feeding_event.event_date,
+                memo=f"Feed issue for {self.feeding_event.pond.name} - {self.item.name}",
+            )
+            
+            # Create inventory transaction line (negative qty for deduction)
+            inv_txn_line = InventoryTransactionLine.objects.create(
+                inventory_transaction=inv_txn,
+                item=self.item,
+                qty=-self.qty,  # Negative for deduction
+                unit_cost=self.unit_cost or 0,
+                pond=self.feeding_event.pond,
+                memo=f"Feeding: {self.memo}",
+            )
+            
+            self.inv_txn_line = inv_txn_line
+        
+        super().save(*args, **kwargs)
+
+
+class MedicineEvent(models.Model):
+    """Medicine events for operational logging"""
+    medicine_id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='medicine_events')
+    pond = models.ForeignKey('Pond', on_delete=models.CASCADE, related_name='medicine_events')
+    event_date = models.DateField()
+    diagnosis_note = models.TextField(blank=True)
+    memo = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-event_date', '-created_at']
+    
+    def __str__(self):
+        return f"Medicine-{self.medicine_id} - {self.pond.customer.name} ({self.event_date})"
+
+
+class MedicineLine(models.Model):
+    """Medicine line items"""
+    medicine_line_id = models.AutoField(primary_key=True)
+    medicine_event = models.ForeignKey(MedicineEvent, on_delete=models.CASCADE, related_name='lines')
+    item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='medicine_lines', help_text="Medicine item")
+    dosage = models.CharField(max_length=200, help_text="Dosage information")
+    qty_used = models.DecimalField(max_digits=10, decimal_places=2, help_text="Quantity used")
+    unit_cost = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    
+    # Inventory transaction link
+    inv_txn_line = models.ForeignKey(InventoryTransactionLine, on_delete=models.SET_NULL, null=True, blank=True, related_name='medicine_lines')
+    
+    memo = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['medicine_event', 'medicine_line_id']
+    
+    def __str__(self):
+        return f"{self.item.name} - {self.dosage} ({self.medicine_event.event_date})"
+
+
+class OtherPondEvent(models.Model):
+    """Other pond events - dynamic activities"""
+    other_event_id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='other_pond_events')
+    pond = models.ForeignKey('Pond', on_delete=models.CASCADE, related_name='other_events')
+    event_date = models.DateField()
+    category = models.CharField(max_length=100, help_text="Free text/tag for event category")
+    memo = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-event_date', '-created_at']
+    
+    def __str__(self):
+        return f"Event-{self.other_event_id} - {self.pond.customer.name} ({self.category})"
+
+
+class OtherPondEventLine(models.Model):
+    """Other pond event line items (optional)"""
+    other_event_line_id = models.AutoField(primary_key=True)
+    other_event = models.ForeignKey(OtherPondEvent, on_delete=models.CASCADE, related_name='lines')
+    item = models.ForeignKey(Item, on_delete=models.SET_NULL, null=True, blank=True, related_name='other_event_lines')
+    qty = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    memo = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['other_event', 'other_event_line_id']
+    
+    def __str__(self):
+        item_name = self.item.name if self.item else "General"
+        return f"{item_name} - {self.amount} ({self.other_event.category})"
+
+
+# ===================== EMPLOYEE & PAYROLL MODELS =====================
+
+class Employee(models.Model):
+    """Employee management"""
+    employee_id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='employees')
+    name = models.CharField(max_length=200)
+    join_date = models.DateField()
+    status = models.CharField(max_length=20, choices=[
+        ('active', 'Active'),
+        ('inactive', 'Inactive'),
+        ('terminated', 'Terminated'),
+    ], default='active')
+    salary_base = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    bonus_rules = models.TextField(blank=True)
+    benefits_profile = models.TextField(blank=True)
+    phone = models.CharField(max_length=50, blank=True)
+    email = models.EmailField(blank=True)
+    address = models.TextField(blank=True)
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['name']
+        unique_together = ['user', 'name']
+    
+    def __str__(self):
+        return self.name
+
+
+class EmployeeDocument(models.Model):
+    """Employee documents"""
+    employee_document_id = models.AutoField(primary_key=True)
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='documents')
+    doc_type = models.CharField(max_length=100, help_text="contract, NID, degree, etc.")
+    file_ref = models.CharField(max_length=500, help_text="File reference/path")
+    issue_date = models.DateField(null=True, blank=True)
+    expiry_date = models.DateField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['employee', 'doc_type']
+    
+    def __str__(self):
+        return f"{self.employee.name} - {self.doc_type}"
+
+
+class PayrollRun(models.Model):
+    """Payroll runs"""
+    payroll_run_id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='payroll_runs')
+    period_start = models.DateField()
+    period_end = models.DateField()
+    pay_date = models.DateField()
+    memo = models.TextField(blank=True)
+    status = models.CharField(max_length=20, choices=[
+        ('draft', 'Draft'),
+        ('approved', 'Approved'),
+        ('paid', 'Paid'),
+    ], default='draft')
+    total_gross = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    total_benefits = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    total_deductions = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    total_net = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-pay_date', '-created_at']
+    
+    def __str__(self):
+        return f"Payroll-{self.payroll_run_id} ({self.period_start} to {self.period_end})"
+
+
+class PayrollLine(models.Model):
+    """Payroll line items"""
+    payroll_line_id = models.AutoField(primary_key=True)
+    payroll_run = models.ForeignKey(PayrollRun, on_delete=models.CASCADE, related_name='lines')
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='payroll_lines')
+    gross_salary = models.DecimalField(max_digits=12, decimal_places=2)
+    benefits = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    deductions = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    net_pay = models.DecimalField(max_digits=12, decimal_places=2)
+    payment_account = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, blank=True, related_name='payroll_lines')
+    check_obj = models.ForeignKey(Check, on_delete=models.SET_NULL, null=True, blank=True, related_name='payroll_lines')
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['payroll_run', 'employee']
+        unique_together = ['payroll_run', 'employee']
+    
+    def __str__(self):
+        return f"{self.employee.name} - {self.net_pay} ({self.payroll_run.pay_date})"
+    
+    def save(self, *args, **kwargs):
+        # Auto-calculate net pay
+        self.net_pay = self.gross_salary + self.benefits - self.deductions
+        super().save(*args, **kwargs)
+
+
+# ===================== ORIGINAL MODELS (Updated) =====================
 
 class Pond(models.Model):
     """Pond management model"""
+    pond_id = models.AutoField(primary_key=True)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='ponds')
-    name = models.CharField(max_length=100)
-    area_decimal = models.DecimalField(max_digits=8, decimal_places=3, help_text="Area in decimal units (1 decimal = 40.46 m²)")
+    name = models.CharField(max_length=100, default="Untitled Pond", help_text="Pond name")
+    water_area_decimal = models.DecimalField(max_digits=8, decimal_places=3, help_text="Area in decimal units (1 decimal = 40.46 m²)")
     depth_ft = models.DecimalField(max_digits=6, decimal_places=2, help_text="Depth in feet")
     volume_m3 = models.DecimalField(max_digits=10, decimal_places=3, help_text="Volume in cubic meters")
     location = models.CharField(max_length=200, blank=True)
+    notes = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -22,15 +1026,15 @@ class Pond(models.Model):
         unique_together = ['user', 'name']
     
     def __str__(self):
-        return f"{self.name} ({self.user.username})"
+        return f"{self.name} - Pond"
     
     @property
     def area_sqm(self):
         """Convert decimal area to square meters"""
-        if isinstance(self.area_decimal, (int, float)):
-            area_decimal_decimal = Decimal(str(self.area_decimal))
+        if isinstance(self.water_area_decimal, (int, float)):
+            area_decimal_decimal = Decimal(str(self.water_area_decimal))
         else:
-            area_decimal_decimal = self.area_decimal
+            area_decimal_decimal = self.water_area_decimal
         return area_decimal_decimal * Decimal('40.46')
     
     def save(self, *args, **kwargs):
@@ -42,10 +1046,10 @@ class Pond(models.Model):
         else:
             depth_ft_decimal = self.depth_ft
         
-        if isinstance(self.area_decimal, (int, float)):
-            area_decimal_decimal = Decimal(str(self.area_decimal))
+        if isinstance(self.water_area_decimal, (int, float)):
+            area_decimal_decimal = Decimal(str(self.water_area_decimal))
         else:
-            area_decimal_decimal = self.area_decimal
+            area_decimal_decimal = self.water_area_decimal
             
         depth_m = depth_ft_decimal * Decimal('0.3048')
         area_sqm = area_decimal_decimal * Decimal('40.46')

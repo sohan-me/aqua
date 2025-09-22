@@ -17,7 +17,7 @@ export default function EditWaterQualityPage() {
   const { data: pondsData } = usePonds();
   const updateSampling = useUpdateSampling();
   
-  const ponds = extractApiData<Pond>(pondsData);
+  const ponds = extractApiData<Pond>(pondsData?.data);
 
   const [formData, setFormData] = useState({
     pond: '',

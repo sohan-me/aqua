@@ -15,8 +15,8 @@ export default function NewStockingPage() {
   const { data: pondsData } = usePonds();
   const { data: speciesData } = useSpecies();
   
-  const ponds = extractApiData<Pond>(pondsData);
-  const species = extractApiData<Species>(speciesData);
+  const ponds = extractApiData<Pond>(pondsData?.data);
+  const species = extractApiData<Species>(speciesData?.data);
 
   const [formData, setFormData] = useState({
     pond: '',

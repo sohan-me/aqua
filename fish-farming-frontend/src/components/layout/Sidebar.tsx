@@ -26,19 +26,114 @@ import {
   Target,
   CreditCard,
   Stethoscope,
+  Building2,
+  Truck,
+  Receipt,
+  Wallet,
+  Banknote,
+  UserCheck,
+  ClipboardList,
+  Archive,
+  ShoppingCart,
+  BookOpen,
+  PieChart,
+  TrendingUp as TrendingUpIcon,
+  AlertCircle,
+  Tag,
 } from 'lucide-react';
 import Image from 'next/image';
 
 const navigation = [
-  { name: 'Analytics Dashboard', href: '/', icon: BarChart3 },
-  { name: 'Ponds', href: '/ponds', icon: Fish },
-  { name: 'Species', href: '/species', icon: Fish },
-  { name: 'Stocking', href: '/stocking', icon: Package },
-  { name: 'Daily Logs', href: '/daily-logs', icon: Calendar },
-  { name: 'Fish Sampling', href: '/fish-sampling', icon: Scale },
-  { name: 'Mortality', href: '/mortality', icon: TrendingDown },
-  // { name: 'Medical Diagnostic', href: '/medical-diagnostic', icon: Stethoscope },
-  // { name: 'Quick Diagnosis', href: '/quick-diagnosis', icon: Stethoscope },
+  { name: 'Analytics Dashboard', href: '/analytics', icon: BarChart3 },
+  
+  // Core Master Data
+  {
+    name: 'Master Data',
+    href: '/master-data',
+    icon: Building2,
+    submenu: [
+      { name: 'Customers', href: '/customers', icon: Users },
+      { name: 'Vendors', href: '/vendors', icon: Truck },
+      { name: 'Vendor Categories', href: '/vendor-categories', icon: Building2 },
+      { name: 'Chart of Accounts', href: '/chart-accounts', icon: BookOpen },
+      { name: 'Items & Services', href: '/items', icon: Package },
+      { name: 'Item Categories', href: '/item-categories', icon: Tag },
+      { name: 'Feed Types', href: '/feed-types', icon: Package },
+      { name: 'Expense Types', href: '/expense-types', icon: TrendingDown },
+      { name: 'Income Types', href: '/income-types', icon: TrendingUp },
+      { name: 'Payment Terms', href: '/payment-terms', icon: Receipt },
+    ]
+  },
+
+  // Aquaculture Operations
+  {
+    name: 'Aquaculture',
+    href: '/aquaculture',
+    icon: Fish,
+    submenu: [
+      { name: 'Ponds', href: '/ponds', icon: Fish },
+      { name: 'Species', href: '/species', icon: Fish },
+      { name: 'Stocking Events', href: '/stocking-events', icon: Package },
+      { name: 'Feeding Events', href: '/feeding-events', icon: Activity },
+      { name: 'Medicine Events', href: '/medicine-events', icon: Stethoscope },
+      { name: 'Other Pond Events', href: '/other-pond-events', icon: Calendar },
+    ]
+  },
+
+  // Inventory Management
+  {
+    name: 'Inventory',
+    href: '/inventory',
+    icon: Archive,
+    submenu: [
+      { name: 'Inventory Stocking', href: '/inventory-stocking', icon: Package },
+      { name: 'Item Sales', href: '/item-sales', icon: ShoppingCart },
+      { name: 'Stock Levels', href: '/stock-levels', icon: Package },
+    ]
+  },
+
+  // Accounting
+  {
+    name: 'Accounting',
+    href: '/accounting',
+    icon: DollarSign,
+    submenu: [
+      { name: 'Bills (AP)', href: '/bills', icon: Receipt },
+      { name: 'Invoices (AR)', href: '/invoices', icon: FileText },
+      { name: 'Customer Payments', href: '/customer-payments', icon: Wallet },
+      { name: 'Bill Payments', href: '/bill-payments', icon: Banknote },
+      { name: 'Deposits', href: '/deposits', icon: Wallet },
+      { name: 'Checks', href: '/checks', icon: CreditCard },
+      { name: 'Journal Entries', href: '/journal-entries', icon: BookOpen },
+    ]
+  },
+
+  // Employee Management
+  {
+    name: 'Employees',
+    href: '/employees',
+    icon: UserCheck,
+    submenu: [
+      { name: 'Employee List', href: '/employees', icon: Users },
+      { name: 'Payroll', href: '/payroll', icon: DollarSign },
+    ]
+  },
+
+  // Monitoring & Analysis
+  {
+    name: 'Monitoring',
+    href: '/monitoring',
+    icon: Activity,
+    submenu: [
+      { name: 'Daily Logs', href: '/daily-logs', icon: Calendar },
+      { name: 'Fish Sampling', href: '/fish-sampling', icon: Scale },
+      { name: 'Mortality', href: '/mortality', icon: TrendingDown },
+      { name: 'Harvest', href: '/harvest', icon: TrendingUp },
+      { name: 'Water Quality', href: '/water-quality', icon: Activity },
+    ]
+  },
+
+  // Medical
   {
     name: 'Medical',
     href: '/medical',
@@ -46,36 +141,28 @@ const navigation = [
     submenu: [
       { name: 'Medical Diagnostic', href: '/medical-diagnostic', icon: Stethoscope },
       { name: 'Quick Diagnosis', href: '/quick-diagnosis', icon: Stethoscope },
-      { name: 'List of Treatment', href: '/medical-diagnostics', icon: Stethoscope },
+      { name: 'Treatment History', href: '/medical-diagnostics', icon: Stethoscope },
     ]
   },
-  { name: 'Feed Types', href: '/feed-types', icon: Package },
-  { name: 'Feeding', href: '/feeding', icon: Activity },
-  { name: 'Harvest', href: '/harvest', icon: TrendingUp },
-  { 
-    name: 'Accounts', 
-    href: '/accounts', 
-    icon: CreditCard,
-    submenu: [
-      { name: 'Expense Types', href: '/expense-types', icon: DollarSign },
-      { name: 'Income Types', href: '/income-types', icon: DollarSign },
-      { name: 'Expenses', href: '/expenses', icon: DollarSign },
-      { name: 'Income', href: '/income', icon: DollarSign },
-    ]
-  },
-  { 
-    name: 'Reports & Analysis', 
-    href: '/reports', 
-    icon: FileText,
+
+  // Reports & Analysis
+  {
+    name: 'Reports',
+    href: '/reports',
+    icon: PieChart,
     submenu: [
       { name: 'Feeding Advice', href: '/feeding-advice', icon: Lightbulb },
       { name: 'Financial Reports', href: '/reports', icon: DollarSign },
       { name: 'FCR Analysis', href: '/reports/fcr', icon: Scale },
       { name: 'Biomass Analysis', href: '/reports/biomass', icon: BarChart3 },
       { name: 'Target Biomass', href: '/reports/target-biomass', icon: Target },
+      { name: 'Profit & Loss', href: '/reports/pnl', icon: TrendingUpIcon },
+      { name: 'Balance Sheet', href: '/reports/balance-sheet', icon: FileText },
     ]
   },
-  // { name: 'Settings', href: '/settings', icon: Settings },
+
+  // Settings
+  { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
 interface SidebarProps {

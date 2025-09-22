@@ -41,8 +41,8 @@ export default function FishSamplingPage() {
   
   const totalItems = filteredSamplings.length;
   const totalPages = Math.ceil(totalItems / pageSize);
-  const species = extractApiData<Species>(speciesData);
-  const ponds = extractApiData<Pond>(pondsData);
+  const species = extractApiData<Species>(speciesData?.data);
+  const ponds = extractApiData<Pond>(pondsData?.data);
   
   // Reset to first page when filters change
   useEffect(() => {

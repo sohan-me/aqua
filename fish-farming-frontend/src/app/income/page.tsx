@@ -14,9 +14,9 @@ export default function IncomePage() {
   const { data: incomeTypesData } = useIncomeTypes();
   const deleteIncome = useDeleteIncome();
   
-  const incomes = extractApiData<Income>(incomesData);
-  const ponds = extractApiData<Pond>(pondsData);
-  const incomeTypes = extractApiData<IncomeType>(incomeTypesData);
+  const incomes = extractApiData<Income>(incomesData?.data);
+  const ponds = extractApiData<Pond>(pondsData?.data);
+  const incomeTypes = extractApiData<IncomeType>(incomeTypesData?.data);
 
   // Date range, pond, and income type filtering state
   const [dateRange, setDateRange] = useState({

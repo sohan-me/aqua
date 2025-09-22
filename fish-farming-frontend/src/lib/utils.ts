@@ -1,146 +1,114 @@
-import { type ClassValue, clsx } from "clsx";
-import { twMerge } from "tailwind-merge";
-import { format, parseISO } from "date-fns";
+import { clsx, type ClassValue } from "clsx"
+import { twMerge } from "tailwind-merge"
 
 export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
+  return twMerge(clsx(inputs))
 }
 
-export function formatCurrency(amount: number | string): string {
-  const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
-  return new Intl.NumberFormat('en-BD', {
-    style: 'currency',
-    currency: 'BDT',
-  }).format(numAmount);
-}
-
-export function formatNumber(num: number | string, decimals: number = 2): string {
-  const numValue = typeof num === 'string' ? parseFloat(num) : num;
-  return new Intl.NumberFormat('en-US', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  }).format(numValue);
-}
-
-export function formatWeight(weight: number | string): string {
-  const numValue = typeof weight === 'string' ? parseFloat(weight) : weight;
-  return new Intl.NumberFormat('en-US', {
-    minimumFractionDigits: 4,
-    maximumFractionDigits: 4,
-  }).format(numValue);
-}
-
-export function formatDate(date: string | Date): string {
-  if (!date) return 'N/A';
-  
-  try {
-    const dateObj = typeof date === 'string' ? parseISO(date) : date;
-    if (isNaN(dateObj.getTime())) {
-      return 'Invalid Date';
-    }
-    return format(dateObj, 'MMM dd, yyyy');
-  } catch (error) {
-    return 'Invalid Date';
-  }
-}
-
-export function formatDateTime(date: string | Date): string {
-  if (!date) return 'N/A';
-  
-  try {
-    const dateObj = typeof date === 'string' ? parseISO(date) : date;
-    if (isNaN(dateObj.getTime())) {
-      return 'Invalid Date';
-    }
-    return format(dateObj, 'MMM dd, yyyy HH:mm');
-  } catch (error) {
-    return 'Invalid Date';
-  }
-}
-
-export function getSeverityColor(severity: string): string {
-  switch (severity.toLowerCase()) {
-    case 'critical':
-      return 'text-red-600 bg-red-50 border-red-200';
-    case 'high':
-      return 'text-orange-600 bg-orange-50 border-orange-200';
-    case 'medium':
-      return 'text-yellow-600 bg-yellow-50 border-yellow-200';
-    case 'low':
-      return 'text-blue-600 bg-blue-50 border-blue-200';
-    default:
-      return 'text-gray-600 bg-gray-50 border-gray-200';
-  }
-}
-
-export function getCategoryColor(category: string): string {
-  const colors: Record<string, string> = {
-    feed: 'bg-green-100 text-green-800',
-    medicine: 'bg-red-100 text-red-800',
-    equipment: 'bg-blue-100 text-blue-800',
-    labor: 'bg-purple-100 text-purple-800',
-    utilities: 'bg-yellow-100 text-yellow-800',
-    maintenance: 'bg-orange-100 text-orange-800',
-    harvest: 'bg-green-100 text-green-800',
-    seedling: 'bg-blue-100 text-blue-800',
-    consulting: 'bg-purple-100 text-purple-800',
-    other: 'bg-gray-100 text-gray-800',
-  };
-  return colors[category] || 'bg-gray-100 text-gray-800';
-}
-
-export function calculateProfitLoss(income: number, expenses: number): number {
-  return income - expenses;
-}
-
-export function getProfitLossColor(profitLoss: number): string {
-  if (profitLoss > 0) return 'text-green-600';
-  if (profitLoss < 0) return 'text-red-600';
-  return 'text-gray-600';
-}
-
-export function truncateText(text: string, maxLength: number): string {
-  if (text.length <= maxLength) return text;
-  return text.substring(0, maxLength) + '...';
-}
-
-export function generateId(): string {
-  return Math.random().toString(36).substr(2, 9);
-}
-
-export function toNumber(value: string | number | null | undefined): number {
-  if (value === null || value === undefined || value === '') {
-    return 0;
-  }
-  const num = typeof value === 'string' ? parseFloat(value) : value;
-  return isNaN(num) ? 0 : num;
-}
-
-// Utility function to extract data from API responses (handles both paginated and non-paginated)
 export function extractApiData<T>(response: any): T[] {
-  if (!response?.data) return [];
-  
-  // Check if it's a paginated response
-  if (response.data.results && Array.isArray(response.data.results)) {
-    return response.data.results as T[];
+  if (Array.isArray(response)) {
+    return response;
   }
-  
-  // Check if it's a direct array
-  if (Array.isArray(response.data)) {
-    return response.data as T[];
+  if (response && Array.isArray(response.results)) {
+    return response.results;
   }
-  
-  // Fallback to empty array
+  if (response && Array.isArray(response.data)) {
+    return response.data;
+  }
   return [];
 }
 
-export function debounce<T extends (...args: any[]) => any>(
-  func: T,
-  wait: number
-): (...args: Parameters<T>) => void {
-  let timeout: NodeJS.Timeout;
-  return (...args: Parameters<T>) => {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func(...args), wait);
-  };
+export function formatDate(date: string | Date): string {
+  if (!date) return '';
+  
+  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  
+  if (isNaN(dateObj.getTime())) {
+    return '';
+  }
+  
+  return dateObj.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+export function formatCurrency(amount: number | string | null | undefined): string {
+  if (amount === null || amount === undefined || amount === '') return '৳0';
+  
+  const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+  
+  if (isNaN(numAmount)) return '৳0';
+  
+  return new Intl.NumberFormat('bn-BD', {
+    style: 'currency',
+    currency: 'BDT',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(numAmount).replace('BDT', '৳');
+}
+
+export function formatWeight(weight: number | string | null | undefined): string {
+  if (weight === null || weight === undefined || weight === '') return '0';
+  
+  const numWeight = typeof weight === 'string' ? parseFloat(weight) : weight;
+  
+  if (isNaN(numWeight)) return '0';
+  
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  }).format(numWeight);
+}
+
+export function formatDateTime(date: string | Date): string {
+  if (!date) return '';
+  
+  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  
+  if (isNaN(dateObj.getTime())) {
+    return '';
+  }
+  
+  return dateObj.toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+export function formatNumber(num: number | string | null | undefined): string {
+  if (num === null || num === undefined || num === '') return '0';
+  
+  const numValue = typeof num === 'string' ? parseFloat(num) : num;
+  
+  if (isNaN(numValue)) return '0';
+  
+  return new Intl.NumberFormat('en-US').format(numValue);
+}
+
+export function getSeverityColor(severity: string): string {
+  switch (severity?.toLowerCase()) {
+    case 'critical':
+      return 'text-red-600 bg-red-50';
+    case 'high':
+      return 'text-orange-600 bg-orange-50';
+    case 'medium':
+      return 'text-yellow-600 bg-yellow-50';
+    case 'low':
+      return 'text-blue-600 bg-blue-50';
+    default:
+      return 'text-gray-600 bg-gray-50';
+  }
+}
+
+export function toNumber(value: string | number | null | undefined): number {
+  if (value === null || value === undefined || value === '') return 0;
+  
+  const numValue = typeof value === 'string' ? parseFloat(value) : value;
+  
+  return isNaN(numValue) ? 0 : numValue;
 }

@@ -11,7 +11,7 @@ export default function NewPondPage() {
   const createPond = useCreatePond();
   const [formData, setFormData] = useState({
     name: '',
-    area_decimal: '',
+    water_area_decimal: '',
     depth_ft: '',
     location: '',
     is_active: true
@@ -25,7 +25,7 @@ export default function NewPondPage() {
     try {
       await createPond.mutateAsync({
         name: formData.name,
-        area_decimal: parseFloat(formData.area_decimal),
+        water_area_decimal: parseFloat(formData.water_area_decimal),
         depth_ft: parseFloat(formData.depth_ft),
         location: formData.location,
         is_active: formData.is_active
@@ -97,17 +97,17 @@ export default function NewPondPage() {
           </div>
 
           <div>
-            <label htmlFor="area_decimal" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="water_area_decimal" className="block text-sm font-medium text-gray-700 mb-2">
               Area (Decimal) *
             </label>
             <input
               type="number"
-              id="area_decimal"
-              name="area_decimal"
+              id="water_area_decimal"
+              name="water_area_decimal"
               required
               min="0"
               step="0.001"
-              value={formData.area_decimal}
+              value={formData.water_area_decimal}
               onChange={handleInputChange}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
               placeholder="e.g., 2.500"

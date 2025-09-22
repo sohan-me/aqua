@@ -14,9 +14,9 @@ export default function ExpensesPage() {
   const { data: expenseTypesData } = useExpenseTypes();
   const deleteExpense = useDeleteExpense();
   
-  const expenses = extractApiData<Expense>(expensesData);
-  const ponds = extractApiData<Pond>(pondsData);
-  const expenseTypes = extractApiData<ExpenseType>(expenseTypesData);
+  const expenses = extractApiData<Expense>(expensesData?.data);
+  const ponds = extractApiData<Pond>(pondsData?.data);
+  const expenseTypes = extractApiData<ExpenseType>(expenseTypesData?.data);
 
   // Date range, pond, and expense type filtering state
   const [dateRange, setDateRange] = useState({

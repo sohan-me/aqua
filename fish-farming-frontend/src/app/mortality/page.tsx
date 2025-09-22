@@ -28,8 +28,8 @@ export default function MortalityPage() {
   const { data: stockingData } = useStocking();
   const deleteMortality = useDeleteMortality();
 
-  const mortalities = extractApiData<Mortality>(mortalitiesData);
-  const stockings = extractApiData<Stocking>(stockingData);
+  const mortalities = extractApiData<Mortality>(mortalitiesData?.data);
+  const stockings = extractApiData<Stocking>(stockingData?.data);
   console.log(mortalities);
   const handleDelete = async (
     id: number,

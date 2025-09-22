@@ -30,7 +30,7 @@ export default function IncomeTypesPage() {
   const updateIncomeType = useUpdateIncomeType();
   const deleteIncomeType = useDeleteIncomeType();
 
-  const incomeTypes = extractApiData<IncomeType>(incomeTypesData);
+  const incomeTypes = extractApiData<IncomeType>(incomeTypesData?.data);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [formData, setFormData] = useState({

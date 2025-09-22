@@ -13,8 +13,8 @@ export default function FeedingPage() {
   const { data: feedTypesData } = useFeedTypes();
   const deleteFeed = useDeleteFeed();
   
-  const feeds = extractApiData<Feed>(feedsData);
-  const feedTypes = extractApiData<FeedType>(feedTypesData);
+  const feeds = extractApiData<Feed>(feedsData?.data);
+  const feedTypes = extractApiData<FeedType>(feedTypesData?.data);
 
   const handleDelete = async (id: number, pondName: string, feedTypeName: string, date: string) => {
     if (window.confirm(`Are you sure you want to delete the feeding record for ${pondName} (${feedTypeName}) on ${formatDate(date)}? This action cannot be undone.`)) {

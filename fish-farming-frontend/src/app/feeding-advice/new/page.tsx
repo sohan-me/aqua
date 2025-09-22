@@ -13,7 +13,7 @@ export default function NewFeedingAdvicePage() {
   const router = useRouter();
   const { data: pondsData } = usePonds();
   const autoGenerateAdvice = useAutoGenerateFeedingAdvice();
-  const ponds = extractApiData<Pond>(pondsData);
+  const ponds = extractApiData<Pond>(pondsData?.data);
   
   const [selectedPond, setSelectedPond] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);

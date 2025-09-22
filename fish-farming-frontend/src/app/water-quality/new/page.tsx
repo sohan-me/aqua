@@ -14,8 +14,8 @@ export default function NewWaterQualityPage() {
   const { data: pondsData } = usePonds();
   const { data: sampleTypesData } = useSampleTypes();
   
-  const ponds = extractApiData<Pond>(pondsData);
-  const sampleTypes = extractApiData<SampleType>(sampleTypesData);
+  const ponds = extractApiData<Pond>(pondsData?.data);
+  const sampleTypes = extractApiData<SampleType>(sampleTypesData?.data);
 
   const [formData, setFormData] = useState({
     pond: '',

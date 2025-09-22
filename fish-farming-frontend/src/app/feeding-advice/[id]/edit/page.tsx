@@ -23,8 +23,8 @@ export default function EditFeedingAdvicePage({ params }: PageProps) {
   const { data: feedTypesData } = useFeedTypes();
   const { data: advice, isLoading: adviceLoading } = useFeedingAdviceById(adviceId);
   const updateAdvice = useUpdateFeedingAdvice();
-  const ponds = extractApiData<Pond>(pondsData);
-  const feedTypes = extractApiData<FeedType>(feedTypesData);
+  const ponds = extractApiData<Pond>(pondsData?.data);
+  const feedTypes = extractApiData<FeedType>(feedTypesData?.data);
   
   const [formData, setFormData] = useState({
     pond: '',

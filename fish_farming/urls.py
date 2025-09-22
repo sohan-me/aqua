@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 from . import views
 
 router = DefaultRouter()
+# Core Aquaculture APIs
 router.register(r'ponds', views.PondViewSet)
 router.register(r'species', views.SpeciesViewSet)
 router.register(r'stocking', views.StockingViewSet)
@@ -29,6 +30,34 @@ router.register(r'feeding-advice', views.FeedingAdviceViewSet)
 router.register(r'survival-rates', views.SurvivalRateViewSet)
 router.register(r'medical-diagnostics', views.MedicalDiagnosticViewSet)
 router.register(r'target-biomass', views.TargetBiomassViewSet, basename='target-biomass')
+
+# Business Management APIs
+router.register(r'customers', views.CustomerViewSet)
+router.register(r'accounts', views.AccountViewSet)
+router.register(r'payment-terms', views.PaymentTermsViewSet)
+router.register(r'vendors', views.VendorViewSet)
+router.register(r'vendor-categories', views.VendorCategoryViewSet)
+router.register(r'item-categories', views.ItemCategoryViewSet)
+router.register(r'items', views.ItemViewSet)
+router.register(r'bills', views.BillViewSet)
+router.register(r'bill-lines', views.BillLineViewSet)
+router.register(r'invoices', views.InvoiceViewSet)
+router.register(r'invoice-lines', views.InvoiceLineViewSet)
+router.register(r'customer-payments', views.CustomerPaymentViewSet)
+router.register(r'customer-payment-applies', views.CustomerPaymentApplyViewSet)
+router.register(r'inventory-transactions', views.InventoryTransactionViewSet)
+router.register(r'inventory-transaction-lines', views.InventoryTransactionLineViewSet)
+router.register(r'item-sales', views.ItemSalesViewSet)
+router.register(r'item-sales-lines', views.ItemSalesLineViewSet)
+router.register(r'stocking-events', views.StockingEventViewSet)
+router.register(r'feeding-events', views.FeedingEventViewSet)
+router.register(r'feeding-lines', views.FeedingLineViewSet)
+router.register(r'medicine-events', views.MedicineEventViewSet)
+router.register(r'medicine-lines', views.MedicineLineViewSet)
+router.register(r'stock-levels', views.StockLevelViewSet, basename='stock-levels')
+router.register(r'other-pond-events', views.OtherPondEventViewSet)
+router.register(r'employees', views.EmployeeViewSet)
+router.register(r'payroll-runs', views.PayrollRunViewSet)
 
 urlpatterns = [
     path('', include(router.urls)),

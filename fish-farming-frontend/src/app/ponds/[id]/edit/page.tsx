@@ -16,7 +16,7 @@ export default function EditPondPage() {
   
   const [formData, setFormData] = useState({
     name: '',
-    area_decimal: '',
+    water_area_decimal: '',
     depth_ft: '',
     location: '',
     is_active: true
@@ -28,7 +28,7 @@ export default function EditPondPage() {
     if (pond) {
       setFormData({
         name: pond.data.name || '',
-        area_decimal: pond.data.area_decimal?.toString() || '',
+        water_area_decimal: pond.data.water_area_decimal?.toString() || '',
         depth_ft: pond.data.depth_ft?.toString() || '',
         location: pond.data.location || '',
         is_active: pond.data.is_active ?? true
@@ -45,7 +45,7 @@ export default function EditPondPage() {
         id: pondId,
         data: {
           name: formData.name,
-          area_decimal: parseFloat(formData.area_decimal),
+          water_area_decimal: parseFloat(formData.water_area_decimal),
           depth_ft: parseFloat(formData.depth_ft),
           location: formData.location,
           is_active: formData.is_active
@@ -142,17 +142,17 @@ export default function EditPondPage() {
           </div>
 
           <div>
-            <label htmlFor="area_decimal" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="water_area_decimal" className="block text-sm font-medium text-gray-700 mb-2">
               Area (Decimal) *
             </label>
             <input
               type="number"
-              id="area_decimal"
-              name="area_decimal"
+              id="water_area_decimal"
+              name="water_area_decimal"
               required
               min="0"
               step="0.001"
-              value={formData.area_decimal}
+              value={formData.water_area_decimal}
               onChange={handleInputChange}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
               placeholder="e.g., 2.500"
@@ -196,8 +196,8 @@ export default function EditPondPage() {
         <div className="mt-6 p-4 bg-gray-50 rounded-md">
           <h3 className="text-sm font-medium text-gray-700 mb-2">Calculated Volume</h3>
           <p className="text-lg font-semibold text-gray-900">
-            {formData.area_decimal && formData.depth_ft && !isNaN(parseFloat(formData.area_decimal)) && !isNaN(parseFloat(formData.depth_ft))
-              ? `${(parseFloat(formData.area_decimal) * 40.46 * parseFloat(formData.depth_ft) * 0.3048).toFixed(3)} m³`
+            {formData.water_area_decimal && formData.depth_ft && !isNaN(parseFloat(formData.water_area_decimal)) && !isNaN(parseFloat(formData.depth_ft))
+              ? `${(parseFloat(formData.water_area_decimal) * 40.46 * parseFloat(formData.depth_ft) * 0.3048).toFixed(3)} m³`
               : 'Enter area and depth to calculate volume'
             }
           </p>

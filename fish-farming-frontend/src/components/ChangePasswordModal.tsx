@@ -93,7 +93,7 @@ export function ChangePasswordModal({ isOpen, onClose }: ChangePasswordModalProp
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" style={{ minHeight: '100vh', alignItems: 'center', justifyContent: 'center' }}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md relative">
+      <div className="bg-white rounded-2xl shadow-2xl w-[95vw] max-w-md max-h-[95vh] overflow-y-auto relative">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-100">
           <div className="flex items-center space-x-3">

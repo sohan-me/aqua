@@ -13,7 +13,7 @@ export default function NewDailyLogPage() {
   const createDailyLog = useCreateDailyLog();
   const { data: pondsData } = usePonds();
   
-  const ponds = extractApiData<Pond>(pondsData);
+  const ponds = extractApiData<Pond>(pondsData?.data);
 
   const [formData, setFormData] = useState({
     pond: '',

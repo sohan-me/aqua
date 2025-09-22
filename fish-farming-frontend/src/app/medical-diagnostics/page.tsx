@@ -27,7 +27,7 @@ export default function MedicalDiagnosticsPage() {
 
   // Fetch real ponds data from API
   const { data: pondsData, isLoading: pondsLoading } = usePonds();
-  const ponds = extractApiData<Pond>(pondsData);
+  const ponds = extractApiData<Pond>(pondsData?.data);
 
   const fetchSavedDiagnostics = async () => {
     try {
@@ -236,8 +236,8 @@ export default function MedicalDiagnosticsPage() {
                 >
                   <option value="all">All Ponds</option>
                   {ponds.map(pond => (
-                    <option key={pond.id} value={pond.id.toString()}>
-                      {pond.name} ({parseFloat(pond.area_decimal).toFixed(3)} decimel)
+                    <option key={pond.pond_id} value={pond.pond_id.toString()}>
+                      {pond.name} ({parseFloat(pond.water_area_decimal).toFixed(3)} decimal)
                     </option>
                   ))}
                 </select>

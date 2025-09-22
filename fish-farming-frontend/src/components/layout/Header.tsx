@@ -23,7 +23,7 @@ export function Header({ onMenuClick }: HeaderProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [filteredSuggestions, setFilteredSuggestions] = useState<Array<{name: string; href: string; description: string; keywords: string[]}>>([]);
-  const alerts = extractApiData<Alert>(alertsData);
+  const alerts = extractApiData<Alert>(alertsData?.data);
   const activeAlerts = alerts.filter(alert => !alert.is_resolved);
 
   // Search suggestions data - memoized to prevent infinite re-renders

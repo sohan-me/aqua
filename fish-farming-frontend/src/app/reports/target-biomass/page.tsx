@@ -42,8 +42,8 @@ export default function TargetBiomassPage() {
   const { data: pondsData } = usePonds();
   const { data: speciesData } = useSpecies();
   
-  const ponds = extractApiData<Pond>(pondsData);
-  const species = extractApiData<Species>(speciesData);
+  const ponds = extractApiData<Pond>(pondsData?.data);
+  const species = extractApiData<Species>(speciesData?.data);
   
   const [form, setForm] = useState<TargetBiomassForm>({
     pondId: '',
@@ -63,7 +63,7 @@ export default function TargetBiomassPage() {
 
     setIsLoading(true);
     try {
-      const response = await fetch('https://apipremiumagro.sascorporationbd.com/api/fish-farming/target-biomass/calculate/', {
+      const response = await fetch('http://127.0.0.1:8000/api/fish-farming/target-biomass/calculate/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -139,8 +139,8 @@ export default function TargetBiomassPage() {
               >
                 <option value="">Select a pond</option>
                 {ponds.map((pond) => (
-                  <option key={pond.id} value={pond.id.toString()}>
-                    {pond.name} ({pond.area_decimal} decimal)
+                  <option key={pond.pond_id} value={pond.pond_id.toString()}>
+                    {pond.name} ({pond.water_area_decimal} decimal)
                   </option>
                 ))}
               </select>

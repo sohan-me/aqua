@@ -22,7 +22,7 @@ export default function EditFishSamplingPage({ params }: PageProps) {
   const { data: pondsData } = usePonds();
   const { data: sampling, isLoading: samplingLoading } = useFishSamplingById(samplingId);
   const updateSampling = useUpdateFishSampling();
-  const ponds = extractApiData<Pond>(pondsData);
+  const ponds = extractApiData<Pond>(pondsData?.data);
   
   const [formData, setFormData] = useState({
     pond: '',

@@ -12,7 +12,7 @@ export default function SpeciesPage() {
   const { data: speciesData, isLoading } = useSpecies();
   const deleteSpecies = useDeleteSpecies();
   
-  const species = extractApiData<Species>(speciesData);
+  const species = extractApiData<Species>(speciesData?.data);
 
   const handleDelete = async (id: number, name: string) => {
     if (window.confirm(`Are you sure you want to delete the species "${name}"? This action cannot be undone and will affect all related stocking records.`)) {

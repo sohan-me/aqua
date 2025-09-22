@@ -71,12 +71,12 @@ export function RecentActivity() {
   const { data: harvestsData } = useHarvests();
   const { data: dailyLogsData } = useDailyLogs();
 
-  const alerts = extractApiData<Alert>(alertsData);
-  const expenses = extractApiData<Expense>(expensesData);
-  const incomes = extractApiData<Income>(incomesData);
-  const stockings = extractApiData<Stocking>(stockingData);
-  const harvests = extractApiData<Harvest>(harvestsData);
-  const dailyLogs = extractApiData<DailyLog>(dailyLogsData);
+  const alerts = extractApiData<Alert>(alertsData?.data);
+  const expenses = extractApiData<Expense>(expensesData?.data);
+  const incomes = extractApiData<Income>(incomesData?.data);
+  const stockings = extractApiData<Stocking>(stockingData?.data);
+  const harvests = extractApiData<Harvest>(harvestsData?.data);
+  const dailyLogs = extractApiData<DailyLog>(dailyLogsData?.data);
 
   // Helper function to safely convert to number
   const toNumber = (value: string | number | null | undefined): number => {

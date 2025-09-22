@@ -1,5 +1,6 @@
 'use client';
 
+import { use } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSpeciesById } from '@/hooks/useApi';
 import { formatDate } from '@/lib/utils';
@@ -8,14 +9,15 @@ import Link from 'next/link';
 import { toast } from 'sonner';
 
 interface SpeciesDetailPageProps {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 export default function SpeciesDetailPage({ params }: SpeciesDetailPageProps) {
   const router = useRouter();
-  const { data: speciesData, isLoading } = useSpeciesById(parseInt(params.id));
+  const { id } = use(params);
+  const { data: speciesData, isLoading } = useSpeciesById(parseInt(id));
   
   const species = speciesData?.data;
 

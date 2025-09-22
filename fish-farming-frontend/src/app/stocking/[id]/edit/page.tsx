@@ -19,8 +19,8 @@ export default function EditStockingPage() {
   const { data: speciesData } = useSpecies();
   const updateStocking = useUpdateStocking();
   
-  const ponds = extractApiData<Pond>(pondsData);
-  const species = extractApiData<Species>(speciesData);
+  const ponds = extractApiData<Pond>(pondsData?.data);
+  const species = extractApiData<Species>(speciesData?.data);
 
   const [formData, setFormData] = useState({
     pond: '',

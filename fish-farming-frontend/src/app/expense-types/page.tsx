@@ -31,7 +31,7 @@ export default function ExpenseTypesPage() {
   const updateExpenseType = useUpdateExpenseType();
   const deleteExpenseType = useDeleteExpenseType();
 
-  const expenseTypes = extractApiData<ExpenseType>(expenseTypesData);
+  const expenseTypes = extractApiData<ExpenseType>(expenseTypesData?.data);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [formData, setFormData] = useState({

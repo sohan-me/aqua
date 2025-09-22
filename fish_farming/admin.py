@@ -9,9 +9,9 @@ from .models import (
 
 @admin.register(Pond)
 class PondAdmin(admin.ModelAdmin):
-    list_display = ['name', 'user', 'area_decimal', 'depth_ft', 'volume_m3', 'is_active', 'created_at']
+    list_display = ['name', 'user', 'water_area_decimal', 'depth_ft', 'volume_m3', 'is_active', 'created_at']
     list_filter = ['is_active', 'created_at', 'user']
-    search_fields = ['name', 'location', 'user__username']
+    search_fields = ['customer__name', 'location', 'user__username']
     readonly_fields = ['volume_m3', 'created_at', 'updated_at']
 
 

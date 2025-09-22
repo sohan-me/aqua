@@ -71,8 +71,8 @@ export default function BiomassReportPage() {
   const { data: pondsData } = usePonds();
   const { data: speciesData } = useSpecies();
   
-  const ponds = extractApiData<Pond>(pondsData);
-  const species = extractApiData<Species>(speciesData);
+  const ponds = extractApiData<Pond>(pondsData?.data);
+  const species = extractApiData<Species>(speciesData?.data);
   
   const [filters, setFilters] = useState<BiomassFilters>({
     pondId: 'all',
@@ -93,7 +93,7 @@ export default function BiomassReportPage() {
       if (filters.startDate) params.append('start_date', filters.startDate);
       if (filters.endDate) params.append('end_date', filters.endDate);
 
-      const response = await fetch(`https://apipremiumagro.sascorporationbd.com/api/fish-farming/fish-sampling/biomass_analysis/?${params}`, {
+      const response = await fetch(`http://127.0.0.1:8000/api/fish-farming/fish-sampling/biomass_analysis/?${params}`, {
         headers: {
           'Authorization': `Token ${localStorage.getItem('authToken')}`,
         },
@@ -190,7 +190,7 @@ export default function BiomassReportPage() {
             >
               <option value="all">All Ponds</option>
               {ponds.map((pond) => (
-                <option key={pond.id} value={pond.id.toString()}>
+                <option key={pond.pond_id} value={pond.pond_id.toString()}>
                   {pond.name}
                 </option>
               ))}
@@ -312,6 +312,90 @@ export default function BiomassReportPage() {
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Load Analysis */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+              <Scale className="h-5 w-5 mr-2 text-blue-600" />
+              Load Analysis (Biomass per Area)
+            </h2>
+            
+            {/* Overall Load Summary */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+              <div className="bg-blue-50 rounded-lg p-4">
+                <h3 className="text-sm font-medium text-blue-600 mb-2">Total Area</h3>
+                <p className="text-2xl font-bold text-blue-700">
+                  {biomassData.load_analysis.total_area_sqm.toFixed(1)} m²
+                </p>
+                <p className="text-sm text-blue-600 mt-1">
+                  {(biomassData.load_analysis.total_area_sqm / 40.46).toFixed(2)} decimals
+                </p>
+              </div>
+              
+              <div className="bg-green-50 rounded-lg p-4">
+                <h3 className="text-sm font-medium text-green-600 mb-2">Overall Load</h3>
+                <p className="text-2xl font-bold text-green-700">
+                  {biomassData.load_analysis.overall_load_kg_per_sqm.toFixed(2)} kg/m²
+                </p>
+                <p className="text-sm text-green-600 mt-1">
+                  Total biomass per square meter
+                </p>
+              </div>
+              
+              <div className="bg-purple-50 rounded-lg p-4">
+                <h3 className="text-sm font-medium text-purple-600 mb-2">Load Status</h3>
+                <p className={`text-2xl font-bold ${biomassData.load_analysis.overall_load_kg_per_sqm > 2 ? 'text-red-700' : biomassData.load_analysis.overall_load_kg_per_sqm > 1 ? 'text-yellow-700' : 'text-green-700'}`}>
+                  {biomassData.load_analysis.overall_load_kg_per_sqm > 2 ? 'High' : biomassData.load_analysis.overall_load_kg_per_sqm > 1 ? 'Medium' : 'Low'}
+                </p>
+                <p className="text-sm text-purple-600 mt-1">
+                  Stocking density level
+                </p>
+              </div>
+            </div>
+
+            {/* Individual Pond Loads */}
+            {biomassData.load_analysis.pond_loads.length > 0 && (
+              <div>
+                <h3 className="text-md font-semibold text-gray-800 mb-3">Pond Load Details</h3>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pond</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Area (m²)</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Area (decimals)</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Biomass (kg)</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Load (kg/m²)</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {biomassData.load_analysis.pond_loads.map((pond, index) => (
+                        <tr key={index}>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{pond.pond_name}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{pond.area_sqm.toFixed(1)}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{pond.area_decimal.toFixed(2)}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{pond.total_biomass_kg.toFixed(1)}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{pond.load_kg_per_sqm.toFixed(2)}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              pond.load_kg_per_sqm > 2 
+                                ? 'bg-red-100 text-red-800' 
+                                : pond.load_kg_per_sqm > 1 
+                                  ? 'bg-yellow-100 text-yellow-800' 
+                                  : 'bg-green-100 text-green-800'
+                            }`}>
+                              {pond.load_kg_per_sqm > 2 ? 'High' : pond.load_kg_per_sqm > 1 ? 'Medium' : 'Low'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Pond Summary */}

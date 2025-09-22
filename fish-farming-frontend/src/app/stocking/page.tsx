@@ -14,9 +14,9 @@ export default function StockingPage() {
   const { data: pondsData } = usePonds();
   const deleteStocking = useDeleteStocking();
   
-  const stockings = extractApiData<Stocking>(stockingData);
-  const species = extractApiData<Species>(speciesData);
-  const ponds = extractApiData<Pond>(pondsData);
+  const stockings = extractApiData<Stocking>(stockingData?.data);
+  const species = extractApiData<Species>(speciesData?.data);
+  const ponds = extractApiData<Pond>(pondsData?.data);
 
   // Date range and pond filtering state
   const [dateRange, setDateRange] = useState({

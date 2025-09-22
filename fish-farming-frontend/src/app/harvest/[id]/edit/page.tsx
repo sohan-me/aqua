@@ -17,7 +17,7 @@ export default function EditHarvestPage() {
   const { data: pondsData } = usePonds();
   const updateHarvest = useUpdateHarvest();
   
-  const ponds = extractApiData<Pond>(pondsData);
+  const ponds = extractApiData<Pond>(pondsData?.data);
 
   const [formData, setFormData] = useState({
     pond: '',

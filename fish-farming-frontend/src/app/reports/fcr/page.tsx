@@ -35,8 +35,8 @@ export default function FcrReportPage() {
   const { data: pondsData } = usePonds();
   const { data: speciesData } = useSpecies();
   
-  const ponds = extractApiData<Pond>(pondsData);
-  const species = extractApiData<Species>(speciesData);
+  const ponds = extractApiData<Pond>(pondsData?.data);
+  const species = extractApiData<Species>(speciesData?.data);
 
   // Safe data access helpers - FCR analysis data is wrapped in 'data' property by useApiQuery
   const fcrSummary = fcrData?.data?.summary || {

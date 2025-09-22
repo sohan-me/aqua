@@ -10,7 +10,7 @@ import Link from 'next/link';
 export default function AlertsPage() {
   const { data: alertsData, isLoading } = useAlerts();
   const resolveAlertMutation = useResolveAlert();
-  const alerts = extractApiData<Alert>(alertsData);
+  const alerts = extractApiData<Alert>(alertsData?.data);
   
   const [filter, setFilter] = useState('all');
 

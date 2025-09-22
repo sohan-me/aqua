@@ -14,8 +14,8 @@ export default function NewFishSamplingPage() {
   const { data: pondsData } = usePonds();
   const { data: speciesData } = useSpecies();
   const createSampling = useCreateFishSampling();
-  const ponds = extractApiData<Pond>(pondsData);
-  const species = extractApiData<Species>(speciesData);
+  const ponds = extractApiData<Pond>(pondsData?.data);
+  const species = extractApiData<Species>(speciesData?.data);
   
   const [formData, setFormData] = useState({
     pond: '',

@@ -17,7 +17,7 @@ export default function EditDailyLogPage() {
   const { data: pondsData } = usePonds();
   const updateDailyLog = useUpdateDailyLog();
   
-  const ponds = extractApiData<Pond>(pondsData);
+  const ponds = extractApiData<Pond>(pondsData?.data);
 
   const [formData, setFormData] = useState({
     pond: '',
@@ -154,8 +154,8 @@ export default function EditDailyLogPage() {
               >
                 <option value="">Select a pond</option>
                 {ponds.map((pond) => (
-                  <option key={pond.id} value={pond.id}>
-                    {pond.name} ({pond.area_decimal} decimal)
+                  <option key={pond.pond_id} value={pond.pond_id}>
+                    {pond.name} ({pond.water_area_decimal} decimal)
                   </option>
                 ))}
               </select>

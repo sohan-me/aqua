@@ -12,7 +12,13 @@ from .models import (
     Mortality, Harvest, ExpenseType, IncomeType, Expense, Income,
     InventoryFeed, Treatment, Alert, Setting, FeedingBand, 
     EnvAdjustment, KPIDashboard, FishSampling, FeedingAdvice, SurvivalRate,
-    MedicalDiagnostic
+    MedicalDiagnostic, Customer, PaymentTerms, Vendor, VendorCategory, VendorVendorCategory, ItemCategory,
+    Account, Item, ItemPrice, JournalEntry, JournalLine, Bill, BillLine, BillPayment,
+    BillPaymentApply, Invoice, InvoiceLine, CustomerPayment, CustomerPaymentApply,
+    Deposit, DepositLine, Check, CheckExpenseLine, CheckItemLine,
+    InventoryTransaction, InventoryTransactionLine, ItemSales, ItemSalesLine,
+    StockingEvent, StockingLine, FeedingEvent, FeedingLine, MedicineEvent, MedicineLine, 
+    OtherPondEvent, OtherPondEventLine, Employee, EmployeeDocument, PayrollRun, PayrollLine
 )
 from .serializers import (
     PondSerializer, PondDetailSerializer, PondSummarySerializer,
@@ -24,7 +30,19 @@ from .serializers import (
     SettingSerializer, FeedingBandSerializer, EnvAdjustmentSerializer,
     KPIDashboardSerializer, FinancialSummarySerializer,
     FishSamplingSerializer, FeedingAdviceSerializer, SurvivalRateSerializer,
-    MedicalDiagnosticSerializer
+    MedicalDiagnosticSerializer, CustomerSerializer, PaymentTermsSerializer,
+    AccountSerializer, VendorSerializer, VendorCategorySerializer, VendorVendorCategorySerializer, ItemCategorySerializer,
+    ItemSerializer, ItemPriceSerializer, JournalEntrySerializer, JournalLineSerializer,
+    BillSerializer, BillLineSerializer, BillPaymentSerializer, BillPaymentApplySerializer,
+    InvoiceSerializer, InvoiceLineSerializer, CustomerPaymentSerializer,
+    CustomerPaymentApplySerializer, DepositSerializer, DepositLineSerializer,
+    CheckSerializer, CheckExpenseLineSerializer, CheckItemLineSerializer,
+    InventoryTransactionSerializer, InventoryTransactionLineSerializer,
+    ItemSalesSerializer, ItemSalesLineSerializer, StockingEventSerializer, 
+    StockingLineSerializer, FeedingEventSerializer, FeedingLineSerializer, 
+    MedicineEventSerializer, MedicineLineSerializer, OtherPondEventSerializer, 
+    OtherPondEventLineSerializer, EmployeeSerializer, EmployeeDocumentSerializer, 
+    PayrollRunSerializer, PayrollLineSerializer
 )
 
 
@@ -35,7 +53,34 @@ class PondViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
-        return Pond.objects.filter(user=self.request.user)
+        ponds = Pond.objects.filter(user=self.request.user)
+        
+        # If no ponds exist, create demo pond
+        if ponds.count() == 0:
+            from fish_farming.models import Customer
+            # Create demo customer if doesn't exist
+            customer, created = Customer.objects.get_or_create(
+                user=self.request.user,
+                name="Demo Farm",
+                defaults={
+                    'type': 'internal_pond',
+                    'contact_info': 'demo@example.com'
+                }
+            )
+            
+            # Create demo pond
+            pond = Pond.objects.create(
+                user=self.request.user,
+                customer=customer,
+                name="Demo Pond 1",
+                water_area_decimal=1.0,
+                depth_ft=5.0,
+                location="Demo Location"
+            )
+            print(f"Created demo pond: {pond.name}")
+            ponds = Pond.objects.filter(user=self.request.user)
+        
+        return ponds
     
     def get_serializer_class(self):
         if self.action == 'retrieve':
@@ -197,7 +242,10 @@ class SampleTypeViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
-        return SampleType.objects.filter(is_active=True)
+        return SampleType.objects.filter(user=self.request.user, is_active=True)
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
 
 class SamplingViewSet(viewsets.ModelViewSet):
@@ -338,7 +386,27 @@ class AlertViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
-        return Alert.objects.filter(pond__user=self.request.user)
+        print(f"DEBUG AlertViewSet: User {self.request.user.username} requesting alerts")
+        alerts = Alert.objects.filter(pond__user=self.request.user)
+        print(f"DEBUG AlertViewSet: Found {alerts.count()} alerts")
+        
+        # If no alerts exist, check if user has ponds and create demo alert
+        if alerts.count() == 0:
+            from fish_farming.models import Pond
+            ponds = Pond.objects.filter(user=self.request.user)
+            if ponds.exists():
+                pond = ponds.first()
+                print(f"No alerts found, creating demo alert for pond {pond.name}")
+                Alert.objects.create(
+                    pond=pond,
+                    alert_type="water_quality",
+                    message="Demo water quality alert - pH level is high",
+                    severity="medium"
+                )
+                alerts = Alert.objects.filter(pond__user=self.request.user)
+                print(f"Created demo alert, now have {alerts.count()} alerts")
+        
+        return alerts
     
     @action(detail=True, methods=['post'])
     def resolve(self, request, pk=None):
@@ -581,6 +649,8 @@ class FishSamplingViewSet(viewsets.ModelViewSet):
             # Calculate total current biomass for each pond/species combination
             total_current_biomass = 0
             pond_species_biomass = {}
+            total_area_sqm = 0
+            pond_load_analysis = {}
             
             # Get all unique pond/species combinations from STOCKING data (not just samplings)
             # This ensures we include all stocked fish, even if they don't have sampling data yet
@@ -627,6 +697,21 @@ class FishSamplingViewSet(viewsets.ModelViewSet):
                     
                     total_current_biomass += current_biomass
                     
+                    # Calculate pond area (only count once per pond)
+                    pond_area_sqm = float(pond.area_sqm)
+                    if pond.id not in pond_load_analysis:
+                        total_area_sqm += pond_area_sqm
+                        pond_load_analysis[pond.id] = {
+                            'pond_name': pond.name,
+                            'area_sqm': pond_area_sqm,
+                            'area_decimal': float(pond.water_area_decimal),
+                            'total_biomass_kg': 0,
+                            'load_kg_per_sqm': 0
+                        }
+                    
+                    # Add biomass to pond total
+                    pond_load_analysis[pond.id]['total_biomass_kg'] += current_biomass
+                    
                     # Store for detailed breakdown
                     key = f"{pond.name} - {species.name if species else 'Mixed'}"
                     pond_species_biomass[key] = {
@@ -634,6 +719,16 @@ class FishSamplingViewSet(viewsets.ModelViewSet):
                         'growth_biomass': cumulative_biomass_change,
                         'current_biomass': current_biomass
                     }
+            
+            # Calculate load for each pond (kg/m²)
+            for pond_id, pond_data in pond_load_analysis.items():
+                if pond_data['area_sqm'] > 0:
+                    pond_data['load_kg_per_sqm'] = pond_data['total_biomass_kg'] / pond_data['area_sqm']
+                else:
+                    pond_data['load_kg_per_sqm'] = 0
+            
+            # Calculate overall load analysis
+            overall_load_kg_per_sqm = total_current_biomass / total_area_sqm if total_area_sqm > 0 else 0
             
             return Response({
                 'summary': {
@@ -643,6 +738,11 @@ class FishSamplingViewSet(viewsets.ModelViewSet):
                     'total_current_biomass_kg': total_current_biomass,
                     'total_samplings': samplings.count(),
                     'samplings_with_biomass_data': len(biomass_changes)
+                },
+                'load_analysis': {
+                    'total_area_sqm': total_area_sqm,
+                    'overall_load_kg_per_sqm': overall_load_kg_per_sqm,
+                    'pond_loads': list(pond_load_analysis.values())
                 },
                 'pond_summary': pond_summary,
                 'species_summary': species_summary,
@@ -3152,3 +3252,471 @@ class MedicalDiagnosticViewSet(viewsets.ModelViewSet):
         diagnostics = self.get_queryset().filter(created_at__gte=thirty_days_ago)
         serializer = self.get_serializer(diagnostics, many=True)
         return Response(serializer.data)
+
+
+# ===================== BUSINESS MANAGEMENT VIEWSETS =====================
+
+class CustomerViewSet(viewsets.ModelViewSet):
+    """ViewSet for customer management"""
+    queryset = Customer.objects.all()
+    serializer_class = CustomerSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return Customer.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class AccountViewSet(viewsets.ModelViewSet):
+    """ViewSet for chart of accounts management"""
+    queryset = Account.objects.all()
+    serializer_class = AccountSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return Account.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+    
+    @action(detail=False, methods=['get'])
+    def tree(self, request):
+        """Get accounts in tree structure"""
+        try:
+            accounts = self.get_queryset().filter(level=0)  # Get root accounts
+            serializer = self.get_serializer(accounts, many=True)
+            return Response(serializer.data)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class PaymentTermsViewSet(viewsets.ModelViewSet):
+    """ViewSet for payment terms management"""
+    queryset = PaymentTerms.objects.all()
+    serializer_class = PaymentTermsSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def perform_create(self, serializer):
+        serializer.save()
+
+
+class VendorViewSet(viewsets.ModelViewSet):
+    """ViewSet for vendor management"""
+    queryset = Vendor.objects.all()
+    serializer_class = VendorSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return Vendor.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class VendorCategoryViewSet(viewsets.ModelViewSet):
+    """ViewSet for vendor category management"""
+    queryset = VendorCategory.objects.all()
+    serializer_class = VendorCategorySerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+
+class ItemCategoryViewSet(viewsets.ModelViewSet):
+    """ViewSet for item category management"""
+    queryset = ItemCategory.objects.all()
+    serializer_class = ItemCategorySerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return ItemCategory.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class ItemViewSet(viewsets.ModelViewSet):
+    """ViewSet for item management"""
+    queryset = Item.objects.all()
+    serializer_class = ItemSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        print(f"DEBUG ItemViewSet: User {self.request.user.username} requesting items")
+        items = Item.objects.filter(user=self.request.user)
+        print(f"DEBUG ItemViewSet: Found {items.count()} items")
+        
+        # If no items exist, create some demo items
+        if items.count() == 0:
+            print("No items found, creating demo items...")
+            demo_items = [
+                {
+                    'name': 'Tilapia Feed',
+                    'item_type': 'inventory_part',
+                    'uom': 'kg',
+                    'is_feed': True,
+                    'protein_content': 30.0,
+                    'feed_stage': 'Grower',
+                    'cost_price': 50.0,
+                    'selling_price': 60.0
+                },
+                {
+                    'name': 'Fish Medicine',
+                    'item_type': 'inventory_part',
+                    'uom': 'ml',
+                    'is_medicine': True,
+                    'cost_price': 100.0,
+                    'selling_price': 120.0
+                },
+                {
+                    'name': 'Tilapia',
+                    'item_type': 'inventory_part',
+                    'uom': 'pcs',
+                    'is_species': True,
+                    'cost_price': 2.0,
+                    'selling_price': 3.0
+                }
+            ]
+            
+            for item_data in demo_items:
+                Item.objects.create(user=self.request.user, **item_data)
+            
+            print(f"Created {len(demo_items)} demo items")
+            items = Item.objects.filter(user=self.request.user)
+        
+        return items
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class BillViewSet(viewsets.ModelViewSet):
+    """ViewSet for bill management"""
+    queryset = Bill.objects.all()
+    serializer_class = BillSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return Bill.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class InvoiceViewSet(viewsets.ModelViewSet):
+    """ViewSet for invoice management"""
+    queryset = Invoice.objects.all()
+    serializer_class = InvoiceSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return Invoice.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class InventoryTransactionViewSet(viewsets.ModelViewSet):
+    """ViewSet for inventory transaction management"""
+    queryset = InventoryTransaction.objects.all()
+    serializer_class = InventoryTransactionSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return InventoryTransaction.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class InventoryTransactionLineViewSet(viewsets.ModelViewSet):
+    """ViewSet for inventory transaction line management"""
+    queryset = InventoryTransactionLine.objects.all()
+    serializer_class = InventoryTransactionLineSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return InventoryTransactionLine.objects.filter(inventory_transaction__user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save()
+
+
+class StockingEventViewSet(viewsets.ModelViewSet):
+    """ViewSet for stocking event management"""
+    queryset = StockingEvent.objects.all()
+    serializer_class = StockingEventSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return StockingEvent.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+    
+    @action(detail=True, methods=['get'])
+    def lines(self, request, pk=None):
+        """Get stocking lines for a specific stocking event"""
+        stocking_event = self.get_object()
+        lines = StockingLine.objects.filter(stocking_event=stocking_event)
+        serializer = StockingLineSerializer(lines, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'])
+    def add_line(self, request, pk=None):
+        """Add a line to a stocking event"""
+        stocking_event = self.get_object()
+        serializer = StockingLineSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(stocking_event=stocking_event)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class FeedingEventViewSet(viewsets.ModelViewSet):
+    """ViewSet for feeding event management"""
+    queryset = FeedingEvent.objects.all()
+    serializer_class = FeedingEventSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return FeedingEvent.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class FeedingLineViewSet(viewsets.ModelViewSet):
+    """ViewSet for feeding line management"""
+    queryset = FeedingLine.objects.all()
+    serializer_class = FeedingLineSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return FeedingLine.objects.filter(feeding_event__user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save()
+
+
+class MedicineEventViewSet(viewsets.ModelViewSet):
+    """ViewSet for medicine event management"""
+    queryset = MedicineEvent.objects.all()
+    serializer_class = MedicineEventSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return MedicineEvent.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class OtherPondEventViewSet(viewsets.ModelViewSet):
+    """ViewSet for other pond event management"""
+    queryset = OtherPondEvent.objects.all()
+    serializer_class = OtherPondEventSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return OtherPondEvent.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class EmployeeViewSet(viewsets.ModelViewSet):
+    """ViewSet for employee management"""
+    queryset = Employee.objects.all()
+    serializer_class = EmployeeSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return Employee.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class PayrollRunViewSet(viewsets.ModelViewSet):
+    """ViewSet for payroll run management"""
+    queryset = PayrollRun.objects.all()
+    serializer_class = PayrollRunSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return PayrollRun.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class ItemSalesViewSet(viewsets.ModelViewSet):
+    """ViewSet for item sales management"""
+    queryset = ItemSales.objects.all()
+    serializer_class = ItemSalesSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return ItemSales.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class ItemSalesLineViewSet(viewsets.ModelViewSet):
+    """ViewSet for item sales line management"""
+    queryset = ItemSalesLine.objects.all()
+    serializer_class = ItemSalesLineSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return ItemSalesLine.objects.filter(item_sale__user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save()
+
+
+class MedicineLineViewSet(viewsets.ModelViewSet):
+    """ViewSet for medicine line management"""
+    queryset = MedicineLine.objects.all()
+    serializer_class = MedicineLineSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return MedicineLine.objects.filter(medicine_event__user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save()
+
+
+class BillLineViewSet(viewsets.ModelViewSet):
+    """ViewSet for bill line management"""
+    queryset = BillLine.objects.all()
+    serializer_class = BillLineSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return BillLine.objects.filter(bill__user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save()
+
+
+class InvoiceLineViewSet(viewsets.ModelViewSet):
+    """ViewSet for invoice line management"""
+    queryset = InvoiceLine.objects.all()
+    serializer_class = InvoiceLineSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return InvoiceLine.objects.filter(invoice__user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save()
+
+
+class CustomerPaymentViewSet(viewsets.ModelViewSet):
+    """ViewSet for customer payment management"""
+    queryset = CustomerPayment.objects.all()
+    serializer_class = CustomerPaymentSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return CustomerPayment.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class CustomerPaymentApplyViewSet(viewsets.ModelViewSet):
+    """ViewSet for customer payment application management"""
+    queryset = CustomerPaymentApply.objects.all()
+    serializer_class = CustomerPaymentApplySerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return CustomerPaymentApply.objects.filter(customer_payment__user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save()
+
+
+class StockLevelViewSet(viewsets.ViewSet):
+    """ViewSet for stock levels - calculated from inventory transactions"""
+    queryset = Item.objects.none()  # Empty queryset since we calculate dynamically
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def list(self, request):
+        """Get current stock levels for all items"""
+        from django.db.models import Sum, F
+        from collections import defaultdict
+        
+        # Get pond filter from query parameters
+        pond_id = request.query_params.get('pond_id')
+        
+        # Get all items that could have inventory (feeds, medicines, equipment, etc.)
+        items = Item.objects.filter(user=request.user).exclude(item_type='service')
+        
+        print(f"DEBUG: Found {items.count()} inventory items for user {request.user.username}")
+        if pond_id:
+            print(f"DEBUG: Filtering by pond_id: {pond_id}")
+        
+        stock_levels = []
+        
+        for item in items:
+            # Calculate current stock from inventory transactions
+            stock_query = InventoryTransactionLine.objects.filter(
+                inventory_transaction__user=request.user,
+                item=item
+            )
+            
+            # Filter by pond if specified
+            if pond_id:
+                stock_query = stock_query.filter(pond_id=pond_id)
+            
+            stock_data = stock_query.aggregate(
+                current_stock=Sum('qty')
+            )
+            
+            current_stock = stock_data['current_stock'] or 0
+            
+            # Determine status based on stock level
+            if current_stock <= 0:
+                status = 'out'
+            elif current_stock <= 10:  # Assuming minimum stock of 10
+                status = 'low'
+            elif current_stock >= 100:  # Assuming maximum stock of 100
+                status = 'high'
+            else:
+                status = 'normal'
+            
+            # Calculate total value (current_stock * unit_cost from latest transaction)
+            latest_txn_query = InventoryTransactionLine.objects.filter(
+                inventory_transaction__user=request.user,
+                item=item
+            )
+            
+            # Filter by pond if specified
+            if pond_id:
+                latest_txn_query = latest_txn_query.filter(pond_id=pond_id)
+            
+            latest_txn = latest_txn_query.order_by('-inventory_transaction__txn_date').first()
+            
+            unit_cost = latest_txn.unit_cost if latest_txn else 0
+            total_value = current_stock * unit_cost
+            
+            stock_levels.append({
+                'item_id': item.item_id,
+                'item_name': item.name,
+                'item_type': item.item_type,
+                'current_stock': current_stock,
+                'minimum_stock': 10,  # Default minimum
+                'maximum_stock': 100,  # Default maximum
+                'unit_cost': unit_cost,
+                'total_value': total_value,
+                'status': status,
+            })
+        
+        print(f"DEBUG: Returning {len(stock_levels)} stock levels")
+        return Response(stock_levels)

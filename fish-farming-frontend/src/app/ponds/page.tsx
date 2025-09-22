@@ -8,8 +8,9 @@
 
   export default function PondsPage() {
     const { data: pondsData, isLoading } = usePonds();
-    const ponds = extractApiData<Pond>(pondsData);
-
+    console.log(pondsData)
+    const ponds = extractApiData<Pond>(pondsData?.data);
+    console.log(ponds)
     if (isLoading) {
       return (
         <div className="flex items-center justify-center h-64">
@@ -53,7 +54,7 @@
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {ponds.map((pond) => (
-              <div key={pond.id} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              <div key={pond.pond_id} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
                 <div className="p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-semibold text-gray-900">{pond.name}</h3>
@@ -67,7 +68,7 @@
                   <div className="space-y-3">
                     <div className="flex items-center text-sm text-gray-600">
                       <Droplets className="h-4 w-4 mr-2 text-blue-500" />
-                      <span>Area: {parseFloat(pond.area_decimal).toFixed(3)} decimal</span>
+                      <span>Area: {parseFloat(pond.water_area_decimal).toFixed(3)} decimal</span>
                     </div>
                     
                     <div className="flex items-center text-sm text-gray-600">
@@ -96,13 +97,13 @@
                 <div className="bg-gray-50 px-6 py-3 border-t border-gray-200">
                   <div className="flex space-x-3">
                     <Link
-                      href={`/ponds/${pond.id}`}
+                      href={`/ponds/${pond.pond_id}`}
                       className="flex-1 text-center text-sm font-medium text-blue-600 hover:text-blue-500"
                     >
                       View Details
                     </Link>
                     <Link
-                      href={`/ponds/${pond.id}/edit`}
+                      href={`/ponds/${pond.pond_id}/edit`}
                       className="flex-1 text-center text-sm font-medium text-gray-600 hover:text-gray-500"
                     >
                       Edit

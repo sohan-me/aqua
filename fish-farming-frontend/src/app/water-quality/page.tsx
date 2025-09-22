@@ -14,9 +14,9 @@ export default function WaterQualityPage() {
   const { data: sampleTypesData } = useSampleTypes();
   const deleteSampling = useDeleteSampling();
   
-  const samplings = extractApiData<Sampling>(samplingsData);
-  const ponds = extractApiData<Pond>(pondsData);
-  const sampleTypes = extractApiData<SampleType>(sampleTypesData);
+  const samplings = extractApiData<Sampling>(samplingsData?.data);
+  const ponds = extractApiData<Pond>(pondsData?.data);
+  const sampleTypes = extractApiData<SampleType>(sampleTypesData?.data);
 
   const handleDelete = async (id: number, pondName: string, sampleType: string, date: string) => {
     if (window.confirm(`Are you sure you want to delete the ${sampleType} sample for ${pondName} on ${formatDate(date)}? This action cannot be undone.`)) {

@@ -1,6 +1,51 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiService, PaginationParams } from '@/lib/api';
+import { apiService, PaginationParams, api } from '@/lib/api';
 import { toast } from 'sonner';
+
+// Simple useApi hook for basic API operations
+export function useApi() {
+  const get = async (url: string) => {
+    const response = await api.get(url);
+    return response.data;
+  };
+
+  const post = async (url: string, data: any) => {
+    try {
+      console.log('POST Request:', { url, data });
+      const response = await api.post(url, data);
+      console.log('POST Response:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('POST Error Details:', {
+        url,
+        data,
+        error: error,
+        errorMessage: error.message,
+        errorStack: error.stack,
+        response: error.response,
+        responseStatus: error.response?.status,
+        responseStatusText: error.response?.statusText,
+        responseData: error.response?.data,
+        responseHeaders: error.response?.headers,
+        request: error.request,
+        config: error.config
+      });
+      throw error;
+    }
+  };
+
+  const put = async (url: string, data: any) => {
+    const response = await api.put(url, data);
+    return response.data;
+  };
+
+  const del = async (url: string) => {
+    const response = await api.delete(url);
+    return response.data;
+  };
+
+  return { get, post, put, delete: del };
+}
 
 // Generic hook for GET requests
 export function  useApiQuery<T>(
@@ -18,12 +63,8 @@ export function  useApiQuery<T>(
       const response = await queryFn();
       console.log('useApiQuery raw response:', response);
       
-      // Extract data from Axios response if needed
-      if (response && typeof response === 'object' && 'data' in response) {
-        console.log('useApiQuery extracted data:', response.data);
-        return { data: response.data };
-      }
-      console.log('useApiQuery returning response as-is:', response);
+      // The API service already returns the Axios response with data property
+      // So we just return the response as-is
       return response;
     },
     ...options,
@@ -461,54 +502,6 @@ export function useDeleteDailyLog() {
   );
 }
 
-// Sample Types
-export function useSampleTypes() {
-  return useApiQuery(['sample-types'], () => apiService.getSampleTypes());
-}
-
-export function useSampleTypeById(id: number) {
-  return useApiQuery(
-    ['sample-types', id.toString()],
-    () => apiService.getSampleTypeById(id),
-    { enabled: !!id }
-  );
-}
-
-export function useCreateSampleType() {
-  return useApiMutation(
-    (data: any) => apiService.createSampleType(data),
-    {
-      onSuccess: () => {
-        toast.success('Sample type created successfully');
-      },
-      invalidateQueries: [['sample-types']],
-    }
-  );
-}
-
-export function useUpdateSampleType() {
-  return useApiMutation(
-    ({ id, data }: { id: number; data: any }) => apiService.updateSampleType(id, data),
-    {
-      onSuccess: () => {
-        toast.success('Sample type updated successfully');
-      },
-      invalidateQueries: [['sample-types']],
-    }
-  );
-}
-
-export function useDeleteSampleType() {
-  return useApiMutation(
-    (id: number) => apiService.deleteSampleType(id),
-    {
-      onSuccess: () => {
-        toast.success('Sample type deleted successfully');
-      },
-      invalidateQueries: [['sample-types']],
-    }
-  );
-}
 
 // Water Quality Sampling
 export function useSamplings(params?: PaginationParams) {
@@ -1086,4 +1079,287 @@ export function useFcrAnalysis(params?: { pond?: number; species?: number; start
   });
   
   return result;
+}
+
+// Business Management Hooks
+export function useCustomers(params?: PaginationParams) {
+  return useApiQuery(['customers', JSON.stringify(params || {})], () => apiService.getCustomers(params));
+}
+
+export function useCustomer(id: number) {
+  return useApiQuery(['customers', id.toString()], () => apiService.getCustomerById(id), {
+    enabled: !!id,
+  });
+}
+
+export function useCreateCustomer() {
+  return useApiMutation(['customers'], apiService.createCustomer);
+}
+
+export function useUpdateCustomer() {
+  return useApiMutation(['customers'], apiService.updateCustomer);
+}
+
+export function useDeleteCustomer() {
+  return useApiMutation(['customers'], apiService.deleteCustomer);
+}
+
+export function usePaymentTerms() {
+  return useApiQuery(['payment-terms'], () => apiService.getPaymentTerms());
+}
+
+export function useVendors(params?: PaginationParams) {
+  return useApiQuery(['vendors', JSON.stringify(params || {})], () => apiService.getVendors(params));
+}
+
+export function useVendor(id: number) {
+  return useApiQuery(['vendors', id.toString()], () => apiService.getVendorById(id), {
+    enabled: !!id,
+  });
+}
+
+export function useCreateVendor() {
+  return useApiMutation(['vendors'], apiService.createVendor);
+}
+
+export function useUpdateVendor() {
+  return useApiMutation(['vendors'], apiService.updateVendor);
+}
+
+export function useDeleteVendor() {
+  return useApiMutation(['vendors'], apiService.deleteVendor);
+}
+
+export function useVendorCategories() {
+  return useApiQuery(['vendor-categories'], () => apiService.getVendorCategories());
+}
+
+export function useItems(params?: PaginationParams) {
+  return useApiQuery(['items', JSON.stringify(params || {})], () => apiService.getItems(params));
+}
+
+export function useItem(id: number) {
+  return useApiQuery(['items', id.toString()], () => apiService.getItemById(id), {
+    enabled: !!id,
+  });
+}
+
+export function useCreateItem() {
+  return useApiMutation(['items'], apiService.createItem);
+}
+
+export function useUpdateItem() {
+  return useApiMutation(['items'], apiService.updateItem);
+}
+
+export function useDeleteItem() {
+  return useApiMutation(['items'], apiService.deleteItem);
+}
+
+export function useBills(params?: PaginationParams) {
+  return useApiQuery(['bills', JSON.stringify(params || {})], () => apiService.getBills(params));
+}
+
+export function useBill(id: number) {
+  return useApiQuery(['bills', id.toString()], () => apiService.getBillById(id), {
+    enabled: !!id,
+  });
+}
+
+export function useCreateBill() {
+  return useApiMutation(['bills'], apiService.createBill);
+}
+
+export function useUpdateBill() {
+  return useApiMutation(['bills'], apiService.updateBill);
+}
+
+export function useDeleteBill() {
+  return useApiMutation(['bills'], apiService.deleteBill);
+}
+
+export function useInvoices(params?: PaginationParams) {
+  return useApiQuery(['invoices', JSON.stringify(params || {})], () => apiService.getInvoices(params));
+}
+
+export function useInvoice(id: number) {
+  return useApiQuery(['invoices', id.toString()], () => apiService.getInvoiceById(id), {
+    enabled: !!id,
+  });
+}
+
+export function useCreateInvoice() {
+  return useApiMutation(['invoices'], apiService.createInvoice);
+}
+
+export function useUpdateInvoice() {
+  return useApiMutation(['invoices'], apiService.updateInvoice);
+}
+
+export function useDeleteInvoice() {
+  return useApiMutation(['invoices'], apiService.deleteInvoice);
+}
+
+export function useInventoryTransactions(params?: PaginationParams) {
+  return useApiQuery(['inventory-transactions', JSON.stringify(params || {})], () => apiService.getInventoryTransactions(params));
+}
+
+export function useInventoryTransaction(id: number) {
+  return useApiQuery(['inventory-transactions', id.toString()], () => apiService.getInventoryTransactionById(id), {
+    enabled: !!id,
+  });
+}
+
+export function useCreateInventoryTransaction() {
+  return useApiMutation(['inventory-transactions'], apiService.createInventoryTransaction);
+}
+
+export function useUpdateInventoryTransaction() {
+  return useApiMutation(['inventory-transactions'], apiService.updateInventoryTransaction);
+}
+
+export function useDeleteInventoryTransaction() {
+  return useApiMutation(['inventory-transactions'], apiService.deleteInventoryTransaction);
+}
+
+export function useStockingEvents(params?: PaginationParams) {
+  return useApiQuery(['stocking-events', JSON.stringify(params || {})], () => apiService.getStockingEvents(params));
+}
+
+export function useStockingEvent(id: number) {
+  return useApiQuery(['stocking-events', id.toString()], () => apiService.getStockingEventById(id), {
+    enabled: !!id,
+  });
+}
+
+export function useCreateStockingEvent() {
+  return useApiMutation(['stocking-events'], apiService.createStockingEvent);
+}
+
+export function useUpdateStockingEvent() {
+  return useApiMutation(['stocking-events'], apiService.updateStockingEvent);
+}
+
+export function useDeleteStockingEvent() {
+  return useApiMutation(['stocking-events'], apiService.deleteStockingEvent);
+}
+
+export function useStockingEventLines(id: number) {
+  return useApiQuery(['stocking-events', id.toString(), 'lines'], () => apiService.getStockingEventLines(id), {
+    enabled: !!id,
+  });
+}
+
+export function useAddStockingEventLine() {
+  return useApiMutation(['stocking-events'], apiService.addStockingEventLine);
+}
+
+export function useFeedingEvents(params?: PaginationParams) {
+  return useApiQuery(['feeding-events', JSON.stringify(params || {})], () => apiService.getFeedingEvents(params));
+}
+
+export function useFeedingEvent(id: number) {
+  return useApiQuery(['feeding-events', id.toString()], () => apiService.getFeedingEventById(id), {
+    enabled: !!id,
+  });
+}
+
+export function useCreateFeedingEvent() {
+  return useApiMutation(['feeding-events'], apiService.createFeedingEvent);
+}
+
+export function useUpdateFeedingEvent() {
+  return useApiMutation(['feeding-events'], apiService.updateFeedingEvent);
+}
+
+export function useDeleteFeedingEvent() {
+  return useApiMutation(['feeding-events'], apiService.deleteFeedingEvent);
+}
+
+export function useMedicineEvents(params?: PaginationParams) {
+  return useApiQuery(['medicine-events', JSON.stringify(params || {})], () => apiService.getMedicineEvents(params));
+}
+
+export function useMedicineEvent(id: number) {
+  return useApiQuery(['medicine-events', id.toString()], () => apiService.getMedicineEventById(id), {
+    enabled: !!id,
+  });
+}
+
+export function useCreateMedicineEvent() {
+  return useApiMutation(['medicine-events'], apiService.createMedicineEvent);
+}
+
+export function useUpdateMedicineEvent() {
+  return useApiMutation(['medicine-events'], apiService.updateMedicineEvent);
+}
+
+export function useDeleteMedicineEvent() {
+  return useApiMutation(['medicine-events'], apiService.deleteMedicineEvent);
+}
+
+export function useOtherPondEvents(params?: PaginationParams) {
+  return useApiQuery(['other-pond-events', JSON.stringify(params || {})], () => apiService.getOtherPondEvents(params));
+}
+
+export function useOtherPondEvent(id: number) {
+  return useApiQuery(['other-pond-events', id.toString()], () => apiService.getOtherPondEventById(id), {
+    enabled: !!id,
+  });
+}
+
+export function useCreateOtherPondEvent() {
+  return useApiMutation(['other-pond-events'], apiService.createOtherPondEvent);
+}
+
+export function useUpdateOtherPondEvent() {
+  return useApiMutation(['other-pond-events'], apiService.updateOtherPondEvent);
+}
+
+export function useDeleteOtherPondEvent() {
+  return useApiMutation(['other-pond-events'], apiService.deleteOtherPondEvent);
+}
+
+export function useEmployees(params?: PaginationParams) {
+  return useApiQuery(['employees', JSON.stringify(params || {})], () => apiService.getEmployees(params));
+}
+
+export function useEmployee(id: number) {
+  return useApiQuery(['employees', id.toString()], () => apiService.getEmployeeById(id), {
+    enabled: !!id,
+  });
+}
+
+export function useCreateEmployee() {
+  return useApiMutation(['employees'], apiService.createEmployee);
+}
+
+export function useUpdateEmployee() {
+  return useApiMutation(['employees'], apiService.updateEmployee);
+}
+
+export function useDeleteEmployee() {
+  return useApiMutation(['employees'], apiService.deleteEmployee);
+}
+
+export function usePayrollRuns(params?: PaginationParams) {
+  return useApiQuery(['payroll-runs', JSON.stringify(params || {})], () => apiService.getPayrollRuns(params));
+}
+
+export function usePayrollRun(id: number) {
+  return useApiQuery(['payroll-runs', id.toString()], () => apiService.getPayrollRunById(id), {
+    enabled: !!id,
+  });
+}
+
+export function useCreatePayrollRun() {
+  return useApiMutation(['payroll-runs'], apiService.createPayrollRun);
+}
+
+export function useUpdatePayrollRun() {
+  return useApiMutation(['payroll-runs'], apiService.updatePayrollRun);
+}
+
+export function useDeletePayrollRun() {
+  return useApiMutation(['payroll-runs'], apiService.deletePayrollRun);
 }

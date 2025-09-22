@@ -18,8 +18,8 @@ export default function EditExpensePage() {
   const { data: expenseTypesData } = useExpenseTypes();
   const updateExpense = useUpdateExpense();
   
-  const ponds = extractApiData<Pond>(pondsData);
-  const expenseTypes = extractApiData<ExpenseType>(expenseTypesData);
+  const ponds = extractApiData<Pond>(pondsData?.data);
+  const expenseTypes = extractApiData<ExpenseType>(expenseTypesData?.data);
 
   const [formData, setFormData] = useState({
     pond: '',

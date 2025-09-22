@@ -15,9 +15,9 @@ export default function NewIncomePage() {
   const { data: incomeTypesData } = useIncomeTypes();
   const { data: speciesData } = useSpecies();
   
-  const ponds = extractApiData<Pond>(pondsData);
-  const incomeTypes = extractApiData<IncomeType>(incomeTypesData);
-  const species = extractApiData<Species>(speciesData);
+  const ponds = extractApiData<Pond>(pondsData?.data);
+  const incomeTypes = extractApiData<IncomeType>(incomeTypesData?.data);
+  const species = extractApiData<Species>(speciesData?.data);
 
   const [formData, setFormData] = useState({
     pond: '',

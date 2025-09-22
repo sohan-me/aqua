@@ -18,8 +18,8 @@ export default function EditFeedingPage() {
   const { data: feedTypesData } = useFeedTypes();
   const updateFeed = useUpdateFeed();
   
-  const ponds = extractApiData<Pond>(pondsData);
-  const feedTypes = extractApiData<FeedType>(feedTypesData);
+  const ponds = extractApiData<Pond>(pondsData?.data);
+  const feedTypes = extractApiData<FeedType>(feedTypesData?.data);
 
   const [formData, setFormData] = useState({
     pond: '',

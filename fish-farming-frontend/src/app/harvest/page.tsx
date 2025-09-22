@@ -28,9 +28,9 @@ export default function HarvestPage() {
   const { data: speciesData } = useSpecies();
   const deleteHarvest = useDeleteHarvest();
   
-  const harvests = extractApiData<Harvest>(harvestsData);
-  const ponds = extractApiData<Pond>(pondsData);
-  const species = extractApiData<Species>(speciesData);
+  const harvests = extractApiData<Harvest>(harvestsData?.data);
+  const ponds = extractApiData<Pond>(pondsData?.data);
+  const species = extractApiData<Species>(speciesData?.data);
   
   // Filter harvests based on selected filters
   const filteredHarvests = useMemo(() => {

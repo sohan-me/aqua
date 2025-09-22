@@ -109,7 +109,7 @@ console.log(pond);
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Area</p>
-              <p className="text-2xl font-semibold text-gray-900">{pond.data.area_decimal || 'N/A'} decimal</p>
+              <p className="text-2xl font-semibold text-gray-900">{pond.data.water_area_decimal || 'N/A'} decimal</p>
             </div>
           </div>
         </div>

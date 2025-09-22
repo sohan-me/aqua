@@ -1,20 +1,21 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSpeciesById, useUpdateSpecies } from '@/hooks/useApi';
 import { ArrowLeft, Save, X, Fish } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface EditSpeciesPageProps {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 export default function EditSpeciesPage({ params }: EditSpeciesPageProps) {
   const router = useRouter();
-  const { data: speciesData, isLoading } = useSpeciesById(parseInt(params.id));
+  const { id } = use(params);
+  const { data: speciesData, isLoading } = useSpeciesById(parseInt(id));
   const updateSpecies = useUpdateSpecies();
   
   const species = speciesData?.data;
@@ -57,8 +58,8 @@ export default function EditSpeciesPage({ params }: EditSpeciesPageProps) {
         description: formData.description.trim()
       };
 
-      await updateSpecies.mutateAsync({ id: parseInt(params.id), data: submitData });
-      router.push(`/species/${params.id}`);
+      await updateSpecies.mutateAsync({ id: parseInt(id), data: submitData });
+      router.push(`/species/${id}`);
     } catch (error) {
       toast.error('Failed to update species');
     } finally {
@@ -67,7 +68,7 @@ export default function EditSpeciesPage({ params }: EditSpeciesPageProps) {
   };
 
   const handleCancel = () => {
-    router.push(`/species/${params.id}`);
+    router.push(`/species/${id}`);
   };
 
   if (isLoading) {

@@ -38,7 +38,7 @@ export default function MedicalDiagnosticPage() {
 
   // Fetch real ponds data from API
   const { data: pondsData, isLoading: pondsLoading } = usePonds();
-  const ponds = extractApiData<Pond>(pondsData);
+  const ponds = extractApiData<Pond>(pondsData?.data);
 
   // Fetch saved diagnostics on component mount
   useEffect(() => {
@@ -329,7 +329,7 @@ export default function MedicalDiagnosticPage() {
     setIsSaving(true);
     try {
       const diagnosticData = {
-        pond: selectedPond.id,
+        pond: selectedPond.pond_id,
         disease_name: diagnosisData.disease,
         confidence_percentage: diagnosisData.confidence.toString(),
         recommended_treatment: diagnosisData.treatment,
@@ -450,30 +450,30 @@ export default function MedicalDiagnosticPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {ponds.map(pond => (
                   <Button
-                    key={pond.id}
-                    variant={selectedPond?.id === pond.id ? "default" : "outline"}
+                    key={pond.pond_id}
+                    variant={selectedPond?.pond_id === pond.pond_id ? "default" : "outline"}
                     onClick={() => setSelectedPond(pond)}
                     className={`h-auto p-4 flex flex-col items-start gap-2 text-left ${
-                      selectedPond?.id === pond.id 
+                      selectedPond?.pond_id === pond.pond_id 
                         ? 'bg-blue-600 hover:bg-blue-700 text-white' 
                         : 'bg-white hover:bg-gray-50 text-gray-800 border-gray-300'
                     }`}
                   >
-                    <div className={`font-semibold ${selectedPond?.id === pond.id ? 'text-white' : 'text-gray-800'}`}>{pond.name}</div>
-                    <div className={`text-sm flex items-center gap-1 ${selectedPond?.id === pond.id ? 'text-white opacity-90' : 'text-gray-700'}`}>
+                    <div className={`font-semibold ${selectedPond?.pond_id === pond.pond_id ? 'text-white' : 'text-gray-800'}`}>{pond.name}</div>
+                    <div className={`text-sm flex items-center gap-1 ${selectedPond?.pond_id === pond.pond_id ? 'text-white opacity-90' : 'text-gray-700'}`}>
                       <Droplets className="h-3 w-3" />
-                      Size: {parseFloat(pond.area_decimal).toFixed(3)} decimel
+                      Size: {parseFloat(pond.water_area_decimal).toFixed(3)} decimal
                     </div>
-                    <div className={`text-sm flex items-center gap-1 ${selectedPond?.id === pond.id ? 'text-white opacity-90' : 'text-gray-700'}`}>
+                    <div className={`text-sm flex items-center gap-1 ${selectedPond?.pond_id === pond.pond_id ? 'text-white opacity-90' : 'text-gray-700'}`}>
                       <Activity className="h-3 w-3" />
                       Depth: {parseFloat(pond.depth_ft).toFixed(1)} ft
                     </div>
-                    <div className={`text-sm flex items-center gap-1 ${selectedPond?.id === pond.id ? 'text-white opacity-90' : 'text-gray-700'}`}>
+                    <div className={`text-sm flex items-center gap-1 ${selectedPond?.pond_id === pond.pond_id ? 'text-white opacity-90' : 'text-gray-700'}`}>
                       <Fish className="h-3 w-3" />
                       Volume: {parseFloat(pond.volume_m3).toFixed(1)} m³
                     </div>
                     {pond.location && (
-                      <div className={`text-sm flex items-center gap-1 ${selectedPond?.id === pond.id ? 'text-white opacity-90' : 'text-gray-700'}`}>
+                      <div className={`text-sm flex items-center gap-1 ${selectedPond?.pond_id === pond.pond_id ? 'text-white opacity-90' : 'text-gray-700'}`}>
                         <MapPin className="h-3 w-3" />
                         {pond.location}
                       </div>
@@ -488,7 +488,7 @@ export default function MedicalDiagnosticPage() {
               {selectedPond && (
                 <div className="mt-4 p-3 bg-blue-50 rounded-lg">
                   <p className="text-sm text-blue-800">
-                    <strong>Selected Pond:</strong> {selectedPond.name} ({parseFloat(selectedPond.area_decimal).toFixed(3)} decimel) - {selectedPond.location || 'No location specified'}
+                    <strong>Selected Pond:</strong> {selectedPond.name} ({parseFloat(selectedPond.water_area_decimal).toFixed(3)} decimal) - {selectedPond.location || 'No location specified'}
                   </p>
                 </div>
               )}
@@ -688,7 +688,7 @@ export default function MedicalDiagnosticPage() {
             {selectedPond && (
               <div className="bg-blue-50 p-3 rounded-lg mb-4">
                 <p className="text-sm text-blue-800">
-                  <strong>Pond:</strong> {selectedPond.name} ({parseFloat(selectedPond.area_decimal).toFixed(3)} decimel) - {selectedPond.location || 'No location specified'}
+                  <strong>Pond:</strong> {selectedPond.name} ({parseFloat(selectedPond.water_area_decimal).toFixed(3)} decimal) - {selectedPond.location || 'No location specified'}
                 </p>
               </div>
             )}
