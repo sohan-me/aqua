@@ -18,6 +18,8 @@ interface Customer {
   customer_id: number;
   name: string;
   type: 'internal_pond' | 'external_buyer';
+  pond?: number | null;
+  pond_name?: string;
   contact_person: string;
   phone: string;
   email: string;
@@ -27,8 +29,17 @@ interface Customer {
   created_at: string;
 }
 
+interface Pond {
+  pond_id: number;
+  name: string;
+  location: string;
+  size: number;
+  status: string;
+}
+
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [ponds, setPonds] = useState<Pond[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -36,6 +47,7 @@ export default function CustomersPage() {
   const [formData, setFormData] = useState({
     name: '',
     type: 'external_buyer' as 'internal_pond' | 'external_buyer',
+    pond: '',
     contact_person: '',
     phone: '',
     email: '',
@@ -48,37 +60,47 @@ export default function CustomersPage() {
   const router = useRouter();
 
   useEffect(() => {
-    fetchCustomers();
+    fetchData();
   }, []);
 
-  const fetchCustomers = async () => {
+  const fetchData = async () => {
     try {
       setLoading(true);
-      const response = await get('/customers/');
-      setCustomers(response.results || response);
+      const [customersResponse, pondsResponse] = await Promise.all([
+        get('/customers/'),
+        get('/ponds/')
+      ]);
+      setCustomers(customersResponse.results || customersResponse);
+      setPonds(pondsResponse.results || pondsResponse);
     } catch (error) {
-      console.error('Error fetching customers:', error);
-      toast.error('Failed to fetch customers');
+      console.error('Error fetching data:', error);
+      toast.error('Failed to fetch data');
     } finally {
       setLoading(false);
     }
   };
 
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      console.log('Customer form data being sent:', formData);
+      const submitData = {
+        ...formData,
+        pond: formData.type === 'internal_pond' && formData.pond ? parseInt(formData.pond) : null,
+      };
+      
+      console.log('Customer form data being sent:', submitData);
       if (editingCustomer) {
-        await put(`/customers/${editingCustomer.customer_id}/`, formData);
+        await put(`/customers/${editingCustomer.customer_id}/`, submitData);
         toast.success('Customer updated successfully');
       } else {
-        await post('/customers/', formData);
+        await post('/customers/', submitData);
         toast.success('Customer created successfully');
       }
       setIsDialogOpen(false);
       setEditingCustomer(null);
       resetForm();
-      fetchCustomers();
+      fetchData();
     } catch (error) {
       console.error('Error saving customer:', error);
       toast.error('Failed to save customer');
@@ -90,6 +112,7 @@ export default function CustomersPage() {
     setFormData({
       name: customer.name,
       type: customer.type,
+      pond: customer.pond?.toString() || '',
       contact_person: customer.contact_person,
       phone: customer.phone,
       email: customer.email,
@@ -105,7 +128,7 @@ export default function CustomersPage() {
       try {
         await del(`/customers/${customerId}/`);
         toast.success('Customer deleted successfully');
-        fetchCustomers();
+        fetchData();
       } catch (error) {
         console.error('Error deleting customer:', error);
         toast.error('Failed to delete customer');
@@ -117,6 +140,7 @@ export default function CustomersPage() {
     setFormData({
       name: '',
       type: 'external_buyer',
+      pond: '',
       contact_person: '',
       phone: '',
       email: '',
@@ -171,7 +195,7 @@ export default function CustomersPage() {
                   <Select
                     value={formData.type}
                     onValueChange={(value: 'internal_pond' | 'external_buyer') => 
-                      setFormData({ ...formData, type: value })
+                      setFormData({ ...formData, type: value, pond: '' })
                     }
                   >
                     <SelectTrigger>
@@ -183,6 +207,26 @@ export default function CustomersPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                {formData.type === 'internal_pond' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="pond">Pond *</Label>
+                    <Select
+                      value={formData.pond}
+                      onValueChange={(value) => setFormData({ ...formData, pond: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a pond" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ponds.map((pond) => (
+                          <SelectItem key={pond.pond_id} value={pond.pond_id.toString()}>
+                            {pond.name} - {pond.location}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="contact_person">Contact Person</Label>
                   <Input
@@ -303,6 +347,11 @@ export default function CustomersPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
+                  {customer.type === 'internal_pond' && customer.pond_name && (
+                    <p className="text-sm text-gray-600">
+                      <strong>Pond:</strong> {customer.pond_name}
+                    </p>
+                  )}
                   {customer.contact_person && (
                     <p className="text-sm text-gray-600">
                       <strong>Contact:</strong> {customer.contact_person}

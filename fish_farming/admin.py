@@ -87,24 +87,26 @@ class HarvestAdmin(admin.ModelAdmin):
 
 @admin.register(ExpenseType)
 class ExpenseTypeAdmin(admin.ModelAdmin):
-    list_display = ['name', 'category', 'created_at']
-    list_filter = ['category']
-    search_fields = ['name', 'description']
-    readonly_fields = ['created_at']
+    list_display = ['category', 'parent', 'user', 'created_at']
+    list_filter = ['parent', 'user']
+    search_fields = ['category', 'description']
+    readonly_fields = ['id', 'created_at']
+    list_select_related = ['parent', 'user']
 
 
 @admin.register(IncomeType)
 class IncomeTypeAdmin(admin.ModelAdmin):
-    list_display = ['name', 'category', 'created_at']
-    list_filter = ['category']
-    search_fields = ['name', 'description']
-    readonly_fields = ['created_at']
+    list_display = ['category', 'parent', 'user', 'created_at']
+    list_filter = ['parent', 'user']
+    search_fields = ['category', 'description']
+    readonly_fields = ['id', 'created_at']
+    list_select_related = ['parent', 'user']
 
 
 @admin.register(Expense)
 class ExpenseAdmin(admin.ModelAdmin):
     list_display = ['expense_type', 'user', 'pond', 'species', 'date', 'amount', 'supplier']
-    list_filter = ['date', 'expense_type__category', 'user', 'species']
+    list_filter = ['date', 'expense_type', 'user', 'species']
     search_fields = ['expense_type__name', 'user__username', 'pond__name', 'species__name', 'supplier', 'notes']
     readonly_fields = ['created_at']
 
@@ -113,7 +115,7 @@ class ExpenseAdmin(admin.ModelAdmin):
 class IncomeAdmin(admin.ModelAdmin):
     list_display = ['income_type', 'user', 'pond', 'species', 'date', 'amount', 'customer']
     list_filter = ['date', 'income_type__category', 'user', 'species']
-    search_fields = ['income_type__name', 'user__username', 'pond__name', 'species__name', 'customer', 'notes']
+    search_fields = ['income_type__category', 'user__username', 'pond__name', 'species__name', 'customer', 'notes']
     readonly_fields = ['created_at']
 
 

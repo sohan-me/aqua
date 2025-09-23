@@ -606,6 +606,11 @@ export function useFeedTypes() {
   return useApiQuery(['feed-types'], () => apiService.getFeedTypes());
 }
 
+// Sample Types
+export function useSampleTypes() {
+  return useApiQuery(['sample-types'], () => apiService.getSampleTypes());
+}
+
 export function useFeedTypeById(id: number) {
   return useApiQuery(
     ['feed-types', id.toString()],

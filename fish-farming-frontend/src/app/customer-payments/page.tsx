@@ -36,6 +36,9 @@ interface Invoice {
   invoice_no: string;
   customer_id: number;
   open_balance: number;
+  invoice_date: string;
+  total_amount: number;
+  customer_name?: string;
 }
 
 
@@ -43,7 +46,9 @@ export default function CustomerPaymentsPage() {
   const [payments, setPayments] = useState<CustomerPayment[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [customerInvoices, setCustomerInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPayment, setEditingPayment] = useState<CustomerPayment | null>(null);
@@ -78,6 +83,32 @@ export default function CustomerPaymentsPage() {
       toast.error('Failed to fetch payment data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchCustomerInvoices = async (customerId: string) => {
+    if (!customerId) {
+      setCustomerInvoices([]);
+      return;
+    }
+
+    try {
+      setLoadingInvoices(true);
+      const response = await get(`/invoices/?customer=${customerId}`);
+      const allInvoices = response.results || response;
+      
+      // Filter for invoices with outstanding balance
+      const outstandingInvoices = allInvoices.filter((invoice: Invoice) => 
+        invoice.open_balance > 0
+      );
+      
+      setCustomerInvoices(outstandingInvoices);
+    } catch (error) {
+      console.error('Error fetching customer invoices:', error);
+      toast.error('Failed to fetch customer invoices');
+      setCustomerInvoices([]);
+    } finally {
+      setLoadingInvoices(false);
     }
   };
 
@@ -137,11 +168,12 @@ export default function CustomerPaymentsPage() {
   const resetForm = () => {
     setFormData({
       customer_id: '',
-      payment_date: '',
+      payment_date: new Date().toISOString().split('T')[0], // Default to today
       amount_total: '',
       memo: '',
-      deposit_account: '',
+      deposit_account: '1', // Default to account ID 1
     });
+    setCustomerInvoices([]);
   };
 
 
@@ -178,7 +210,10 @@ export default function CustomerPaymentsPage() {
                   <Label htmlFor="customer_id">Customer *</Label>
                   <Select
                     value={formData.customer_id}
-                    onValueChange={(value) => setFormData({ ...formData, customer_id: value, invoice_id: '' })}
+                    onValueChange={(value) => {
+                      setFormData({ ...formData, customer_id: value, invoice_id: '' });
+                      fetchCustomerInvoices(value);
+                    }}
                   >
                     <SelectTrigger className="h-12">
                       <SelectValue placeholder="Select customer" />
@@ -240,6 +275,49 @@ export default function CustomerPaymentsPage() {
                   className="min-h-[100px]"
                 />
               </div>
+
+              {/* Customer Outstanding Invoices */}
+              {formData.customer_id && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold">Outstanding Invoices</h3>
+                    {loadingInvoices && <div className="text-sm text-gray-500">Loading...</div>}
+                  </div>
+                  
+                  {customerInvoices.length > 0 ? (
+                    <div className="border rounded-lg">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Invoice #</TableHead>
+                            <TableHead>Date</TableHead>
+                            <TableHead>Total Amount</TableHead>
+                            <TableHead>Outstanding Balance</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {customerInvoices.map((invoice) => (
+                            <TableRow key={invoice.invoice_id}>
+                              <TableCell className="font-medium">{invoice.invoice_no}</TableCell>
+                              <TableCell>{new Date(invoice.invoice_date).toLocaleDateString()}</TableCell>
+                              <TableCell>${Number(invoice.total_amount).toFixed(2)}</TableCell>
+                              <TableCell className="text-red-600 font-medium">
+                                ${Number(invoice.open_balance).toFixed(2)}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  ) : (
+                    !loadingInvoices && (
+                      <div className="text-center py-4 text-gray-500">
+                        <p>No outstanding invoices found for this customer.</p>
+                      </div>
+                    )
+                  )}
+                </div>
+              )}
 
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>

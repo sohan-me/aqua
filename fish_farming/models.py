@@ -8,6 +8,22 @@ from mptt.models import MPTTModel, TreeForeignKey
 
 # ===================== CORE MASTER DATA =====================
 
+class PaymentTerms(models.Model):
+    """Payment terms for bills and invoices"""
+    terms_id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=100, unique=True, help_text="e.g., Net 30, Due on receipt")
+    day_count = models.PositiveIntegerField(help_text="Number of days for payment")
+    description = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name_plural = 'Payment Terms'
+
+    def __str__(self):
+        return self.name
+
+
 class Customer(models.Model):
     """Customer model - includes own ponds & 3rd-party buyers"""
     CUSTOMER_TYPE_CHOICES = [
@@ -19,6 +35,7 @@ class Customer(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='customers')
     name = models.CharField(max_length=200, help_text="e.g., Digonta, Mynuddin, Ashari-1, Ashari-2")
     type = models.CharField(max_length=20, choices=CUSTOMER_TYPE_CHOICES)
+    pond = models.ForeignKey('Pond', on_delete=models.CASCADE, null=True, blank=True, related_name='customers', help_text="Required for Internal Pond type")
     contact_person = models.CharField(max_length=100, blank=True)
     phone = models.CharField(max_length=50, blank=True)
     email = models.EmailField(blank=True)
@@ -39,40 +56,6 @@ class Customer(models.Model):
         return f"{self.name} ({self.get_type_display()})"
 
 
-class PaymentTerms(models.Model):
-    """Payment terms for bills and invoices"""
-    terms_id = models.AutoField(primary_key=True)
-    name = models.CharField(max_length=100, unique=True, help_text="e.g., Net 30, Due on receipt")
-    day_count = models.PositiveIntegerField(help_text="Number of days for payment")
-    description = models.TextField(blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    
-    class Meta:
-        ordering = ['name']
-        verbose_name_plural = 'Payment Terms'
-    
-    def __str__(self):
-        return self.name
-
-
-class VendorCategory(MPTTModel):
-    """Vendor categories: Feed Company, Equipment Supplier, etc. - Hierarchical structure"""
-    vendor_category_id = models.AutoField(primary_key=True)
-    name = models.CharField(max_length=100)
-    parent = TreeForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='children')
-    description = models.TextField(blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    
-    class MPTTMeta:
-        order_insertion_by = ['name']
-    
-    class Meta:
-        ordering = ['tree_id', 'lft']
-        verbose_name_plural = 'Vendor Categories'
-        unique_together = ['name', 'parent']  # Same name allowed at different levels
-    
-    def __str__(self):
-        return f"{self.name}" if not self.parent else f"{self.parent} > {self.name}"
 
 
 class Vendor(models.Model):
@@ -84,14 +67,11 @@ class Vendor(models.Model):
     phone = models.CharField(max_length=50, blank=True)
     email = models.EmailField(blank=True)
     address = models.TextField(blank=True)
-    terms_default = models.ForeignKey(PaymentTerms, on_delete=models.SET_NULL, null=True, blank=True, related_name='vendors')
     memo = models.TextField(blank=True)
+    terms_default = models.ForeignKey(PaymentTerms, on_delete=models.SET_NULL, null=True, blank=True, related_name='vendors')
     active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
-    # Many-to-many relationship with categories
-    categories = models.ManyToManyField(VendorCategory, through='VendorVendorCategory', blank=True)
     
     class Meta:
         ordering = ['name']
@@ -99,19 +79,6 @@ class Vendor(models.Model):
     
     def __str__(self):
         return self.name
-
-
-class VendorVendorCategory(models.Model):
-    """Many-to-many relationship between Vendor and VendorCategory"""
-    vendor = models.ForeignKey(Vendor, on_delete=models.CASCADE)
-    vendor_category = models.ForeignKey(VendorCategory, on_delete=models.CASCADE)
-    created_at = models.DateTimeField(auto_now_add=True)
-    
-    class Meta:
-        unique_together = ['vendor', 'vendor_category']
-    
-    def __str__(self):
-        return f"{self.vendor.name} - {self.vendor_category.name}"
 
 
 class ItemCategory(MPTTModel):
@@ -175,6 +142,11 @@ class Account(MPTTModel):
     
     def __str__(self):
         return f"{self.code} - {self.name}" if self.code else self.name
+    
+    def get_full_path(self):
+        """Get the full path from root to this account"""
+        ancestors = self.get_ancestors(include_self=True)
+        return ' > '.join([f"{ancestor.code} - {ancestor.name}" if ancestor.code else ancestor.name for ancestor in ancestors])
 
 
 class Item(models.Model):
@@ -196,11 +168,12 @@ class Item(models.Model):
     income_account = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, blank=True, related_name='income_items')
     expense_account = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, blank=True, related_name='expense_items')
     asset_account = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, blank=True, related_name='asset_items')
+    cost_of_goods_sold_account = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, blank=True, related_name='cogs_items', help_text="Cost of Goods Sold account")
     
-    # Quick filters
-    is_species = models.BooleanField(default=False)
-    is_feed = models.BooleanField(default=False)
-    is_medicine = models.BooleanField(default=False)
+    # Stock management
+    current_stock = models.DecimalField(max_digits=15, decimal_places=3, default=0, help_text="Current stock quantity")
+    min_stock_level = models.DecimalField(max_digits=15, decimal_places=3, default=0, help_text="Minimum stock level for alerts")
+    max_stock_level = models.DecimalField(max_digits=15, decimal_places=3, null=True, blank=True, help_text="Maximum stock level")
     
     # Feed-specific fields
     protein_content = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, help_text="Protein content % (for feeds)")
@@ -221,6 +194,39 @@ class Item(models.Model):
     
     def __str__(self):
         return self.name
+    
+    def calculate_current_stock(self):
+        """Calculate current stock based on inventory transactions"""
+        from django.db.models import Sum
+        
+        # Sum all inventory transactions for this item
+        stock_sum = InventoryTransactionLine.objects.filter(
+            item=self
+        ).aggregate(
+            total_stock=Sum('qty')
+        )['total_stock'] or 0
+        
+        return stock_sum
+    
+    def update_current_stock(self):
+        """Update current_stock field based on inventory transactions"""
+        self.current_stock = self.calculate_current_stock()
+        self.save(update_fields=['current_stock'])
+    
+    def is_low_stock(self):
+        """Check if item is below minimum stock level"""
+        return self.current_stock <= self.min_stock_level
+    
+    def get_stock_status(self):
+        """Get stock status for display"""
+        if self.current_stock <= 0:
+            return 'out_of_stock'
+        elif self.is_low_stock():
+            return 'low_stock'
+        elif self.max_stock_level and self.current_stock >= self.max_stock_level:
+            return 'overstocked'
+        else:
+            return 'in_stock'
 
 
 class ItemPrice(models.Model):
@@ -309,7 +315,7 @@ class Bill(models.Model):
     bill_id = models.AutoField(primary_key=True)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='bills')
     vendor = models.ForeignKey(Vendor, on_delete=models.CASCADE, related_name='bills')
-    bill_no = models.CharField(max_length=100, help_text="Vendor reference number")
+    bill_no = models.CharField(max_length=100, help_text="Auto-generated bill number")
     bill_date = models.DateField()
     due_date = models.DateField()
     terms = models.ForeignKey(PaymentTerms, on_delete=models.SET_NULL, null=True, blank=True)
@@ -321,6 +327,28 @@ class Bill(models.Model):
     
     class Meta:
         ordering = ['-bill_date', '-created_at']
+    
+    def get_next_bill_number(self):
+        """Get the next auto-generated bill number for this user"""
+        last_bill = Bill.objects.filter(user=self.user).order_by('-bill_id').first()
+        if last_bill and last_bill.bill_no.isdigit():
+            return str(int(last_bill.bill_no) + 1)
+        else:
+            return "1"
+    
+    def save(self, *args, **kwargs):
+        # Auto-generate bill number if not provided
+        if not self.bill_no:
+            self.bill_no = self.get_next_bill_number()
+        else:
+            # If bill_no is provided, check for duplicates within the same user
+            existing_bill = Bill.objects.filter(
+                user=self.user, 
+                bill_no=self.bill_no
+            ).exclude(bill_id=self.bill_id).first()
+            if existing_bill:
+                raise ValueError(f"Bill number '{self.bill_no}' already exists for this user.")
+        super().save(*args, **kwargs)
     
     def __str__(self):
         return f"Bill-{self.bill_id} - {self.vendor.name} ({self.bill_date})"
@@ -608,6 +636,7 @@ class InventoryTransaction(models.Model):
         ('RECEIPT_NO_BILL', 'Receipt without Bill'),
         ('ADJUSTMENT', 'Adjustment'),
         ('ISSUE_TO_POND', 'Issue to Pond'),
+        ('SALE_TO_CUSTOMER', 'Sale to Customer'),
     ]
     
     inv_txn_id = models.AutoField(primary_key=True)
@@ -647,6 +676,18 @@ class InventoryTransactionLine(models.Model):
     
     def __str__(self):
         return f"{self.item.name} - {self.qty} @ {self.unit_cost}"
+    
+    def save(self, *args, **kwargs):
+        """Override save to update item stock"""
+        super().save(*args, **kwargs)
+        # Update the item's current stock
+        self.item.update_current_stock()
+    
+    def delete(self, *args, **kwargs):
+        """Override delete to update item stock"""
+        super().delete(*args, **kwargs)
+        # Update the item's current stock after deletion
+        self.item.update_current_stock()
 
 
 # ===================== ITEM SALES & ISSUES =====================
@@ -834,6 +875,16 @@ class MedicineEvent(models.Model):
     event_date = models.DateField()
     diagnosis_note = models.TextField(blank=True)
     memo = models.TextField(blank=True)
+    
+    # Invoice and billing options
+    create_invoice = models.BooleanField(default=False, help_text="Generate invoice for this medicine event")
+    invoice_status = models.CharField(max_length=20, choices=[
+        ('draft', 'Draft'),
+        ('sent', 'Sent'),
+        ('paid', 'Paid'),
+        ('cancelled', 'Cancelled'),
+    ], default='draft', blank=True, help_text="Invoice status")
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -849,9 +900,90 @@ class MedicineLine(models.Model):
     medicine_line_id = models.AutoField(primary_key=True)
     medicine_event = models.ForeignKey(MedicineEvent, on_delete=models.CASCADE, related_name='lines')
     item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='medicine_lines', help_text="Medicine item")
+    
+    # Medicine Type choices
+    MEDICINE_TYPE_CHOICES = [
+        ('antibiotic', 'Antibiotic'),
+        ('antifungal', 'Antifungal'),
+        ('antiparasitic', 'Antiparasitic'),
+        ('vitamin', 'Vitamin'),
+        ('mineral', 'Mineral'),
+        ('probiotic', 'Probiotic'),
+        ('disinfectant', 'Disinfectant'),
+        ('hormone', 'Hormone'),
+        ('other', 'Other'),
+    ]
+    medicine_type = models.CharField(max_length=50, choices=MEDICINE_TYPE_CHOICES, default='other', help_text="Type of medicine")
+    
+    # Treatment Type choices
+    TREATMENT_TYPE_CHOICES = [
+        ('preventive', 'Preventive'),
+        ('therapeutic', 'Therapeutic'),
+        ('curative', 'Curative'),
+        ('prophylactic', 'Prophylactic'),
+        ('emergency', 'Emergency'),
+        ('routine', 'Routine'),
+    ]
+    treatment_type = models.CharField(max_length=50, choices=TREATMENT_TYPE_CHOICES, default='therapeutic', help_text="Type of treatment")
+    
+    # State Type choices
+    STATE_TYPE_CHOICES = [
+        ('liquid', 'Liquid'),
+        ('powder', 'Powder'),
+        ('tablet', 'Tablet'),
+        ('capsule', 'Capsule'),
+        ('injection', 'Injection'),
+        ('topical', 'Topical'),
+        ('granule', 'Granule'),
+        ('other', 'Other'),
+    ]
+    state_type = models.CharField(max_length=50, choices=STATE_TYPE_CHOICES, default='liquid', help_text="Physical state/form of medicine")
+    
+    # Dosage information
     dosage = models.CharField(max_length=200, help_text="Dosage information")
+    prescribed_dosage = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True, help_text="Prescribed dosage amount")
+    
+    # Dosage Unit choices
+    DOSAGE_UNIT_CHOICES = [
+        ('mg', 'Milligrams (mg)'),
+        ('g', 'Grams (g)'),
+        ('kg', 'Kilograms (kg)'),
+        ('ml', 'Milliliters (ml)'),
+        ('l', 'Liters (L)'),
+        ('pieces', 'Pieces'),
+        ('tablets', 'Tablets'),
+        ('capsules', 'Capsules'),
+        ('drops', 'Drops'),
+        ('units', 'Units'),
+        ('iu', 'International Units (IU)'),
+        ('ppm', 'Parts Per Million (ppm)'),
+        ('other', 'Other'),
+    ]
+    dosage_unit = models.CharField(max_length=50, choices=DOSAGE_UNIT_CHOICES, default='ml', help_text="Unit for prescribed dosage")
+    
+    # Quantity and unit
     qty_used = models.DecimalField(max_digits=10, decimal_places=2, help_text="Quantity used")
-    unit_cost = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    
+    # Unit of Measure choices (same as dosage units for consistency)
+    UNIT_OF_MEASURE_CHOICES = [
+        ('mg', 'Milligrams (mg)'),
+        ('g', 'Grams (g)'),
+        ('kg', 'Kilograms (kg)'),
+        ('ml', 'Milliliters (ml)'),
+        ('l', 'Liters (L)'),
+        ('pieces', 'Pieces'),
+        ('tablets', 'Tablets'),
+        ('capsules', 'Capsules'),
+        ('drops', 'Drops'),
+        ('units', 'Units'),
+        ('iu', 'International Units (IU)'),
+        ('ppm', 'Parts Per Million (ppm)'),
+        ('other', 'Other'),
+    ]
+    unit_of_measure = models.CharField(max_length=50, choices=UNIT_OF_MEASURE_CHOICES, default='ml', help_text="Unit of measure for quantity")
+    
+    # Cost
+    unit_cost = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, help_text="Cost per unit")
     
     # Inventory transaction link
     inv_txn_line = models.ForeignKey(InventoryTransactionLine, on_delete=models.SET_NULL, null=True, blank=True, related_name='medicine_lines')
@@ -864,6 +996,91 @@ class MedicineLine(models.Model):
     
     def __str__(self):
         return f"{self.item.name} - {self.dosage} ({self.medicine_event.event_date})"
+    
+    def save(self, *args, **kwargs):
+        """Override save to handle inventory management and invoicing"""
+        is_new = self.pk is None
+        super().save(*args, **kwargs)
+        
+        if is_new and self.qty_used > 0:
+            self._create_inventory_transaction()
+            self._create_invoice_if_needed()
+    
+    def _create_inventory_transaction(self):
+        """Create inventory transaction to reduce stock"""
+        from django.utils import timezone
+        
+        # Create inventory transaction for medicine usage
+        inv_txn = InventoryTransaction.objects.create(
+            user=self.medicine_event.user,
+            txn_type='ISSUE_TO_POND',
+            txn_date=self.medicine_event.event_date,
+            memo=f"Medicine issue for {self.medicine_event.pond.name} - {self.item.name}",
+        )
+        
+        # Create inventory transaction line (negative qty for deduction)
+        inv_txn_line = InventoryTransactionLine.objects.create(
+            inventory_transaction=inv_txn,
+            item=self.item,
+            qty=-self.qty_used,  # Negative for deduction
+            unit_cost=self.unit_cost or 0,
+            pond=self.medicine_event.pond
+        )
+        
+        # Link the inventory transaction line
+        self.inv_txn_line = inv_txn_line
+        super().save(update_fields=['inv_txn_line'])
+    
+    def _create_invoice_if_needed(self):
+        """Create invoice for medicine usage if configured"""
+        # Check if invoicing is enabled for this medicine event
+        # This could be controlled by a setting or configuration
+        if hasattr(self.medicine_event, 'create_invoice') and self.medicine_event.create_invoice:
+            self._generate_invoice()
+    
+    def _generate_invoice(self):
+        """Generate invoice for medicine usage"""
+        from django.utils import timezone
+        
+        # Check if pond has a customer (this would need to be added to Pond model)
+        # For now, we'll create a default customer or skip invoice generation
+        customer = getattr(self.medicine_event.pond, 'customer', None)
+        
+        if not customer:
+            # Create a default customer for internal pond usage
+            from fish_farming.models import Customer
+            customer, created = Customer.objects.get_or_create(
+                user=self.medicine_event.user,
+                name=f"Internal - {self.medicine_event.pond.name}",
+                defaults={
+                    'type': 'internal',
+                    'phone': '',
+                    'email': '',
+                    'address': 'Internal pond usage'
+                }
+            )
+        
+        # Create invoice for the pond/customer
+        invoice = Invoice.objects.create(
+            user=self.medicine_event.user,
+            customer=customer,
+            invoice_date=self.medicine_event.event_date,
+            due_date=self.medicine_event.event_date,  # Could be calculated based on payment terms
+            memo=f"Medicine treatment for {self.medicine_event.pond.name}",
+            status='draft'
+        )
+        
+        # Create invoice line for the medicine
+        InvoiceLine.objects.create(
+            invoice=invoice,
+            item=self.item,
+            description=f"{self.item.name} - {self.dosage}",
+            qty=self.qty_used,
+            unit_price=self.unit_cost or 0,
+            pond=self.medicine_event.pond
+        )
+        
+        return invoice
 
 
 class OtherPondEvent(models.Model):
@@ -1353,47 +1570,56 @@ class Harvest(models.Model):
         super().save(*args, **kwargs)
 
 
-class ExpenseType(models.Model):
-    """Expense type model"""
-    name = models.CharField(max_length=100, unique=True)
-    category = models.CharField(max_length=50, choices=[
-        ('feed', 'Feed'),
-        ('medicine', 'Medicine'),
-        ('equipment', 'Equipment'),
-        ('labor', 'Labor'),
-        ('utilities', 'Utilities'),
-        ('maintenance', 'Maintenance'),
-        ('other', 'Other'),
-    ])
+class ExpenseType(MPTTModel):
+    """Expense type model with hierarchical categories"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='expense_types')
+    category = models.CharField(max_length=100)
     description = models.TextField(blank=True)
+    parent = TreeForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='children')
     created_at = models.DateTimeField(auto_now_add=True)
     
+    class MPTTMeta:
+        order_insertion_by = ['category']
+    
     class Meta:
-        ordering = ['category', 'name']
+        ordering = ['category']
+        unique_together = ['user', 'category', 'parent']
+        verbose_name = 'Expense Type'
+        verbose_name_plural = 'Expense Types'
     
     def __str__(self):
-        return f"{self.get_category_display()} - {self.name}"
+        return self.category
+    
+    def get_full_path(self):
+        """Get the full path from root to this expense type"""
+        ancestors = self.get_ancestors(include_self=True)
+        return ' > '.join([ancestor.category for ancestor in ancestors])
 
 
-class IncomeType(models.Model):
-    """Income type model"""
-    name = models.CharField(max_length=100, unique=True)
-    category = models.CharField(max_length=50, choices=[
-        ('harvest', 'Harvest'),
-        ('seedling', 'Seedling'),
-        ('consulting', 'Consulting'),
-        ('equipment_sales', 'Equipment Sales'),
-        ('services', 'Services'),
-        ('other', 'Other'),
-    ])
+class IncomeType(MPTTModel):
+    """Income type model with hierarchical categories"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='income_types')
+    category = models.CharField(max_length=100)
     description = models.TextField(blank=True)
+    parent = TreeForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='children')
     created_at = models.DateTimeField(auto_now_add=True)
     
+    class MPTTMeta:
+        order_insertion_by = ['category']
+    
     class Meta:
-        ordering = ['category', 'name']
+        ordering = ['category']
+        unique_together = ['user', 'category', 'parent']
+        verbose_name = 'Income Type'
+        verbose_name_plural = 'Income Types'
     
     def __str__(self):
-        return f"{self.get_category_display()} - {self.name}"
+        return self.category
+    
+    def get_full_path(self):
+        """Get the full path from root to this income type"""
+        ancestors = self.get_ancestors(include_self=True)
+        return ' > '.join([ancestor.category for ancestor in ancestors])
 
 
 class Expense(models.Model):
@@ -1435,7 +1661,7 @@ class Income(models.Model):
         ordering = ['-date']
     
     def __str__(self):
-        return f"{self.income_type.name} - ৳{self.amount} ({self.date})"
+        return f"{self.income_type.category} - ৳{self.amount} ({self.date})"
 
 
 class InventoryFeed(models.Model):

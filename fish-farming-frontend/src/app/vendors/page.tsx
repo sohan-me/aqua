@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Search, Edit, Trash2, Truck, Tag } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Truck } from 'lucide-react';
 import { useApi } from '@/hooks/useApi';
 import { toast } from 'sonner';
 
@@ -25,18 +25,8 @@ interface Vendor {
   memo: string;
   active: boolean;
   created_at: string;
-  vendor_categories: Array<{
-    vendor_category_id: number;
-    name: string;
-  }>;
 }
 
-interface VendorCategory {
-  vendor_category_id: number;
-  name: string;
-  description: string;
-  parent: number | null;
-}
 
 interface PaymentTerm {
   terms_id: number;
@@ -46,7 +36,6 @@ interface PaymentTerm {
 
 export default function VendorsPage() {
   const [vendors, setVendors] = useState<Vendor[]>([]);
-  const [vendorCategories, setVendorCategories] = useState<VendorCategory[]>([]);
   const [paymentTerms, setPaymentTerms] = useState<PaymentTerm[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -61,7 +50,6 @@ export default function VendorsPage() {
     terms_default: '',
     memo: '',
     active: true,
-    vendor_categories: [] as number[],
   });
 
   const { get, post, put, delete: del } = useApi();
@@ -73,14 +61,12 @@ export default function VendorsPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [vendorsResponse, categoriesResponse, termsResponse] = await Promise.all([
+      const [vendorsResponse, termsResponse] = await Promise.all([
         get('/vendors/'),
-        get('/vendor-categories/'),
         get('/payment-terms/'),
       ]);
       
       setVendors(vendorsResponse.results || vendorsResponse);
-      setVendorCategories(categoriesResponse.results || categoriesResponse);
       setPaymentTerms(termsResponse.results || termsResponse);
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -96,7 +82,6 @@ export default function VendorsPage() {
       const submitData = {
         ...formData,
         terms_default: formData.terms_default && formData.terms_default !== 'none' ? parseInt(formData.terms_default) : null,
-        vendor_categories: formData.vendor_categories,
       };
       
       console.log('Vendor form data being sent:', submitData);
@@ -129,7 +114,6 @@ export default function VendorsPage() {
       terms_default: vendor.terms_default?.toString() || '',
       memo: vendor.memo,
       active: vendor.active,
-      vendor_categories: vendor.vendor_categories?.map(vc => vc.vendor_category_id) || [],
     });
     setIsDialogOpen(true);
   };
@@ -157,7 +141,6 @@ export default function VendorsPage() {
       terms_default: '',
       memo: '',
       active: true,
-      vendor_categories: [],
     });
   };
 
@@ -265,34 +248,6 @@ export default function VendorsPage() {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="vendor_categories">Categories</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  {vendorCategories.map((category) => (
-                    <label key={category.vendor_category_id} className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        checked={formData.vendor_categories.includes(category.vendor_category_id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setFormData({
-                              ...formData,
-                              vendor_categories: [...formData.vendor_categories, category.vendor_category_id]
-                            });
-                          } else {
-                            setFormData({
-                              ...formData,
-                              vendor_categories: formData.vendor_categories.filter(id => id !== category.vendor_category_id)
-                            });
-                          }
-                        }}
-                        className="rounded"
-                      />
-                      <span className="text-sm">{category.name}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div className="space-y-2">
                 <Label htmlFor="address">Address</Label>
                 <Textarea
                   id="address"
@@ -385,16 +340,6 @@ export default function VendorsPage() {
                     <p className="text-sm text-gray-600">
                       <strong>Address:</strong> {vendor.address}
                     </p>
-                  )}
-                  {vendor.vendor_categories && vendor.vendor_categories.length > 0 && (
-                    <div className="flex flex-wrap gap-1">
-                      {vendor.vendor_categories.map((category) => (
-                        <Badge key={category.vendor_category_id} variant="outline" className="text-xs">
-                          <Tag className="h-3 w-3 mr-1" />
-                          {category.name}
-                        </Badge>
-                      ))}
-                    </div>
                   )}
                   {vendor.memo && (
                     <p className="text-sm text-gray-600">

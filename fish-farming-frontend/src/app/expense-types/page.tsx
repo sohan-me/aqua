@@ -1,334 +1,335 @@
 'use client';
 
-import { useState } from 'react';
-import { 
-  useExpenseTypes, 
-  useCreateExpenseType, 
-  useUpdateExpenseType, 
-  useDeleteExpenseType 
-} from '@/hooks/useApi';
-import { extractApiData } from '@/lib/utils';
-import { ExpenseType } from '@/lib/api';
-import { 
-  Plus, 
-  Edit, 
-  Trash2, 
-  DollarSign, 
-  Save,
-  X,
-  Package,
-  Heart,
-  Wrench,
-  Users,
-  Zap,
-  Settings,
-  MoreHorizontal
-} from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Plus, Search, Edit, Trash2, DollarSign, ChevronRight, ChevronDown } from 'lucide-react';
+import { useApi } from '@/hooks/useApi';
+import { toast } from 'sonner';
+
+interface ExpenseType {
+  id: number;
+  category: string;
+  description: string;
+  parent: number | null;
+  parent_name?: string;
+  full_path?: string;
+  children?: ExpenseType[];
+  created_at: string;
+}
 
 export default function ExpenseTypesPage() {
-  const { data: expenseTypesData, isLoading } = useExpenseTypes();
-  const createExpenseType = useCreateExpenseType();
-  const updateExpenseType = useUpdateExpenseType();
-  const deleteExpenseType = useDeleteExpenseType();
-
-  const expenseTypes = extractApiData<ExpenseType>(expenseTypesData?.data);
-  const [isAdding, setIsAdding] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [expenseTypes, setExpenseTypes] = useState<ExpenseType[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingExpenseType, setEditingExpenseType] = useState<ExpenseType | null>(null);
+  const [expandedNodes, setExpandedNodes] = useState<Set<number>>(new Set());
   const [formData, setFormData] = useState({
-    name: '',
-    category: 'other',
-    description: ''
+    category: '',
+    parent: '',
+    description: '',
   });
 
-  const categoryOptions = [
-    { value: 'feed', label: 'Feed', icon: Package, color: 'bg-green-100 text-green-800' },
-    { value: 'medicine', label: 'Medicine', icon: Heart, color: 'bg-red-100 text-red-800' },
-    { value: 'equipment', label: 'Equipment', icon: Wrench, color: 'bg-blue-100 text-blue-800' },
-    { value: 'labor', label: 'Labor', icon: Users, color: 'bg-purple-100 text-purple-800' },
-    { value: 'utilities', label: 'Utilities', icon: Zap, color: 'bg-yellow-100 text-yellow-800' },
-    { value: 'maintenance', label: 'Maintenance', icon: Settings, color: 'bg-orange-100 text-orange-800' },
-    { value: 'other', label: 'Other', icon: MoreHorizontal, color: 'bg-gray-100 text-gray-800' },
-  ];
+  const { get, post, put, delete: del } = useApi();
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+  useEffect(() => {
+    fetchExpenseTypes();
+  }, []);
+
+  const fetchExpenseTypes = async () => {
+    try {
+      setLoading(true);
+      const response = await get('/expense-types/tree/');
+      setExpenseTypes(response);
+    } catch (error: any) {
+      console.error('Error fetching expense types:', error);
+      const errorMessage = error?.response?.data?.detail || error?.message || 'Failed to fetch expense types';
+      toast.error(`Error: ${errorMessage}`);
+      setExpenseTypes([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     try {
-      if (editingId) {
-        await updateExpenseType.mutateAsync({ id: editingId, data: formData });
-        setEditingId(null);
+      const submitData = {
+        ...formData,
+        parent: formData.parent && formData.parent !== 'none' ? parseInt(formData.parent) : null,
+      };
+
+      if (editingExpenseType) {
+        await put(`/expense-types/${editingExpenseType.id}/`, submitData);
+        toast.success('Expense category updated successfully');
       } else {
-        await createExpenseType.mutateAsync(formData);
-        setIsAdding(false);
+        await post('/expense-types/', submitData);
+        toast.success('Expense category created successfully');
       }
-      setFormData({ name: '', category: 'other', description: '' });
+      setIsDialogOpen(false);
+      setEditingExpenseType(null);
+      resetForm();
+      fetchExpenseTypes();
     } catch (error) {
       console.error('Error saving expense type:', error);
+      toast.error('Failed to save expense category');
     }
   };
 
-  const handleEdit = (expenseType: any) => {
+  const handleEdit = (expenseType: ExpenseType) => {
+    setEditingExpenseType(expenseType);
     setFormData({
-      name: expenseType.name,
       category: expenseType.category,
-      description: expenseType.description
+      parent: expenseType.parent?.toString() || '',
+      description: expenseType.description,
     });
-    setEditingId(expenseType.id);
-    setIsAdding(false);
+    setIsDialogOpen(true);
   };
 
-  const handleDelete = async (id: number, name: string) => {
-    if (window.confirm(`Are you sure you want to delete the expense type "${name}"? This action cannot be undone.`)) {
+  const handleDelete = async (expenseTypeId: number) => {
+    if (confirm('Are you sure you want to delete this expense category? This will also delete all sub-categories.')) {
       try {
-        await deleteExpenseType.mutateAsync(id);
+        await del(`/expense-types/${expenseTypeId}/`);
+        toast.success('Expense category deleted successfully');
+        fetchExpenseTypes();
       } catch (error) {
         console.error('Error deleting expense type:', error);
+        toast.error('Failed to delete expense category');
       }
     }
   };
 
-  const handleCancel = () => {
-    setIsAdding(false);
-    setEditingId(null);
-    setFormData({ name: '', category: 'other', description: '' });
+  const resetForm = () => {
+    setFormData({
+      category: '',
+      parent: '',
+      description: '',
+    });
   };
 
-  const getCategoryInfo = (category: string) => {
-    return categoryOptions.find(option => option.value === category) || categoryOptions[6];
+  const toggleNode = (expenseTypeId: number) => {
+    const newExpanded = new Set(expandedNodes);
+    if (newExpanded.has(expenseTypeId)) {
+      newExpanded.delete(expenseTypeId);
+    } else {
+      newExpanded.add(expenseTypeId);
+    }
+    setExpandedNodes(newExpanded);
   };
 
-  const getCategoryIcon = (category: string) => {
-    const categoryInfo = getCategoryInfo(category);
-    const IconComponent = categoryInfo.icon;
-    return <IconComponent className="h-4 w-4" />;
+  const flattenExpenseTypes = (expenseTypes: ExpenseType[]): ExpenseType[] => {
+    const flattened: ExpenseType[] = [];
+    
+    const flatten = (items: ExpenseType[]) => {
+      items.forEach(item => {
+        flattened.push(item);
+        if (item.children && item.children.length > 0) {
+          flatten(item.children);
+        }
+      });
+    };
+    
+    flatten(expenseTypes);
+    return flattened;
   };
 
-  const getCategoryColor = (category: string) => {
-    const categoryInfo = getCategoryInfo(category);
-    return categoryInfo.color;
-  };
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+  const renderExpenseTypeTree = (expenseTypes: ExpenseType[], level = 0) => {
+    return expenseTypes.map((expenseType) => (
+      <div key={expenseType.id} className={`border-l-2 border-gray-100 ${level > 0 ? `ml-${Math.min(level * 4, 16)}` : ''}`}>
+        <div className="flex items-center space-x-2 p-2 hover:bg-gray-50 rounded">
+          <div className="flex items-center flex-1">
+            {expenseType.children && expenseType.children.length > 0 ? (
+              <button
+                onClick={() => toggleNode(expenseType.id)}
+                className="p-1 hover:bg-gray-200 rounded"
+              >
+                {expandedNodes.has(expenseType.id) ? (
+                  <ChevronDown className="h-4 w-4" />
+                ) : (
+                  <ChevronRight className="h-4 w-4" />
+                )}
+              </button>
+            ) : (
+              <div className="w-6" />
+            )}
+            <div className="flex items-center space-x-2 flex-1">
+              {/* Level indicator */}
+              {level > 0 && (
+                <div className="flex items-center space-x-1">
+                  {Array.from({ length: level }, (_, i) => (
+                    <div key={i} className="w-1 h-4 bg-gray-300 rounded"></div>
+                  ))}
+                </div>
+              )}
+              <span className={`font-medium ${level === 0 ? 'text-lg' : level === 1 ? 'text-base' : 'text-sm'}`}>
+                {expenseType.category}
+              </span>
+              {expenseType.parent_name && (
+                <Badge variant="outline" className="text-xs">
+                  Level {level + 1}
+                </Badge>
+              )}
+            </div>
+          </div>
+          <div className="flex space-x-1">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleEdit(expenseType)}
+            >
+              <Edit className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleDelete(expenseType.id)}
+              className="text-red-600 hover:text-red-700"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+        {expenseType.children && expenseType.children.length > 0 && expandedNodes.has(expenseType.id) && (
+          <div className={`${level > 0 ? `ml-${Math.min((level + 1) * 4, 16)}` : 'ml-4'}`}>
+            {renderExpenseTypeTree(expenseType.children, level + 1)}
+          </div>
+        )}
       </div>
-    );
-  }
+    ));
+  };
+
+  const filteredExpenseTypes = expenseTypes.filter(expenseType =>
+    expenseType.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    expenseType.description.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="space-y-6">
-      <div className="md:flex space-y-3 md:space-y-0 items-center justify-between">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Expense Types</h1>
-          <p className="text-gray-600">Manage expense categories and types for better financial tracking</p>
+          <h1 className="text-3xl font-bold text-gray-900">Expense Categories</h1>
+          <p className="text-gray-600 mt-1">Manage your expense structure with hierarchical categories</p>
         </div>
-        <button
-          style={{color: "white"}}
-          onClick={() => setIsAdding(true)}
-          className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Add Expense Type
-        </button>
-      </div>
-
-      {/* Add/Edit Form */}
-      {(isAdding || editingId) && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">
-            {editingId ? 'Edit Expense Type' : 'Add New Expense Type'}
-          </h2>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-                  Expense Type Name *
-                </label>
-                <input
-                  type="text"
-                  id="name"
-                  name="name"
-                  required
-                  value={formData.name}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
-                  placeholder="e.g., Premium Feed, Water Pump, Labor Cost"
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button onClick={() => { setEditingExpenseType(null); resetForm(); }}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Category
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="w-[95vw] max-w-4xl max-h-[95vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{editingExpenseType ? 'Edit Category' : 'Add New Category'}</DialogTitle>
+              <DialogDescription>
+                {editingExpenseType ? 'Update category information' : 'Create a new expense category'}
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleSubmit}>
+              <div className="grid grid-cols-2 gap-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="category">Category *</Label>
+                  <Input
+                    id="category"
+                    value={formData.category}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                    placeholder="Category name"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="parent">Sub account of</Label>
+                  <Select
+                    value={formData.parent}
+                    onValueChange={(value) => setFormData({ ...formData, parent: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select parent category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No parent (Root category)</SelectItem>
+                      {flattenExpenseTypes(expenseTypes).map((expenseType) => (
+                        <SelectItem key={expenseType.id} value={expenseType.id.toString()}>
+                          {expenseType.full_path || expenseType.category}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  placeholder="Category description"
+                  rows={3}
                 />
               </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit">
+                  {editingExpenseType ? 'Update' : 'Create'} Category
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
 
-              <div>
-                <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-2">
-                  Category *
-                </label>
-                <select
-                  id="category"
-                  name="category"
-                  required
-                  value={formData.category}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
-                >
-                  {categoryOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+      {/* Search */}
+      <div className="flex items-center space-x-2">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+          <Input
+            placeholder="Search categories..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+      </div>
+
+      {/* Categories Tree */}
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading categories...</p>
+          </div>
+        </div>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle>Category Structure</CardTitle>
+            <CardDescription>
+              Hierarchical view of your expense categories. Click arrows to expand/collapse.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {filteredExpenseTypes.length > 0 ? (
+              <div className="space-y-1">
+                {renderExpenseTypeTree(filteredExpenseTypes)}
               </div>
-            </div>
-
-            <div>
-              <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
-                Description
-              </label>
-              <textarea
-                id="description"
-                name="description"
-                rows={3}
-                value={formData.description}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
-                placeholder="Describe the expense type and its purpose..."
-              />
-            </div>
-
-            <div className="flex justify-end space-x-3">
-              <button
-                type="button"
-                onClick={handleCancel}
-                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-              >
-                <X className="h-4 w-4 mr-2 inline" />
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={createExpenseType.isPending || updateExpenseType.isPending}
-                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
-                style={{ color: 'white !important' }}
-              >
-                <Save className="h-4 w-4 mr-2 inline" />
-                {editingId ? 'Update' : 'Create'}
-              </button>
-            </div>
-          </form>
-        </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <DollarSign className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p>No categories found</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
-
-      {/* Expense Types List */}
-      <div className="bg-white shadow-sm border border-gray-200 rounded-lg overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Expense Type
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Category
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Description
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Created
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {expenseTypes.map((expenseType) => (
-                <tr key={expenseType.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <DollarSign className="h-5 w-5 text-red-600 mr-3" />
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">{expenseType.name}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getCategoryColor(expenseType.category)}`}>
-                      {getCategoryIcon(expenseType.category)}
-                      <span className="ml-1">{getCategoryInfo(expenseType.category).label}</span>
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="text-sm text-gray-900 max-w-xs truncate">
-                      {expenseType.description || 'No description'}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(expenseType.created_at).toLocaleDateString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={() => handleEdit(expenseType)}
-                        className="text-blue-600 hover:text-blue-900"
-                        title="Edit"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(expenseType.id, expenseType.name)}
-                        className="text-red-600 hover:text-red-900"
-                        title="Delete"
-                        disabled={deleteExpenseType.isPending}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {expenseTypes.length === 0 && (
-        <div className="text-center py-12">
-          <DollarSign className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">No expense types</h3>
-          <p className="mt-1 text-sm text-gray-500">Get started by creating your first expense type.</p>
-        </div>
-      )}
-
-      {/* Expense Categories Info */}
-      <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-red-900 mb-3">Expense Categories</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-          <div>
-            <h4 className="font-medium text-red-800 mb-2">Operational Expenses:</h4>
-            <ul className="space-y-1 text-red-700">
-              <li><span className="inline-block w-3 h-3 bg-green-100 rounded-full mr-2"></span>Feed: Fish feed, supplements, nutrition</li>
-              <li><span className="inline-block w-3 h-3 bg-red-100 rounded-full mr-2"></span>Medicine: Health treatments, vaccines, medications</li>
-              <li><span className="inline-block w-3 h-3 bg-blue-100 rounded-full mr-2"></span>Equipment: Pumps, aerators, monitoring devices</li>
-              <li><span className="inline-block w-3 h-3 bg-purple-100 rounded-full mr-2"></span>Labor: Wages, contractor fees, services</li>
-            </ul>
-          </div>
-          <div>
-            <h4 className="font-medium text-red-800 mb-2">Infrastructure Expenses:</h4>
-            <ul className="space-y-1 text-red-700">
-              <li><span className="inline-block w-3 h-3 bg-yellow-100 rounded-full mr-2"></span>Utilities: Electricity, water, gas bills</li>
-              <li><span className="inline-block w-3 h-3 bg-orange-100 rounded-full mr-2"></span>Maintenance: Repairs, cleaning, upkeep</li>
-              <li><span className="inline-block w-3 h-3 bg-gray-100 rounded-full mr-2"></span>Other: Miscellaneous expenses</li>
-            </ul>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

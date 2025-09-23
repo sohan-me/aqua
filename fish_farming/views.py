@@ -12,7 +12,7 @@ from .models import (
     Mortality, Harvest, ExpenseType, IncomeType, Expense, Income,
     InventoryFeed, Treatment, Alert, Setting, FeedingBand, 
     EnvAdjustment, KPIDashboard, FishSampling, FeedingAdvice, SurvivalRate,
-    MedicalDiagnostic, Customer, PaymentTerms, Vendor, VendorCategory, VendorVendorCategory, ItemCategory,
+    MedicalDiagnostic, PaymentTerms, Customer, Vendor, ItemCategory,
     Account, Item, ItemPrice, JournalEntry, JournalLine, Bill, BillLine, BillPayment,
     BillPaymentApply, Invoice, InvoiceLine, CustomerPayment, CustomerPaymentApply,
     Deposit, DepositLine, Check, CheckExpenseLine, CheckItemLine,
@@ -30,8 +30,8 @@ from .serializers import (
     SettingSerializer, FeedingBandSerializer, EnvAdjustmentSerializer,
     KPIDashboardSerializer, FinancialSummarySerializer,
     FishSamplingSerializer, FeedingAdviceSerializer, SurvivalRateSerializer,
-    MedicalDiagnosticSerializer, CustomerSerializer, PaymentTermsSerializer,
-    AccountSerializer, VendorSerializer, VendorCategorySerializer, VendorVendorCategorySerializer, ItemCategorySerializer,
+    MedicalDiagnosticSerializer, PaymentTermsSerializer, CustomerSerializer,
+    AccountSerializer, VendorSerializer, ItemCategorySerializer,
     ItemSerializer, ItemPriceSerializer, JournalEntrySerializer, JournalLineSerializer,
     BillSerializer, BillLineSerializer, BillPaymentSerializer, BillPaymentApplySerializer,
     InvoiceSerializer, InvoiceLineSerializer, CustomerPaymentSerializer,
@@ -321,14 +321,40 @@ class ExpenseTypeViewSet(viewsets.ModelViewSet):
     """ViewSet for expense types"""
     queryset = ExpenseType.objects.all()
     serializer_class = ExpenseTypeSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return ExpenseType.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+    
+    @action(detail=False, methods=['get'])
+    def tree(self, request):
+        """Get expense types in tree structure"""
+        root_types = ExpenseType.objects.filter(user=request.user, parent=None)
+        serializer = ExpenseTypeSerializer(root_types, many=True)
+        return Response(serializer.data)
 
 
 class IncomeTypeViewSet(viewsets.ModelViewSet):
     """ViewSet for income types"""
     queryset = IncomeType.objects.all()
     serializer_class = IncomeTypeSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return IncomeType.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+    
+    @action(detail=False, methods=['get'])
+    def tree(self, request):
+        """Get income types in tree structure"""
+        root_types = IncomeType.objects.filter(user=request.user, parent=None)
+        serializer = IncomeTypeSerializer(root_types, many=True)
+        return Response(serializer.data)
 
 
 class ExpenseViewSet(viewsets.ModelViewSet):
@@ -3256,6 +3282,16 @@ class MedicalDiagnosticViewSet(viewsets.ModelViewSet):
 
 # ===================== BUSINESS MANAGEMENT VIEWSETS =====================
 
+class PaymentTermsViewSet(viewsets.ModelViewSet):
+    """ViewSet for payment terms management"""
+    queryset = PaymentTerms.objects.all()
+    serializer_class = PaymentTermsSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def perform_create(self, serializer):
+        serializer.save()
+
+
 class CustomerViewSet(viewsets.ModelViewSet):
     """ViewSet for customer management"""
     queryset = Customer.objects.all()
@@ -3292,16 +3328,6 @@ class AccountViewSet(viewsets.ModelViewSet):
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class PaymentTermsViewSet(viewsets.ModelViewSet):
-    """ViewSet for payment terms management"""
-    queryset = PaymentTerms.objects.all()
-    serializer_class = PaymentTermsSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def perform_create(self, serializer):
-        serializer.save()
-
-
 class VendorViewSet(viewsets.ModelViewSet):
     """ViewSet for vendor management"""
     queryset = Vendor.objects.all()
@@ -3315,11 +3341,6 @@ class VendorViewSet(viewsets.ModelViewSet):
         serializer.save(user=self.request.user)
 
 
-class VendorCategoryViewSet(viewsets.ModelViewSet):
-    """ViewSet for vendor category management"""
-    queryset = VendorCategory.objects.all()
-    serializer_class = VendorCategorySerializer
-    permission_classes = [permissions.IsAuthenticated]
 
 
 class ItemCategoryViewSet(viewsets.ModelViewSet):
@@ -3342,49 +3363,7 @@ class ItemViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
-        print(f"DEBUG ItemViewSet: User {self.request.user.username} requesting items")
-        items = Item.objects.filter(user=self.request.user)
-        print(f"DEBUG ItemViewSet: Found {items.count()} items")
-        
-        # If no items exist, create some demo items
-        if items.count() == 0:
-            print("No items found, creating demo items...")
-            demo_items = [
-                {
-                    'name': 'Tilapia Feed',
-                    'item_type': 'inventory_part',
-                    'uom': 'kg',
-                    'is_feed': True,
-                    'protein_content': 30.0,
-                    'feed_stage': 'Grower',
-                    'cost_price': 50.0,
-                    'selling_price': 60.0
-                },
-                {
-                    'name': 'Fish Medicine',
-                    'item_type': 'inventory_part',
-                    'uom': 'ml',
-                    'is_medicine': True,
-                    'cost_price': 100.0,
-                    'selling_price': 120.0
-                },
-                {
-                    'name': 'Tilapia',
-                    'item_type': 'inventory_part',
-                    'uom': 'pcs',
-                    'is_species': True,
-                    'cost_price': 2.0,
-                    'selling_price': 3.0
-                }
-            ]
-            
-            for item_data in demo_items:
-                Item.objects.create(user=self.request.user, **item_data)
-            
-            print(f"Created {len(demo_items)} demo items")
-            items = Item.objects.filter(user=self.request.user)
-        
-        return items
+        return Item.objects.filter(user=self.request.user)
     
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
@@ -3401,6 +3380,17 @@ class BillViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
+    
+    @action(detail=False, methods=['get'])
+    def next_bill_number(self, request):
+        """Get the next auto-generated bill number for the current user"""
+        try:
+            # Create a temporary bill instance to get the next number
+            temp_bill = Bill(user=request.user)
+            next_number = temp_bill.get_next_bill_number()
+            return Response({'next_bill_number': next_number}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class InvoiceViewSet(viewsets.ModelViewSet):
@@ -3410,10 +3400,140 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
-        return Invoice.objects.filter(user=self.request.user)
+        queryset = Invoice.objects.filter(user=self.request.user)
+        
+        # Filter by customer if provided
+        customer_id = self.request.query_params.get('customer')
+        if customer_id:
+            queryset = queryset.filter(customer_id=customer_id)
+        
+        return queryset
     
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        invoice = serializer.save(user=self.request.user)
+        
+        # Create inventory transactions for each invoice line
+        self._create_inventory_transactions(invoice)
+        
+        # Create journal entries for accounting
+        self._create_journal_entries(invoice)
+    
+    def _create_inventory_transactions(self, invoice):
+        """Create inventory transactions for invoice lines"""
+        from .models import InventoryTransaction, InventoryTransactionLine
+        
+        # Create inventory transaction for the invoice
+        inv_txn = InventoryTransaction.objects.create(
+            user=invoice.user,
+            txn_type='SALE_TO_CUSTOMER',
+            txn_date=invoice.invoice_date,
+            memo=f"Invoice {invoice.invoice_no} - {invoice.customer.name}",
+        )
+        
+        # Create inventory transaction lines for each invoice line
+        for line in invoice.lines.all():
+            # Create inventory transaction for inventory items
+            # Only inventory_part items should deduct from stock
+            if line.item.item_type == 'inventory_part':
+                InventoryTransactionLine.objects.create(
+                    inventory_transaction=inv_txn,
+                    item=line.item,
+                    qty=-line.qty,  # Negative for issue/sale
+                    unit_cost=line.rate,
+                    memo=f"Sold to {invoice.customer.name}",
+                )
+    
+    @action(detail=False, methods=['get'])
+    def next_invoice_number(self, request):
+        """Get the next auto-generated invoice number"""
+        try:
+            # Get the last invoice for this user
+            last_invoice = Invoice.objects.filter(user=request.user).order_by('-invoice_id').first()
+            
+            if last_invoice and last_invoice.invoice_no.isdigit():
+                next_num = int(last_invoice.invoice_no) + 1
+            else:
+                next_num = 1
+            
+            next_invoice_number = str(next_num).zfill(6)
+            
+            return Response({
+                'next_invoice_number': next_invoice_number
+            })
+        except Exception as e:
+            return Response({
+                'error': 'Failed to generate invoice number',
+                'details': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def _create_journal_entries(self, invoice):
+        """Create journal entries for invoice accounting"""
+        from .models import JournalEntry, JournalLine
+        
+        # Create journal entry for the invoice
+        je = JournalEntry.objects.create(
+            user=invoice.user,
+            date=invoice.invoice_date,
+            memo=f"Invoice {invoice.invoice_no} - {invoice.customer.name}",
+            source='INVOICE',
+            source_id=invoice.invoice_id,
+        )
+        
+        # Create journal lines for each invoice line
+        for line in invoice.lines.all():
+            # Debit: Accounts Receivable (use default AR account or create one)
+            ar_account = self._get_or_create_ar_account(invoice.user)
+            JournalLine.objects.create(
+                journal_entry=je,
+                account=ar_account,
+                memo=f"{line.item.name} - {line.qty} {line.item.uom}",
+                debit=line.amount,
+                credit=0,
+            )
+            
+            # Credit: Income Account (from item's income account)
+            if line.item.income_account:
+                JournalLine.objects.create(
+                    journal_entry=je,
+                    account=line.item.income_account,
+                    memo=f"Sales - {line.item.name}",
+                    debit=0,
+                    credit=line.amount,
+                )
+            
+            # If it's an inventory item, also create COGS entry
+            if line.item.item_type == 'inventory_part' and line.item.cost_of_goods_sold_account:
+                JournalLine.objects.create(
+                    journal_entry=je,
+                    account=line.item.cost_of_goods_sold_account,
+                    memo=f"COGS - {line.item.name}",
+                    debit=line.amount,
+                    credit=0,
+                )
+                
+                # Credit: Inventory Asset Account
+                if line.item.asset_account:
+                    JournalLine.objects.create(
+                        journal_entry=je,
+                        account=line.item.asset_account,
+                        memo=f"Inventory - {line.item.name}",
+                        debit=0,
+                        credit=line.amount,
+                    )
+    
+    def _get_or_create_ar_account(self, user):
+        """Get or create default Accounts Receivable account"""
+        from .models import Account
+        
+        ar_account, created = Account.objects.get_or_create(
+            user=user,
+            name='Accounts Receivable',
+            defaults={
+                'account_type': 'Accounts Receivable',
+                'description': 'Default Accounts Receivable account for customer invoices',
+            }
+        )
+        return ar_account
 
 
 class InventoryTransactionViewSet(viewsets.ModelViewSet):
@@ -3597,10 +3717,74 @@ class BillLineViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
-        return BillLine.objects.filter(bill__user=self.request.user)
+        queryset = BillLine.objects.filter(bill__user=self.request.user)
+        
+        # Filter by bill ID if provided
+        bill_id = self.request.query_params.get('bill')
+        if bill_id:
+            queryset = queryset.filter(bill_id=bill_id)
+        
+        return queryset
     
     def perform_create(self, serializer):
-        serializer.save()
+        bill_line = serializer.save()
+        
+        # Create inventory transaction for inventory items
+        self._create_inventory_transaction_for_bill_line(bill_line)
+    
+    def perform_destroy(self, instance):
+        """Handle deletion of bill line - remove inventory transactions"""
+        from .models import InventoryTransactionLine
+        
+        # Find and delete the corresponding inventory transaction line
+        if instance.is_item and instance.item and instance.item.item_type == 'inventory_part':
+            # Find the inventory transaction line for this bill line
+            inv_txn_line = InventoryTransactionLine.objects.filter(
+                inventory_transaction__user=instance.bill.user,
+                inventory_transaction__txn_type='RECEIPT_WITH_BILL',
+                inventory_transaction__memo=f"Bill {instance.bill.bill_no} - {instance.bill.vendor.name}",
+                item=instance.item,
+                qty=instance.qty,  # Match the positive quantity
+                unit_cost=instance.cost
+            ).first()
+            
+            if inv_txn_line:
+                inv_txn_line.delete()  # This will trigger stock recalculation
+        
+        # Delete the bill line
+        instance.delete()
+    
+    def _create_inventory_transaction_for_bill_line(self, bill_line):
+        """Create inventory transaction for a bill line (addition to stock)"""
+        from .models import InventoryTransaction, InventoryTransactionLine
+        
+        # Only create inventory transaction for item lines (not expense lines)
+        if bill_line.is_item and bill_line.item and bill_line.item.item_type == 'inventory_part':
+            # Check if inventory transaction already exists for this bill
+            existing_txn = InventoryTransaction.objects.filter(
+                user=bill_line.bill.user,
+                txn_type='RECEIPT_WITH_BILL',
+                memo=f"Bill {bill_line.bill.bill_no} - {bill_line.bill.vendor.name}"
+            ).first()
+            
+            if not existing_txn:
+                # Create new inventory transaction for the bill
+                existing_txn = InventoryTransaction.objects.create(
+                    user=bill_line.bill.user,
+                    txn_type='RECEIPT_WITH_BILL',
+                    txn_date=bill_line.bill.bill_date,
+                    bill=bill_line.bill,  # Link to the bill
+                    memo=f"Bill {bill_line.bill.bill_no} - {bill_line.bill.vendor.name}",
+                )
+            
+            # Create inventory transaction line (positive quantity for addition)
+            InventoryTransactionLine.objects.create(
+                inventory_transaction=existing_txn,
+                item=bill_line.item,
+                qty=bill_line.qty,  # Positive for receipt/addition
+                unit_cost=bill_line.cost,
+                memo=f"Received from {bill_line.bill.vendor.name}",
+            )
 
 
 class InvoiceLineViewSet(viewsets.ModelViewSet):
@@ -3610,10 +3794,77 @@ class InvoiceLineViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
-        return InvoiceLine.objects.filter(invoice__user=self.request.user)
+        queryset = InvoiceLine.objects.filter(invoice__user=self.request.user)
+        
+        # Filter by invoice ID if provided
+        invoice_id = self.request.query_params.get('invoice')
+        if invoice_id:
+            queryset = queryset.filter(invoice_id=invoice_id)
+        
+        return queryset
     
     def perform_create(self, serializer):
-        serializer.save()
+        # Calculate amount before saving
+        data = serializer.validated_data
+        data['amount'] = data['qty'] * data['rate']
+        
+        invoice_line = serializer.save()
+        
+        # Create inventory transaction for inventory items
+        self._create_inventory_transaction_for_line(invoice_line)
+    
+    def perform_destroy(self, instance):
+        """Handle deletion of invoice line - remove inventory transactions"""
+        from .models import InventoryTransactionLine
+        
+        # Find and delete the corresponding inventory transaction line
+        if instance.item.item_type == 'inventory_part':
+            # Find the inventory transaction line for this invoice line
+            inv_txn_line = InventoryTransactionLine.objects.filter(
+                inventory_transaction__user=instance.invoice.user,
+                inventory_transaction__txn_type='SALE_TO_CUSTOMER',
+                inventory_transaction__memo=f"Invoice {instance.invoice.invoice_no} - {instance.invoice.customer.name}",
+                item=instance.item,
+                qty=-instance.qty,  # Match the negative quantity
+                unit_cost=instance.rate
+            ).first()
+            
+            if inv_txn_line:
+                inv_txn_line.delete()  # This will trigger stock recalculation
+        
+        # Delete the invoice line
+        instance.delete()
+    
+    def _create_inventory_transaction_for_line(self, invoice_line):
+        """Create inventory transaction for a single invoice line"""
+        from .models import InventoryTransaction, InventoryTransactionLine
+        
+        # Only create inventory transaction for inventory items
+        if invoice_line.item.item_type == 'inventory_part':
+            # Check if inventory transaction already exists for this invoice
+            existing_txn = InventoryTransaction.objects.filter(
+                user=invoice_line.invoice.user,
+                txn_type='SALE_TO_CUSTOMER',
+                memo=f"Invoice {invoice_line.invoice.invoice_no} - {invoice_line.invoice.customer.name}"
+            ).first()
+            
+            if not existing_txn:
+                # Create new inventory transaction for the invoice
+                existing_txn = InventoryTransaction.objects.create(
+                    user=invoice_line.invoice.user,
+                    txn_type='SALE_TO_CUSTOMER',
+                    txn_date=invoice_line.invoice.invoice_date,
+                    memo=f"Invoice {invoice_line.invoice.invoice_no} - {invoice_line.invoice.customer.name}",
+                )
+            
+            # Create inventory transaction line
+            InventoryTransactionLine.objects.create(
+                inventory_transaction=existing_txn,
+                item=invoice_line.item,
+                qty=-invoice_line.qty,  # Negative for issue/sale
+                unit_cost=invoice_line.rate,
+                memo=f"Sold to {invoice_line.invoice.customer.name}",
+            )
 
 
 class CustomerPaymentViewSet(viewsets.ModelViewSet):
@@ -3626,7 +3877,58 @@ class CustomerPaymentViewSet(viewsets.ModelViewSet):
         return CustomerPayment.objects.filter(user=self.request.user)
     
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        customer_payment = serializer.save(user=self.request.user)
+        
+        # Automatically apply payment to outstanding invoices
+        self._apply_payment_to_invoices(customer_payment)
+    
+    def _apply_payment_to_invoices(self, customer_payment):
+        """Automatically apply payment to outstanding invoices for the customer"""
+        from .models import CustomerPaymentApply
+        
+        # Get outstanding invoices for this customer
+        outstanding_invoices = Invoice.objects.filter(
+            customer=customer_payment.customer,
+            open_balance__gt=0
+        ).order_by('invoice_date')  # Apply to oldest invoices first
+        
+        remaining_payment = customer_payment.amount_total
+        
+        for invoice in outstanding_invoices:
+            if remaining_payment <= 0:
+                break
+                
+            # Apply payment up to the invoice's outstanding balance
+            amount_to_apply = min(remaining_payment, invoice.open_balance)
+            
+            # Create payment application record
+            CustomerPaymentApply.objects.create(
+                customer_payment=customer_payment,
+                invoice=invoice,
+                amount_applied=amount_to_apply
+            )
+            
+            # Update invoice open balance
+            invoice.open_balance -= amount_to_apply
+            invoice.save(update_fields=['open_balance'])
+            
+            remaining_payment -= amount_to_apply
+    
+    def perform_destroy(self, instance):
+        """Handle deletion of customer payment - reverse invoice balance updates"""
+        from .models import CustomerPaymentApply
+        
+        # Get all payment applications for this payment
+        payment_applies = CustomerPaymentApply.objects.filter(customer_payment=instance)
+        
+        for payment_apply in payment_applies:
+            # Restore the invoice's open balance
+            invoice = payment_apply.invoice
+            invoice.open_balance += payment_apply.amount_applied
+            invoice.save(update_fields=['open_balance'])
+        
+        # Delete the payment (this will cascade delete the payment applications)
+        instance.delete()
 
 
 class CustomerPaymentApplyViewSet(viewsets.ModelViewSet):
@@ -3640,6 +3942,107 @@ class CustomerPaymentApplyViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         serializer.save()
+
+
+class DepositViewSet(viewsets.ModelViewSet):
+    """ViewSet for deposit management"""
+    queryset = Deposit.objects.all()
+    serializer_class = DepositSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return Deposit.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        deposit = serializer.save(user=self.request.user)
+        
+        # Handle customer payments if provided
+        customer_payments = self.request.data.get('customer_payments', [])
+        if customer_payments:
+            self._create_deposit_lines(deposit, customer_payments)
+    
+    def _create_deposit_lines(self, deposit, customer_payment_ids):
+        """Create deposit lines for selected customer payments with amount deduction logic"""
+        from .models import DepositLine
+        from decimal import Decimal
+        
+        # Get the specified deposit amount from request data
+        specified_amount = self.request.data.get('total_amount')
+        if specified_amount:
+            specified_amount = Decimal(str(specified_amount))
+        
+        # Calculate total amount of selected customer payments
+        selected_payments_total = Decimal('0')
+        customer_payments = []
+        
+        for payment_id in customer_payment_ids:
+            try:
+                customer_payment = CustomerPayment.objects.get(
+                    cust_payment_id=payment_id,
+                    user=self.request.user
+                )
+                customer_payments.append(customer_payment)
+                selected_payments_total += customer_payment.amount_total
+                
+            except CustomerPayment.DoesNotExist:
+                continue
+        
+        if not customer_payments:
+            return
+        
+        # Case 1: If deposit amount is specified, deduct from customer payments
+        if specified_amount and specified_amount > 0:
+            remaining_amount = specified_amount
+            
+            for customer_payment in customer_payments:
+                if remaining_amount <= 0:
+                    break
+                
+                # Calculate how much to deduct from this payment
+                deduction_amount = min(remaining_amount, customer_payment.amount_total)
+                
+                # Create deposit line
+                DepositLine.objects.create(
+                    deposit=deposit,
+                    customer_payment=customer_payment,
+                    amount=deduction_amount
+                )
+                
+                # Update customer payment amount (reduce by deduction)
+                customer_payment.amount_total -= deduction_amount
+                
+                # If amount becomes 0 or less, delete the record
+                if customer_payment.amount_total <= 0:
+                    customer_payment.delete()
+                else:
+                    customer_payment.save(update_fields=['amount_total'])
+                
+                remaining_amount -= deduction_amount
+            
+            # Set deposit total to the specified amount
+            deposit.total_amount = specified_amount
+            
+        # Case 2: If no deposit amount specified, use full amount and remove customer payments
+        else:
+            total_amount = Decimal('0')
+            
+            for customer_payment in customer_payments:
+                # Create deposit line with full amount
+                DepositLine.objects.create(
+                    deposit=deposit,
+                    customer_payment=customer_payment,
+                    amount=customer_payment.amount_total
+                )
+                
+                total_amount += customer_payment.amount_total
+                
+                # Delete the customer payment record (fully deposited)
+                customer_payment.delete()
+            
+            # Set deposit total to sum of all customer payments
+            deposit.total_amount = total_amount
+        
+        deposit.save(update_fields=['total_amount'])
 
 
 class StockLevelViewSet(viewsets.ViewSet):

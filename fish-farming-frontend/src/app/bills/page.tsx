@@ -10,13 +10,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Plus, Search, Edit, Trash2, Receipt, Calendar, DollarSign, FileText } from 'lucide-react';
 import { useApi } from '@/hooks/useApi';
 import { toast } from 'sonner';
 
 interface Bill {
   bill_id: number;
-  vendor_id: number;
+  vendor: number; // This is the vendor ID from the ForeignKey
+  vendor_id?: number; // Keep for backward compatibility
   vendor_name?: string;
   bill_no: string;
   bill_date: string;
@@ -27,16 +29,30 @@ interface Bill {
   status: 'draft' | 'pending' | 'partial' | 'paid' | 'overdue';
   memo: string;
   created_at: string;
+  updated_at: string;
+  user: number; // User foreign key
+  user_username: string; // Username for display
+  terms?: number | null; // Payment terms
 }
 
 interface BillLine {
   bill_line_id: number;
-  bill_id: number;
-  item_id: number;
+  bill: number; // Foreign key referencing bill_id from Bill table
+  is_item: boolean;
+  // Item mode fields
+  item?: number; // Foreign key to item
   item_name?: string;
-  quantity: number;
-  unit_cost: number;
-  total_cost: number;
+  description?: string;
+  qty?: number; // Quantity field name from API
+  cost?: number; // Cost field name from API
+  line_amount?: number; // Line amount field name from API
+  // Expense mode fields
+  expense_account?: number; // Foreign key to expense account
+  expense_account_name?: string;
+  amount?: number;
+  line_memo?: string; // Memo field name from API
+  pond?: number; // Foreign key to pond
+  created_at: string;
 }
 
 interface Vendor {
@@ -50,24 +66,35 @@ interface Item {
   item_type: string;
 }
 
+interface Account {
+  account_id: number;
+  name: string;
+  account_type: string;
+  parent?: number;
+}
+
 export default function BillsPage() {
   const [bills, setBills] = useState<Bill[]>([]);
   const [billLines, setBillLines] = useState<BillLine[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [items, setItems] = useState<Item[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingBill, setEditingBill] = useState<Bill | null>(null);
   const [showBillLines, setShowBillLines] = useState<number | null>(null);
+  const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
+  const [currentBillLines, setCurrentBillLines] = useState<BillLine[]>([]);
   const [formData, setFormData] = useState({
     vendor_id: '',
     bill_no: '',
-    bill_date: '',
-    due_date: '',
+    bill_date: new Date().toISOString().split('T')[0], // Today's date
+    due_date: new Date().toISOString().split('T')[0], // Today's date
     memo: '',
   });
   const [lineItems, setLineItems] = useState<Partial<BillLine>[]>([]);
+  const [activeTab, setActiveTab] = useState<'expenses' | 'items'>('expenses');
 
   const { get, post, put, delete: del } = useApi();
 
@@ -75,18 +102,39 @@ export default function BillsPage() {
     fetchData();
   }, []);
 
+  const fetchNextBillNumber = async () => {
+    try {
+      const response = await get('/bills/next_bill_number/');
+      if (response.next_bill_number) {
+        setFormData(prev => ({ ...prev, bill_no: response.next_bill_number }));
+      }
+    } catch (error) {
+      console.error('Error fetching next bill number:', error);
+    }
+  };
+
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [billsResponse, vendorsResponse, itemsResponse] = await Promise.all([
+      const [billsResponse, vendorsResponse, itemsResponse, accountsResponse] = await Promise.all([
         get('/bills/'),
         get('/vendors/'),
         get('/items/'),
+        get('/accounts/').catch(err => {
+          console.error('Error fetching accounts:', err);
+          return { results: [] };
+        }),
       ]);
       
       setBills(billsResponse.results || billsResponse);
       setVendors(vendorsResponse.results || vendorsResponse);
       setItems(itemsResponse.results || itemsResponse);
+      setAccounts(accountsResponse.results || accountsResponse);
+      
+      // Debug logging
+      console.log('Accounts response:', accountsResponse);
+      console.log('Accounts data:', accountsResponse.results || accountsResponse);
+      console.log('Accounts count:', (accountsResponse.results || accountsResponse).length);
     } catch (error) {
       console.error('Error fetching data:', error);
       toast.error('Failed to fetch data');
@@ -97,36 +145,57 @@ export default function BillsPage() {
 
   const fetchBillLines = async (billId: number) => {
     try {
+      console.log('Fetching bill lines for bill ID:', billId);
       const response = await get(`/bill-lines/?bill=${billId}`);
-      setBillLines(response.results || response);
+      const lines = response.results || response;
+      console.log('Fetched bill lines:', lines);
+      setBillLines(lines);
+      setCurrentBillLines(lines);
     } catch (error) {
       console.error('Error fetching bill lines:', error);
+      setBillLines([]);
+      setCurrentBillLines([]);
     }
   };
 
   const calculateTotals = () => {
-    const totalAmount = lineItems.reduce((sum, line) => sum + (line.total_cost || 0), 0);
-    return { totalAmount };
+    const totalAmount = lineItems.reduce((sum, line) => {
+      if (line.is_item) {
+        return sum + (Number(line.line_amount) || 0);
+      } else {
+        return sum + (Number(line.amount) || 0);
+      }
+    }, 0);
+    return { totalAmount: Number(totalAmount) || 0 };
   };
 
   const addLineItem = () => {
-    setLineItems([...lineItems, {
-      item_id: 0,
-      quantity: 0,
-      unit_cost: 0,
-      total_cost: 0,
-    }]);
+    const newLineItem: Partial<BillLine> = {
+      is_item: activeTab === 'items',
+    };
+    
+    if (activeTab === 'items') {
+      newLineItem.item = 0;
+      newLineItem.qty = 0;
+      newLineItem.cost = 0;
+      newLineItem.line_amount = 0;
+    } else {
+      newLineItem.expense_account = 0;
+      newLineItem.amount = 0;
+    }
+    
+    setLineItems([...lineItems, newLineItem]);
   };
 
   const updateLineItem = (index: number, field: keyof BillLine, value: any) => {
     const updated = [...lineItems];
     updated[index] = { ...updated[index], [field]: value };
     
-    // Calculate total cost
-    if (field === 'quantity' || field === 'unit_cost') {
-      const quantity = updated[index].quantity || 0;
-      const cost = updated[index].unit_cost || 0;
-      updated[index].total_cost = quantity * cost;
+    // Calculate total cost for item mode
+    if (updated[index].is_item && (field === 'qty' || field === 'cost')) {
+      const quantity = updated[index].qty || 0;
+      const cost = updated[index].cost || 0;
+      updated[index].line_amount = quantity * cost;
     }
     
     setLineItems(updated);
@@ -138,12 +207,52 @@ export default function BillsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate required fields
+    if (!formData.vendor_id) {
+      toast.error('Please select a vendor');
+      return;
+    }
+    
+    if (lineItems.length === 0) {
+      toast.error('Please add at least one line item');
+      return;
+    }
+    
+    // Validate line items
+    for (let i = 0; i < lineItems.length; i++) {
+      const line = lineItems[i];
+      if (line.is_item) {
+        if (!line.item || line.item === 0) {
+          toast.error(`Please select an item for line ${i + 1}`);
+          return;
+        }
+        if (!line.qty || line.qty <= 0) {
+          toast.error(`Please enter a valid quantity for line ${i + 1}`);
+          return;
+        }
+        if (!line.cost || line.cost <= 0) {
+          toast.error(`Please enter a valid unit cost for line ${i + 1}`);
+          return;
+        }
+      } else {
+        if (!line.expense_account || line.expense_account === 0) {
+          toast.error(`Please select an expense account for line ${i + 1}`);
+          return;
+        }
+        if (!line.amount || line.amount <= 0) {
+          toast.error(`Please enter a valid amount for line ${i + 1}`);
+          return;
+        }
+      }
+    }
+    
     try {
       const totals = calculateTotals();
+      const { vendor_id, ...formDataWithoutVendorId } = formData;
       const billData = {
-        ...formData,
-        vendor: parseInt(formData.vendor_id),
-        bill_no: formData.bill_no || `BILL-${Date.now()}`,
+        ...formDataWithoutVendorId,
+        vendor: parseInt(vendor_id),
         total_amount: totals.totalAmount,
         open_balance: totals.totalAmount,
       };
@@ -152,22 +261,62 @@ export default function BillsPage() {
 
       if (editingBill) {
         await put(`/bills/${editingBill.bill_id}/`, billData);
+        
+        // Delete existing bill lines
+        const existingLines = await get(`/bill-lines/?bill=${editingBill.bill_id}`);
+        const linesToDelete = existingLines.results || existingLines;
+        for (const line of linesToDelete) {
+          await del(`/bill-lines/${line.bill_line_id}/`);
+        }
+        
+        // Create new bill lines
+        for (const line of lineItems) {
+          const billLineData: any = {
+            bill: editingBill.bill_id,
+            is_item: line.is_item || false,
+          };
+          
+          if (line.is_item) {
+            billLineData.item = line.item || null;
+            billLineData.description = line.description || '';
+            billLineData.qty = line.qty || 0;
+            billLineData.cost = line.cost || 0;
+            billLineData.line_amount = line.line_amount || 0;
+          } else {
+            billLineData.expense_account = line.expense_account || null;
+            billLineData.amount = line.amount || 0;
+            billLineData.line_memo = line.line_memo || '';
+            billLineData.pond = line.pond || null;
+          }
+          
+          await post('/bill-lines/', billLineData);
+        }
+        
         toast.success('Bill updated successfully');
       } else {
         const response = await post('/bills/', billData);
         
         // Create bill lines
         for (const line of lineItems) {
-          await post('/bill-lines/', {
+          const billLineData: any = {
             bill: response.bill_id,
             is_item: line.is_item || false,
-            item: line.item_id || null,
-            description: line.description || '',
-            qty: line.quantity || 0,
-            cost: line.unit_cost || 0,
-            amount: line.total_cost || 0,
-            pond: line.pond_id || null,
-          });
+          };
+          
+          if (line.is_item) {
+            billLineData.item = line.item || null;
+            billLineData.description = line.description || '';
+            billLineData.qty = line.qty || 0;
+            billLineData.cost = line.cost || 0;
+            billLineData.line_amount = line.line_amount || 0;
+          } else {
+            billLineData.expense_account = line.expense_account || null;
+            billLineData.amount = line.amount || 0;
+            billLineData.line_memo = line.line_memo || '';
+            billLineData.pond = line.pond || null;
+          }
+          
+          await post('/bill-lines/', billLineData);
         }
         
         toast.success('Bill created successfully');
@@ -177,22 +326,83 @@ export default function BillsPage() {
       setEditingBill(null);
       resetForm();
       fetchData();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving bill:', error);
-      toast.error('Failed to save bill');
+      if (error.response?.data?.error && error.response.data.error.includes('already exists')) {
+        toast.error(`Bill number '${formData.bill_no}' already exists. Please use a different number.`);
+      } else {
+        toast.error('Failed to save bill');
+      }
     }
   };
 
-  const handleEdit = (bill: Bill) => {
+  const handleEdit = async (bill: Bill) => {
+    console.log('Edit button clicked for bill:', bill);
+    console.log('Bill vendor_id:', bill.vendor_id);
+    console.log('Bill vendor:', bill.vendor);
+    
+    // Get the vendor ID from either field - prioritize vendor field
+    const vendorId = bill.vendor || bill.vendor_id;
+    if (!vendorId) {
+      console.error('No vendor ID found in bill:', bill);
+      toast.error('Invalid bill data: missing vendor information');
+      return;
+    }
+    
+    // Reset form first to ensure clean state
+    resetForm();
+    
+    // Set the specific bill being edited
     setEditingBill(bill);
     setFormData({
-      vendor_id: bill.vendor_id.toString(),
-      bill_no: bill.bill_no,
-      bill_date: bill.bill_date,
-      due_date: bill.due_date,
-      memo: bill.memo,
+      vendor_id: vendorId.toString(),
+      bill_no: bill.bill_no || '',
+      bill_date: bill.bill_date || new Date().toISOString().split('T')[0],
+      due_date: bill.due_date || new Date().toISOString().split('T')[0],
+      memo: bill.memo || '',
     });
-    setLineItems([]);
+    
+    // Load existing bill lines for this specific bill only
+    try {
+      const response = await get(`/bill-lines/?bill=${bill.bill_id}`);
+      const existingLines = response.results || response;
+      
+      // Convert existing lines to our format
+      const formattedLines = existingLines.map((line: any) => ({
+        bill_line_id: line.bill_line_id,
+        bill: line.bill, // Foreign key to bill
+        is_item: line.is_item,
+        // Item mode fields
+        item: line.item || null,
+        item_name: line.item_name || '',
+        description: line.description || '',
+        qty: line.qty || 0,
+        cost: line.cost || 0,
+        line_amount: line.line_amount || 0,
+        // Expense mode fields
+        expense_account: line.expense_account || null,
+        expense_account_name: line.expense_account_name || '',
+        amount: line.amount || 0,
+        line_memo: line.line_memo || '',
+        pond: line.pond || null,
+        created_at: line.created_at,
+      }));
+      
+      setLineItems(formattedLines);
+      
+      // Set the active tab based on the first line item type, or default to expenses
+      if (formattedLines.length > 0) {
+        setActiveTab(formattedLines[0].is_item ? 'items' : 'expenses');
+      } else {
+        setActiveTab('expenses');
+      }
+    } catch (error) {
+      console.error('Error loading bill lines:', error);
+      setLineItems([]);
+      setActiveTab('expenses');
+    }
+    
+    // Open dialog for this specific bill
     setIsDialogOpen(true);
   };
 
@@ -213,11 +423,13 @@ export default function BillsPage() {
     setFormData({
       vendor_id: '',
       bill_no: '',
-      bill_date: '',
-      due_date: '',
+      bill_date: new Date().toISOString().split('T')[0], // Today's date
+      due_date: new Date().toISOString().split('T')[0], // Today's date
       memo: '',
     });
     setLineItems([]);
+    setActiveTab('expenses');
+    setEditingBill(null);
   };
 
   const getStatusColor = (status: string) => {
@@ -251,7 +463,15 @@ export default function BillsPage() {
           <h1 className="text-3xl font-bold text-gray-900">Bills (Accounts Payable)</h1>
           <p className="text-gray-600 mt-1">Manage vendor bills and accounts payable</p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <Dialog open={isDialogOpen} onOpenChange={(open) => {
+          setIsDialogOpen(open);
+          if (!open) {
+            resetForm();
+          } else if (!editingBill) {
+            // Fetch next bill number when opening for new bill
+            fetchNextBillNumber();
+          }
+        }}>
           <DialogTrigger asChild>
             <Button onClick={() => { setEditingBill(null); resetForm(); }}>
               <Plus className="h-4 w-4 mr-2" />
@@ -260,12 +480,25 @@ export default function BillsPage() {
           </DialogTrigger>
           <DialogContent className="w-[95vw] max-w-7xl max-h-[95vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>{editingBill ? 'Edit Bill' : 'Add New Bill'}</DialogTitle>
+              <DialogTitle>
+                {editingBill ? `Edit Bill #${editingBill.bill_no}` : 'Add New Bill'}
+              </DialogTitle>
               <DialogDescription>
-                {editingBill ? 'Update bill information' : 'Create a new vendor bill'}
+                {editingBill ? `Update information for bill #${editingBill.bill_no}` : 'Create a new vendor bill. Bill number will be auto-generated but can be customized.'}
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit}>
+              {editingBill && (
+                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center gap-2 text-blue-800">
+                    <Edit className="h-4 w-4" />
+                    <span className="font-medium">Editing Bill #{editingBill.bill_no}</span>
+                    <span className="text-sm text-blue-600">
+                      ({editingBill.vendor_name || 'Unknown Vendor'})
+                    </span>
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-6 py-4">
                 <div className="space-y-2">
                   <Label htmlFor="vendor_id">Vendor *</Label>
@@ -287,13 +520,26 @@ export default function BillsPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="bill_no">Bill Number</Label>
-                  <Input
-                    id="bill_no"
-                    value={formData.bill_no}
-                    onChange={(e) => setFormData({ ...formData, bill_no: e.target.value })}
-                    placeholder="Bill number"
-                    className="h-12"
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      id="bill_no"
+                      value={formData.bill_no}
+                      onChange={(e) => setFormData({ ...formData, bill_no: e.target.value })}
+                      placeholder="Auto-generated"
+                      className="h-12"
+                    />
+                    {!editingBill && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={fetchNextBillNumber}
+                        className="h-12 px-3"
+                        title="Get next auto-generated number"
+                      >
+                        <FileText className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="bill_date">Bill Date *</Label>
@@ -340,82 +586,185 @@ export default function BillsPage() {
                   </Button>
                 </div>
 
-                <div className="space-y-4 max-h-80 overflow-y-auto">
-                  {lineItems.map((line, index) => (
-                    <Card key={index} className="p-6">
-                      <div className="grid grid-cols-5 gap-4 items-end">
-                        <div className="space-y-2">
-                          <Label>Item</Label>
-                          <Select
-                            value={line.item_id?.toString() || ''}
-                            onValueChange={(value) => updateLineItem(index, 'item_id', parseInt(value))}
-                          >
-                            <SelectTrigger className="h-12">
-                              <SelectValue placeholder="Select item" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {items.map((item) => (
-                                <SelectItem key={item.item_id} value={item.item_id.toString()}>
-                                  {item.name} ({item.item_type})
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <Label>Quantity</Label>
-                          <Input
-                            type="number"
-                            value={line.quantity || ''}
-                            onChange={(e) => updateLineItem(index, 'quantity', parseInt(e.target.value) || 0)}
-                            placeholder="Quantity"
-                            className="h-12"
-                          />
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <Label>Unit Cost</Label>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            value={line.unit_cost || ''}
-                            onChange={(e) => updateLineItem(index, 'unit_cost', parseFloat(e.target.value) || 0)}
-                            placeholder="Cost per unit"
-                            className="h-12"
-                          />
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <Label>Total Cost</Label>
-                          <div className="flex items-center space-x-2">
-                            <Input
-                              type="number"
-                              step="0.01"
-                              value={line.total_cost || 0}
-                              readOnly
-                              className="bg-gray-50 h-12"
-                            />
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => removeLineItem(index)}
-                              className="text-red-600 hover:text-red-700 h-12 px-3"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'expenses' | 'items')}>
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="expenses">Expenses</TabsTrigger>
+                    <TabsTrigger value="items">Items</TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="expenses">
+                    <div className="space-y-4 max-h-80 overflow-y-auto">
+                      {lineItems.filter(line => !line.is_item).map((line, originalIndex) => {
+                        // Find the original index in the full lineItems array
+                        const actualIndex = lineItems.findIndex(item => item === line);
+                        return (
+                        <Card key={actualIndex} className="p-6">
+                          <div className="grid grid-cols-4 gap-4 items-end">
+                            <div className="space-y-2">
+                              <Label>Chart of Account</Label>
+                              <Select
+                                value={line.expense_account?.toString() || ''}
+                                onValueChange={(value) => updateLineItem(actualIndex, 'expense_account', parseInt(value))}
+                              >
+                                <SelectTrigger className="h-12">
+                                  <SelectValue placeholder="Select account" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {loading ? (
+                                    <SelectItem value="loading" disabled>
+                                      Loading accounts...
+                                    </SelectItem>
+                                  ) : accounts.length > 0 ? (
+                                    accounts.map((account) => (
+                                      <SelectItem key={account.account_id} value={account.account_id.toString()}>
+                                        {account.name} ({account.account_type})
+                                      </SelectItem>
+                                    ))
+                                  ) : (
+                                    <SelectItem value="no-accounts" disabled>
+                                      No accounts available
+                                    </SelectItem>
+                                  )}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            
+                            <div className="space-y-2">
+                              <Label>Amount</Label>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                value={line.amount || ''}
+                                onChange={(e) => updateLineItem(actualIndex, 'amount', parseFloat(e.target.value) || 0)}
+                                placeholder="Amount"
+                                className="h-12"
+                              />
+                            </div>
+                            
+                            <div className="space-y-2">
+                              <Label>Memo</Label>
+                              <Input
+                                value={line.line_memo || ''}
+                                onChange={(e) => updateLineItem(actualIndex, 'line_memo', e.target.value)}
+                                placeholder="Memo"
+                                className="h-12"
+                              />
+                            </div>
+                            
+                            <div className="space-y-2">
+                              <Label>Actions</Label>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => removeLineItem(actualIndex)}
+                                className="text-red-600 hover:text-red-700 h-12 px-3"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </div>
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
-                </div>
+                        </Card>
+                        );
+                      })}
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="items">
+                    <div className="space-y-4 max-h-80 overflow-y-auto">
+                      {lineItems.filter(line => line.is_item).map((line, originalIndex) => {
+                        // Find the original index in the full lineItems array
+                        const actualIndex = lineItems.findIndex(item => item === line);
+                        return (
+                        <Card key={actualIndex} className="p-6">
+                          <div className="grid grid-cols-6 gap-4 items-end">
+                            <div className="space-y-2">
+                              <Label>Item List</Label>
+                              <Select
+                                value={line.item?.toString() || ''}
+                                onValueChange={(value) => updateLineItem(actualIndex, 'item', parseInt(value))}
+                              >
+                                <SelectTrigger className="h-12">
+                                  <SelectValue placeholder="Select item" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {items.map((item) => (
+                                    <SelectItem key={item.item_id} value={item.item_id.toString()}>
+                                      {item.name} ({item.item_type})
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            
+                            <div className="space-y-2">
+                              <Label>Description</Label>
+                              <Input
+                                value={line.description || ''}
+                                onChange={(e) => updateLineItem(actualIndex, 'description', e.target.value)}
+                                placeholder="Description"
+                                className="h-12"
+                              />
+                            </div>
+                            
+                            <div className="space-y-2">
+                              <Label>QTY</Label>
+                              <Input
+                                type="number"
+                                value={line.qty || ''}
+                                onChange={(e) => updateLineItem(actualIndex, 'qty', parseInt(e.target.value) || 0)}
+                                placeholder="Quantity"
+                                className="h-12"
+                              />
+                            </div>
+                            
+                            <div className="space-y-2">
+                              <Label>Cost per Unit</Label>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                value={line.cost || ''}
+                                onChange={(e) => updateLineItem(actualIndex, 'cost', parseFloat(e.target.value) || 0)}
+                                placeholder="Cost per unit"
+                                className="h-12"
+                              />
+                            </div>
+                            
+                            <div className="space-y-2">
+                              <Label>Amount</Label>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                value={line.line_amount || 0}
+                                readOnly
+                                className="bg-gray-50 h-12"
+                              />
+                            </div>
+                            
+                            <div className="space-y-2">
+                              <Label>Actions</Label>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => removeLineItem(actualIndex)}
+                                className="text-red-600 hover:text-red-700 h-12 px-3"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        </Card>
+                        );
+                      })}
+                    </div>
+                  </TabsContent>
+                </Tabs>
 
                 <div className="grid grid-cols-1 gap-4 text-center">
                   <div className="p-4 bg-purple-50 rounded-lg">
                     <div className="text-2xl font-bold text-purple-600">
-                      ৳{calculateTotals().totalAmount.toFixed(2)}
+                      ৳{(calculateTotals().totalAmount || 0).toFixed(2)}
                     </div>
                     <div className="text-sm text-purple-600">Total Amount</div>
                   </div>
@@ -423,11 +772,14 @@ export default function BillsPage() {
               </div>
 
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                <Button type="button" variant="outline" onClick={() => {
+                  setIsDialogOpen(false);
+                  resetForm();
+                }}>
                   Cancel
                 </Button>
                 <Button type="submit">
-                  {editingBill ? 'Update' : 'Create'} Bill
+                  {editingBill ? `Update Bill #${editingBill.bill_no}` : 'Create Bill'}
                 </Button>
               </DialogFooter>
             </form>
@@ -463,6 +815,7 @@ export default function BillsPage() {
               <TableRow>
                 <TableHead>Bill Number</TableHead>
                 <TableHead>Vendor</TableHead>
+                <TableHead>User</TableHead>
                 <TableHead>Bill Date</TableHead>
                 <TableHead>Due Date</TableHead>
                 <TableHead>Total Amount</TableHead>
@@ -477,6 +830,7 @@ export default function BillsPage() {
                 <TableRow key={bill.bill_id}>
                   <TableCell className="font-medium">{bill.bill_no}</TableCell>
                   <TableCell>{bill.vendor_name || '-'}</TableCell>
+                  <TableCell>{bill.user_username || '-'}</TableCell>
                   <TableCell>{bill.bill_date ? new Date(bill.bill_date).toLocaleDateString() : '-'}</TableCell>
                   <TableCell>{bill.due_date ? new Date(bill.due_date).toLocaleDateString() : '-'}</TableCell>
                   <TableCell>৳{bill.total_amount ? Number(bill.total_amount).toFixed(2) : '0.00'}</TableCell>
@@ -500,10 +854,14 @@ export default function BillsPage() {
                         variant="outline"
                         size="sm"
                         onClick={() => {
+                          console.log('Details button clicked for bill:', bill.bill_id);
                           if (showBillLines === bill.bill_id) {
                             setShowBillLines(null);
+                            setSelectedBill(null);
+                            setCurrentBillLines([]);
                           } else {
                             setShowBillLines(bill.bill_id);
+                            setSelectedBill(bill);
                             fetchBillLines(bill.bill_id);
                           }
                         }}
@@ -527,6 +885,125 @@ export default function BillsPage() {
         </Card>
       )}
 
+      {/* Bill Details Display */}
+      {showBillLines && selectedBill && (
+        <div className="space-y-6">
+          {/* Bill Summary Card */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Receipt className="h-5 w-5" />
+                    Bill Details - #{selectedBill.bill_no}
+                  </CardTitle>
+                  <CardDescription>
+                    Complete information for this bill
+                  </CardDescription>
+                </div>
+                <Badge className={getStatusColor(selectedBill.status || '')}>
+                  {selectedBill.status?.toUpperCase() || 'UNKNOWN'}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-gray-500">Vendor</p>
+                  <p className="text-sm">{selectedBill.vendor_name || '-'}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-gray-500">Bill Date</p>
+                  <p className="text-sm">{selectedBill.bill_date ? new Date(selectedBill.bill_date).toLocaleDateString() : '-'}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-gray-500">Due Date</p>
+                  <p className="text-sm">{selectedBill.due_date ? new Date(selectedBill.due_date).toLocaleDateString() : '-'}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-gray-500">Total Amount</p>
+                  <p className="text-sm font-semibold text-green-600">৳{selectedBill.total_amount ? Number(selectedBill.total_amount).toFixed(2) : '0.00'}</p>
+                </div>
+              </div>
+              {selectedBill.memo && (
+                <div className="mt-4 pt-4 border-t">
+                  <p className="text-sm font-medium text-gray-500 mb-2">Memo</p>
+                  <p className="text-sm text-gray-700">{selectedBill.memo}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Bill Lines Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Line Items
+              </CardTitle>
+              <CardDescription>
+                Detailed breakdown of all line items
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {currentBillLines.length > 0 ? (
+                <div className="space-y-4">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Item/Account</TableHead>
+                        <TableHead>Description</TableHead>
+                        <TableHead>Quantity</TableHead>
+                        <TableHead>Unit Cost</TableHead>
+                        <TableHead>Amount</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {currentBillLines.map((line) => (
+                        <TableRow key={line.bill_line_id}>
+                          <TableCell>
+                            <Badge variant={line.is_item ? "default" : "secondary"} className="w-fit">
+                              {line.is_item ? "Item" : "Expense"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            {line.is_item ? line.item_name : line.expense_account_name}
+                          </TableCell>
+                          <TableCell>
+                            {line.is_item ? line.description : line.line_memo}
+                          </TableCell>
+                          <TableCell>{line.qty || '-'}</TableCell>
+                          <TableCell>{line.cost ? `৳${Number(line.cost).toFixed(2)}` : '-'}</TableCell>
+                          <TableCell className="font-medium text-right">
+                            ৳{line.is_item ? (Number(line.line_amount || 0).toFixed(2)) : (Number(line.amount || 0).toFixed(2))}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  
+                  {/* Summary */}
+                  <div className="flex justify-end pt-4 border-t">
+                    <div className="text-right space-y-1">
+                      <div className="text-sm text-gray-600">Total Amount</div>
+                      <div className="text-xl font-bold text-green-600">
+                        ৳{currentBillLines.reduce((sum, line) => sum + (line.is_item ? (Number(line.line_amount) || 0) : (Number(line.amount) || 0)), 0).toFixed(2)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>No line items found for this bill</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {filteredBills.length === 0 && !loading && (
         <div className="text-center py-12">
           <Receipt className="h-12 w-12 text-gray-400 mx-auto mb-4" />
@@ -541,6 +1018,33 @@ export default function BillsPage() {
             </Button>
           )}
         </div>
+      )}
+
+      {/* Total Accounts Payable Summary */}
+      {!loading && bills.length > 0 && (
+        <Card className="mt-6">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-red-100 rounded-lg">
+                  <DollarSign className="h-6 w-6 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Total Accounts Payable</h3>
+                  <p className="text-sm text-gray-600">Outstanding balance across all bills</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-3xl font-bold text-red-600">
+                  ৳{bills.reduce((sum, bill) => sum + (Number(bill.open_balance) || 0), 0).toFixed(2)}
+                </div>
+                <div className="text-sm text-gray-600">
+                  {bills.filter(bill => (Number(bill.open_balance) || 0) > 0).length} bills with outstanding balance
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );

@@ -11,74 +11,33 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Edit, Trash2, Package, Save, X } from 'lucide-react';
-import { useApi } from '@/hooks/useApi';
+import { useFeedTypes, useCreateFeedType, useUpdateFeedType, useDeleteFeedType } from '@/hooks/useApi';
 import { toast } from 'sonner';
 
 interface FeedType {
-  item_id: number;
+  id: number;
   name: string;
   description: string;
-  item_type: string;
-  uom: string;
   protein_content?: number;
-  feed_stage: string;
-  cost_price?: number;
-  selling_price?: number;
-  is_feed: boolean;
-  is_active: boolean;
   created_at: string;
 }
 
 export default function FeedTypesPage() {
-  const { get, post, put, delete: del } = useApi();
-  const [feedTypes, setFeedTypes] = useState<FeedType[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: feedTypesData, isLoading } = useFeedTypes();
+  const createFeedType = useCreateFeedType();
+  const updateFeedType = useUpdateFeedType();
+  const deleteFeedType = useDeleteFeedType();
+  console.log(feedTypesData?.data);
+  const feedTypes = feedTypesData?.data?.results;
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingFeedType, setEditingFeedType] = useState<FeedType | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    item_type: 'inventory_part',
-    uom: 'kg',
     protein_content: '',
-    feed_stage: 'Starter',
-    cost_price: '',
-    selling_price: '',
-    is_feed: true,
-    is_active: true,
   });
 
-  const feedStages = [
-    'Starter',
-    'Grower', 
-    'Finisher',
-    'Broodstock',
-    'Fry',
-    'Fingerling'
-  ];
 
-  const uomOptions = [
-    'kg', 'g', 'lbs', 'tons', 'pcs', 'bags', 'packs'
-  ];
-
-  useEffect(() => {
-    fetchFeedTypes();
-  }, []);
-
-  const fetchFeedTypes = async () => {
-    try {
-      setLoading(true);
-      const response = await get('/items/');
-      // Filter for feed items only
-      const feedItems = response.results?.filter((item: any) => item.is_feed) || [];
-      setFeedTypes(feedItems);
-    } catch (error) {
-      console.error('Error fetching feed types:', error);
-      toast.error('Failed to fetch feed types');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,22 +45,17 @@ export default function FeedTypesPage() {
       const submitData = {
         ...formData,
         protein_content: formData.protein_content ? parseFloat(formData.protein_content) : null,
-        cost_price: formData.cost_price ? parseFloat(formData.cost_price) : null,
-        selling_price: formData.selling_price ? parseFloat(formData.selling_price) : null,
       };
 
       if (editingFeedType) {
-        await put(`/items/${editingFeedType.item_id}/`, submitData);
-        toast.success('Feed type updated successfully');
+        await updateFeedType.mutateAsync({ id: editingFeedType.id, data: submitData });
       } else {
-        await post('/items/', submitData);
-        toast.success('Feed type created successfully');
+        await createFeedType.mutateAsync(submitData);
       }
       
       setIsDialogOpen(false);
       setEditingFeedType(null);
       resetForm();
-      fetchFeedTypes();
     } catch (error) {
       console.error('Error saving feed type:', error);
       toast.error('Failed to save feed type');
@@ -113,14 +67,7 @@ export default function FeedTypesPage() {
     setFormData({
       name: feedType.name,
       description: feedType.description || '',
-      item_type: feedType.item_type,
-      uom: feedType.uom,
       protein_content: feedType.protein_content?.toString() || '',
-      feed_stage: feedType.feed_stage || 'Starter',
-      cost_price: feedType.cost_price?.toString() || '',
-      selling_price: feedType.selling_price?.toString() || '',
-      is_feed: feedType.is_feed,
-      is_active: feedType.is_active,
     });
     setIsDialogOpen(true);
   };
@@ -128,9 +75,7 @@ export default function FeedTypesPage() {
   const handleDelete = async (id: number) => {
     if (window.confirm('Are you sure you want to delete this feed type?')) {
       try {
-        await del(`/items/${id}/`);
-        toast.success('Feed type deleted successfully');
-        fetchFeedTypes();
+        await deleteFeedType.mutateAsync(id);
       } catch (error) {
         console.error('Error deleting feed type:', error);
         toast.error('Failed to delete feed type');
@@ -142,14 +87,7 @@ export default function FeedTypesPage() {
     setFormData({
       name: '',
       description: '',
-      item_type: 'inventory_part',
-      uom: 'kg',
       protein_content: '',
-      feed_stage: 'Starter',
-      cost_price: '',
-      selling_price: '',
-      is_feed: true,
-      is_active: true,
     });
   };
 
@@ -174,7 +112,7 @@ export default function FeedTypesPage() {
       </div>
 
       {/* Feed Types Table */}
-      {loading ? (
+      {isLoading ? (
         <div className="flex items-center justify-center py-12">
           <div className="text-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
@@ -188,39 +126,23 @@ export default function FeedTypesPage() {
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Description</TableHead>
-                <TableHead>Stage</TableHead>
                 <TableHead>Protein %</TableHead>
-                <TableHead>UOM</TableHead>
-                <TableHead>Cost Price (৳)</TableHead>
-                <TableHead>Selling Price (৳)</TableHead>
-                <TableHead>Status</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {feedTypes.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-gray-500">
+                  <TableCell colSpan={4} className="text-center py-8 text-gray-500">
                     No feed types found. Click "Add Feed Type" to create your first feed type.
                   </TableCell>
                 </TableRow>
               ) : (
                 feedTypes.map((feedType) => (
-                  <TableRow key={feedType.item_id}>
+                  <TableRow key={feedType.id}>
                     <TableCell className="font-medium">{feedType.name}</TableCell>
                     <TableCell>{feedType.description || '-'}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{feedType.feed_stage || 'N/A'}</Badge>
-                    </TableCell>
                     <TableCell>{feedType.protein_content ? `${feedType.protein_content}%` : '-'}</TableCell>
-                    <TableCell>{feedType.uom}</TableCell>
-                    <TableCell>{feedType.cost_price ? `৳${Number(feedType.cost_price).toFixed(2)}` : '-'}</TableCell>
-                    <TableCell>{feedType.selling_price ? `৳${Number(feedType.selling_price).toFixed(2)}` : '-'}</TableCell>
-                    <TableCell>
-                      <Badge variant={feedType.is_active ? 'default' : 'secondary'}>
-                        {feedType.is_active ? 'Active' : 'Inactive'}
-                      </Badge>
-                    </TableCell>
                     <TableCell>
                       <div className="flex space-x-2">
                         <Button
@@ -233,7 +155,7 @@ export default function FeedTypesPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleDelete(feedType.item_id)}
+                          onClick={() => handleDelete(feedType.id)}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -260,33 +182,15 @@ export default function FeedTypesPage() {
           </DialogHeader>
           
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="name">Name *</Label>
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="e.g., Starter Feed, Grower Feed"
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="uom">Unit of Measure *</Label>
-                <Select
-                  value={formData.uom}
-                  onValueChange={(value) => setFormData({ ...formData, uom: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select UOM" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {uomOptions.map((uom) => (
-                      <SelectItem key={uom} value={uom}>{uom}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <div>
+              <Label htmlFor="name">Name *</Label>
+              <Input
+                id="name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="e.g., Starter Feed, Grower Feed"
+                required
+              />
             </div>
 
             <div>
@@ -300,63 +204,18 @@ export default function FeedTypesPage() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="feed_stage">Feed Stage *</Label>
-                <Select
-                  value={formData.feed_stage}
-                  onValueChange={(value) => setFormData({ ...formData, feed_stage: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select stage" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {feedStages.map((stage) => (
-                      <SelectItem key={stage} value={stage}>{stage}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="protein_content">Protein Content (%)</Label>
-                <Input
-                  id="protein_content"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max="100"
-                  value={formData.protein_content}
-                  onChange={(e) => setFormData({ ...formData, protein_content: e.target.value })}
-                  placeholder="e.g., 32.5"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="cost_price">Cost Price (৳)</Label>
-                <Input
-                  id="cost_price"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={formData.cost_price}
-                  onChange={(e) => setFormData({ ...formData, cost_price: e.target.value })}
-                  placeholder="e.g., 125.50"
-                />
-              </div>
-              <div>
-                <Label htmlFor="selling_price">Selling Price (৳)</Label>
-                <Input
-                  id="selling_price"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={formData.selling_price}
-                  onChange={(e) => setFormData({ ...formData, selling_price: e.target.value })}
-                  placeholder="e.g., 150.00"
-                />
-              </div>
+            <div>
+              <Label htmlFor="protein_content">Protein Content (%)</Label>
+              <Input
+                id="protein_content"
+                type="number"
+                step="0.01"
+                min="0"
+                max="100"
+                value={formData.protein_content}
+                onChange={(e) => setFormData({ ...formData, protein_content: e.target.value })}
+                placeholder="e.g., 32.5"
+              />
             </div>
 
             <DialogFooter>

@@ -16,28 +16,52 @@ import { toast } from 'sonner';
 
 interface Deposit {
   deposit_id: number;
-  bank_account_id: number;
+  bank_account: number;
   bank_account_name?: string;
   deposit_date: string;
-  amount: number;
-  reference: string;
+  total_amount: string;
   memo: string;
+  reference?: string;
   created_at: string;
+  lines?: Array<{
+    deposit_line_id: number;
+    customer_payment_customer_name: string;
+    amount: string;
+    created_at: string;
+    deposit: number;
+    customer_payment: number;
+  }>;
 }
 
-interface BankAccount {
-  bank_account_id: number;
-  account_name: string;
-  bank_name: string;
+interface ChartAccount {
+  account_id: number;
+  name: string;
+  full_path: string;
+  account_type: string;
+  children: ChartAccount[];
+  level: number;
+}
+
+interface CustomerPayment {
+  cust_payment_id: number;
+  customer_name: string;
+  deposit_account_name: string;
+  payment_date: string;
+  amount_total: string;
+  memo: string;
+  created_at: string;
+  deposit_account: number;
 }
 
 export default function DepositsPage() {
   const [deposits, setDeposits] = useState<Deposit[]>([]);
-  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [chartAccounts, setChartAccounts] = useState<ChartAccount[]>([]);
+  const [customerPayments, setCustomerPayments] = useState<CustomerPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingDeposit, setEditingDeposit] = useState<Deposit | null>(null);
+  const [selectedPayments, setSelectedPayments] = useState<number[]>([]);
   const [formData, setFormData] = useState({
     bank_account_id: '',
     deposit_date: '',
@@ -52,16 +76,39 @@ export default function DepositsPage() {
     fetchData();
   }, []);
 
+  // Helper function to flatten chart accounts tree
+  const flattenAccounts = (accounts: ChartAccount[]): ChartAccount[] => {
+    const flattened: ChartAccount[] = [];
+    
+    const flatten = (account: ChartAccount) => {
+      flattened.push(account);
+      if (account.children && account.children.length > 0) {
+        account.children.forEach(child => flatten(child));
+      }
+    };
+    
+    accounts.forEach(account => flatten(account));
+    return flattened;
+  };
+
+  // Get undeposited customer payments (those with remaining amount > 0)
+  const undepositedPayments = customerPayments.filter(payment => {
+    // Only show payments that still have remaining amount
+    return parseFloat(payment.amount_total) > 0;
+  });
+
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [depositsResponse, bankAccountsResponse] = await Promise.all([
+      const [depositsResponse, chartAccountsResponse, customerPaymentsResponse] = await Promise.all([
         get('/deposits/'),
-        get('/bank-accounts/'),
+        get('/accounts/tree/'),
+        get('/customer-payments/'),
       ]);
       
       setDeposits(depositsResponse.results || depositsResponse);
-      setBankAccounts(bankAccountsResponse.results || bankAccountsResponse);
+      setChartAccounts(chartAccountsResponse);
+      setCustomerPayments(customerPaymentsResponse.results || customerPaymentsResponse);
     } catch (error) {
       console.error('Error fetching data:', error);
       toast.error('Failed to fetch deposit data');
@@ -73,12 +120,21 @@ export default function DepositsPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      // If customer payments are selected but no amount specified, don't send total_amount
+      const hasSelectedPayments = selectedPayments.length > 0;
+      const specifiedAmount = parseFloat(formData.amount) || 0;
+      
       const depositData = {
         ...formData,
-        bank_account_id: parseInt(formData.bank_account_id),
-        amount: parseFloat(formData.amount) || 0,
+        bank_account: parseInt(formData.bank_account_id),
         reference: formData.reference || `DEP-${Date.now()}`,
+        customer_payments: selectedPayments, // Include selected customer payments
       };
+      
+      // Only include total_amount if it's specified or no customer payments are selected
+      if (specifiedAmount > 0 || !hasSelectedPayments) {
+        depositData.total_amount = specifiedAmount;
+      }
 
       if (editingDeposit) {
         await put(`/deposits/${editingDeposit.deposit_id}/`, depositData);
@@ -90,6 +146,7 @@ export default function DepositsPage() {
       
       setIsDialogOpen(false);
       setEditingDeposit(null);
+      setSelectedPayments([]);
       resetForm();
       fetchData();
     } catch (error) {
@@ -101,10 +158,10 @@ export default function DepositsPage() {
   const handleEdit = (deposit: Deposit) => {
     setEditingDeposit(deposit);
     setFormData({
-      bank_account_id: deposit.bank_account_id.toString(),
+      bank_account_id: deposit.bank_account.toString(),
       deposit_date: deposit.deposit_date,
-      amount: deposit.amount.toString(),
-      reference: deposit.reference,
+      amount: deposit.total_amount,
+      reference: deposit.reference || '',
       memo: deposit.memo,
     });
     setIsDialogOpen(true);
@@ -131,6 +188,22 @@ export default function DepositsPage() {
       reference: '',
       memo: '',
     });
+    setSelectedPayments([]);
+  };
+
+  const handlePaymentSelection = (paymentId: number, checked: boolean) => {
+    if (checked) {
+      setSelectedPayments([...selectedPayments, paymentId]);
+    } else {
+      setSelectedPayments(selectedPayments.filter(id => id !== paymentId));
+    }
+  };
+
+  const calculateSelectedAmount = () => {
+    return selectedPayments.reduce((total, paymentId) => {
+      const payment = undepositedPayments.find(p => p.cust_payment_id === paymentId);
+      return total + (payment ? parseFloat(payment.amount_total) : 0);
+    }, 0);
   };
 
   const filteredDeposits = deposits.filter(deposit =>
@@ -164,18 +237,18 @@ export default function DepositsPage() {
             <form onSubmit={handleSubmit}>
               <div className="grid grid-cols-2 gap-6 py-4">
                 <div className="space-y-2">
-                  <Label htmlFor="bank_account_id">Bank Account *</Label>
+                  <Label htmlFor="bank_account_id">Deposit Account *</Label>
                   <Select
                     value={formData.bank_account_id}
                     onValueChange={(value) => setFormData({ ...formData, bank_account_id: value })}
                   >
                     <SelectTrigger className="h-12">
-                      <SelectValue placeholder="Select bank account" />
+                      <SelectValue placeholder="Select deposit account" />
                     </SelectTrigger>
                     <SelectContent>
-                      {bankAccounts.map((account) => (
-                        <SelectItem key={account.bank_account_id} value={account.bank_account_id.toString()}>
-                          {account.account_name} - {account.bank_name}
+                      {flattenAccounts(chartAccounts).map((account) => (
+                        <SelectItem key={account.account_id} value={account.account_id.toString()}>
+                          {account.full_path} ({account.account_type})
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -193,17 +266,24 @@ export default function DepositsPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="amount">Amount *</Label>
+                  <Label htmlFor="amount">
+                    Amount {selectedPayments.length === 0 ? '*' : ''}
+                  </Label>
                   <Input
                     id="amount"
                     type="number"
                     step="0.01"
                     value={formData.amount}
                     onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                    placeholder="Deposit amount"
+                    placeholder={selectedPayments.length > 0 ? "Leave empty to deposit full amount" : "Deposit amount"}
                     className="h-12"
-                    required
+                    required={selectedPayments.length === 0}
                   />
+                  {selectedPayments.length > 0 && (
+                    <p className="text-sm text-gray-600">
+                      Leave empty to deposit the full amount of selected payments ({calculateSelectedAmount().toFixed(2)})
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="reference">Reference</Label>
@@ -227,6 +307,50 @@ export default function DepositsPage() {
                   className="min-h-[100px]"
                 />
               </div>
+
+              {/* Customer Payments Selection */}
+              {undepositedPayments.length > 0 && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold">Undeposited Customer Payments</h3>
+                    <div className="text-sm text-gray-600">
+                      Selected: ${calculateSelectedAmount().toFixed(2)}
+                    </div>
+                  </div>
+                  
+                  <div className="border rounded-lg max-h-60 overflow-y-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-12">Select</TableHead>
+                          <TableHead>Customer</TableHead>
+                          <TableHead>Payment Date</TableHead>
+                          <TableHead>Amount</TableHead>
+                          <TableHead>Account</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {undepositedPayments.map((payment) => (
+                          <TableRow key={payment.cust_payment_id}>
+                            <TableCell>
+                              <input
+                                type="checkbox"
+                                checked={selectedPayments.includes(payment.cust_payment_id)}
+                                onChange={(e) => handlePaymentSelection(payment.cust_payment_id, e.target.checked)}
+                                className="rounded"
+                              />
+                            </TableCell>
+                            <TableCell className="font-medium">{payment.customer_name}</TableCell>
+                            <TableCell>{new Date(payment.payment_date).toLocaleDateString()}</TableCell>
+                            <TableCell className="font-medium">${parseFloat(payment.amount_total).toFixed(2)}</TableCell>
+                            <TableCell>{payment.deposit_account_name}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
 
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
@@ -267,7 +391,7 @@ export default function DepositsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Bank Account</TableHead>
+                <TableHead>Deposit Account</TableHead>
                 <TableHead>Deposit Date</TableHead>
                 <TableHead>Amount</TableHead>
                 <TableHead>Reference</TableHead>
@@ -279,7 +403,7 @@ export default function DepositsPage() {
                 <TableRow key={deposit.deposit_id}>
                   <TableCell className="font-medium">{deposit.bank_account_name}</TableCell>
                   <TableCell>{new Date(deposit.deposit_date).toLocaleDateString()}</TableCell>
-                  <TableCell className="font-medium">${deposit.amount.toFixed(2)}</TableCell>
+                  <TableCell className="font-medium">${parseFloat(deposit.total_amount || '0').toFixed(2)}</TableCell>
                   <TableCell>{deposit.reference}</TableCell>
                   <TableCell>
                     <div className="flex space-x-2">

@@ -46,7 +46,7 @@ import Image from 'next/image';
 const navigation = [
   { name: 'Analytics Dashboard', href: '/analytics', icon: BarChart3 },
   
-  // Core Master Data
+  // Master Data
   {
     name: 'Master Data',
     href: '/master-data',
@@ -54,14 +54,10 @@ const navigation = [
     submenu: [
       { name: 'Customers', href: '/customers', icon: Users },
       { name: 'Vendors', href: '/vendors', icon: Truck },
-      { name: 'Vendor Categories', href: '/vendor-categories', icon: Building2 },
-      { name: 'Chart of Accounts', href: '/chart-accounts', icon: BookOpen },
-      { name: 'Items & Services', href: '/items', icon: Package },
-      { name: 'Item Categories', href: '/item-categories', icon: Tag },
+      { name: 'Payment Terms', href: '/payment-terms', icon: Receipt },
       { name: 'Feed Types', href: '/feed-types', icon: Package },
       { name: 'Expense Types', href: '/expense-types', icon: TrendingDown },
       { name: 'Income Types', href: '/income-types', icon: TrendingUp },
-      { name: 'Payment Terms', href: '/payment-terms', icon: Receipt },
     ]
   },
 
@@ -80,28 +76,18 @@ const navigation = [
     ]
   },
 
-  // Inventory Management
-  {
-    name: 'Inventory',
-    href: '/inventory',
-    icon: Archive,
-    submenu: [
-      { name: 'Inventory Stocking', href: '/inventory-stocking', icon: Package },
-      { name: 'Item Sales', href: '/item-sales', icon: ShoppingCart },
-      { name: 'Stock Levels', href: '/stock-levels', icon: Package },
-    ]
-  },
-
   // Accounting
   {
     name: 'Accounting',
     href: '/accounting',
     icon: DollarSign,
     submenu: [
+      { name: 'Chart of Accounts', href: '/chart-accounts', icon: BookOpen },
+      { name: 'Items & Services', href: '/items', icon: Package },
       { name: 'Bills (AP)', href: '/bills', icon: Receipt },
+      { name: 'Bill Payments', href: '/bill-payments', icon: Banknote },
       { name: 'Invoices (AR)', href: '/invoices', icon: FileText },
       { name: 'Customer Payments', href: '/customer-payments', icon: Wallet },
-      { name: 'Bill Payments', href: '/bill-payments', icon: Banknote },
       { name: 'Deposits', href: '/deposits', icon: Wallet },
       { name: 'Checks', href: '/checks', icon: CreditCard },
       { name: 'Journal Entries', href: '/journal-entries', icon: BookOpen },

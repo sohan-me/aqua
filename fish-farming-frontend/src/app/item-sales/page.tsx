@@ -51,8 +51,8 @@ interface Pond {
 interface Item {
   item_id: number;
   name: string;
-  is_feed: boolean;
-  is_medicine: boolean;
+  protein_content?: number;
+  feed_stage?: string;
   selling_price?: number;
   uom: string;
 }

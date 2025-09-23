@@ -4,7 +4,7 @@ from django.db import models
 from rest_framework_recursive.fields import RecursiveField
 from .models import (
     # Core Master Data
-    Customer, PaymentTerms, VendorCategory, Vendor, VendorVendorCategory, ItemCategory,
+    PaymentTerms, Customer, Vendor, ItemCategory,
     Account, Item, ItemPrice,
     
     # Accounting Models
@@ -43,15 +43,6 @@ class UserSerializer(serializers.ModelSerializer):
 
 # ===================== CORE MASTER DATA SERIALIZERS =====================
 
-class CustomerSerializer(serializers.ModelSerializer):
-    user_username = serializers.CharField(source='user.username', read_only=True)
-    
-    class Meta:
-        model = Customer
-        fields = '__all__'
-        read_only_fields = ['customer_id', 'user', 'created_at', 'updated_at']
-
-
 class PaymentTermsSerializer(serializers.ModelSerializer):
     class Meta:
         model = PaymentTerms
@@ -59,36 +50,19 @@ class PaymentTermsSerializer(serializers.ModelSerializer):
         read_only_fields = ['terms_id', 'created_at']
 
 
-class VendorCategorySerializer(serializers.ModelSerializer):
-    children = RecursiveField(many=True, read_only=True)
-    parent_name = serializers.CharField(source='parent.name', read_only=True)
-    level = serializers.IntegerField(read_only=True)
+class CustomerSerializer(serializers.ModelSerializer):
+    user_username = serializers.CharField(source='user.username', read_only=True)
+    pond_name = serializers.CharField(source='pond.name', read_only=True)
     
     class Meta:
-        model = VendorCategory
+        model = Customer
         fields = '__all__'
-        read_only_fields = ['vendor_category_id', 'created_at', 'lft', 'rght', 'tree_id', 'level']
-
-
-class VendorCategoryTreeSerializer(serializers.ModelSerializer):
-    """Flat tree representation for VendorCategory"""
-    children = RecursiveField(many=True, read_only=True)
-    full_path = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = VendorCategory
-        fields = ['vendor_category_id', 'name', 'parent', 'level', 'full_path', 'children']
-    
-    def get_full_path(self, obj):
-        """Get the full path from root to this category"""
-        ancestors = obj.get_ancestors(include_self=True)
-        return ' > '.join([ancestor.name for ancestor in ancestors])
+        read_only_fields = ['customer_id', 'user', 'created_at', 'updated_at']
 
 
 class VendorSerializer(serializers.ModelSerializer):
     user_username = serializers.CharField(source='user.username', read_only=True)
     terms_default_name = serializers.CharField(source='terms_default.name', read_only=True)
-    categories_data = VendorCategorySerializer(source='categories', many=True, read_only=True)
     
     class Meta:
         model = Vendor
@@ -115,19 +89,10 @@ class ItemCategorySerializer(serializers.ModelSerializer):
         return obj.items.count()
 
 
-class VendorVendorCategorySerializer(serializers.ModelSerializer):
-    vendor_name = serializers.CharField(source='vendor.name', read_only=True)
-    category_name = serializers.CharField(source='vendor_category.name', read_only=True)
-    
-    class Meta:
-        model = VendorVendorCategory
-        fields = '__all__'
-        read_only_fields = ['created_at']
-
-
 class AccountSerializer(serializers.ModelSerializer):
     user_username = serializers.CharField(source='user.username', read_only=True)
     parent_name = serializers.CharField(source='parent.name', read_only=True)
+    full_path = serializers.CharField(source='get_full_path', read_only=True)
     children = RecursiveField(many=True, read_only=True)
     level = serializers.IntegerField(read_only=True)
     
@@ -154,9 +119,13 @@ class AccountTreeSerializer(serializers.ModelSerializer):
 
 class ItemSerializer(serializers.ModelSerializer):
     user_username = serializers.CharField(source='user.username', read_only=True)
+    category_name = serializers.CharField(source='category.name', read_only=True)
     income_account_name = serializers.CharField(source='income_account.name', read_only=True)
     expense_account_name = serializers.CharField(source='expense_account.name', read_only=True)
     asset_account_name = serializers.CharField(source='asset_account.name', read_only=True)
+    cost_of_goods_sold_account_name = serializers.CharField(source='cost_of_goods_sold_account.name', read_only=True)
+    stock_status = serializers.CharField(source='get_stock_status', read_only=True)
+    is_low_stock = serializers.BooleanField(read_only=True)
     
     class Meta:
         model = Item
@@ -255,7 +224,7 @@ class InvoiceLineSerializer(serializers.ModelSerializer):
     class Meta:
         model = InvoiceLine
         fields = '__all__'
-        read_only_fields = ['invoice_line_id', 'amount', 'created_at']
+        read_only_fields = ['invoice_line_id', 'created_at']
 
 
 class CustomerPaymentSerializer(serializers.ModelSerializer):
@@ -279,16 +248,6 @@ class CustomerPaymentApplySerializer(serializers.ModelSerializer):
         read_only_fields = ['cust_payment_apply_id', 'created_at']
 
 
-class DepositSerializer(serializers.ModelSerializer):
-    user_username = serializers.CharField(source='user.username', read_only=True)
-    bank_account_name = serializers.CharField(source='bank_account.name', read_only=True)
-    
-    class Meta:
-        model = Deposit
-        fields = '__all__'
-        read_only_fields = ['deposit_id', 'user', 'created_at', 'updated_at']
-
-
 class DepositLineSerializer(serializers.ModelSerializer):
     customer_payment_customer_name = serializers.CharField(source='customer_payment.customer.name', read_only=True)
     
@@ -296,6 +255,17 @@ class DepositLineSerializer(serializers.ModelSerializer):
         model = DepositLine
         fields = '__all__'
         read_only_fields = ['deposit_line_id', 'created_at']
+
+
+class DepositSerializer(serializers.ModelSerializer):
+    user_username = serializers.CharField(source='user.username', read_only=True)
+    bank_account_name = serializers.CharField(source='bank_account.name', read_only=True)
+    lines = DepositLineSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = Deposit
+        fields = '__all__'
+        read_only_fields = ['deposit_id', 'user', 'created_at', 'updated_at']
 
 
 class CheckSerializer(serializers.ModelSerializer):
@@ -456,6 +426,11 @@ class MedicineEventSerializer(serializers.ModelSerializer):
 
 class MedicineLineSerializer(serializers.ModelSerializer):
     item_name = serializers.CharField(source='item.name', read_only=True)
+    medicine_type_display = serializers.CharField(source='get_medicine_type_display', read_only=True)
+    treatment_type_display = serializers.CharField(source='get_treatment_type_display', read_only=True)
+    state_type_display = serializers.CharField(source='get_state_type_display', read_only=True)
+    dosage_unit_display = serializers.CharField(source='get_dosage_unit_display', read_only=True)
+    unit_of_measure_display = serializers.CharField(source='get_unit_of_measure_display', read_only=True)
     
     class Meta:
         model = MedicineLine
@@ -616,17 +591,37 @@ class HarvestSerializer(serializers.ModelSerializer):
 
 
 class ExpenseTypeSerializer(serializers.ModelSerializer):
+    user_username = serializers.CharField(source='user.username', read_only=True)
+    parent_name = serializers.CharField(source='parent.category', read_only=True)
+    full_path = serializers.CharField(source='get_full_path', read_only=True)
+    children = serializers.SerializerMethodField()
+    
     class Meta:
         model = ExpenseType
-        fields = '__all__'
-        read_only_fields = ['created_at']
+        fields = ['id', 'user', 'user_username', 'category', 'description', 'parent', 'parent_name', 'full_path', 'children', 'created_at']
+        read_only_fields = ['id', 'user', 'created_at']
+    
+    def get_children(self, obj):
+        """Get children expense types"""
+        children = obj.get_children()
+        return ExpenseTypeSerializer(children, many=True).data
 
 
 class IncomeTypeSerializer(serializers.ModelSerializer):
+    user_username = serializers.CharField(source='user.username', read_only=True)
+    parent_name = serializers.CharField(source='parent.category', read_only=True)
+    full_path = serializers.CharField(source='get_full_path', read_only=True)
+    children = serializers.SerializerMethodField()
+    
     class Meta:
         model = IncomeType
-        fields = '__all__'
-        read_only_fields = ['created_at']
+        fields = ['id', 'user', 'user_username', 'category', 'description', 'parent', 'parent_name', 'full_path', 'children', 'created_at']
+        read_only_fields = ['id', 'user', 'created_at']
+    
+    def get_children(self, obj):
+        """Get children income types"""
+        children = obj.get_children()
+        return IncomeTypeSerializer(children, many=True).data
 
 
 class ExpenseSerializer(serializers.ModelSerializer):
@@ -645,7 +640,7 @@ class IncomeSerializer(serializers.ModelSerializer):
     user_username = serializers.CharField(source='user.username', read_only=True)
     pond_name = serializers.CharField(source='pond.name', read_only=True)
     species_name = serializers.CharField(source='species.name', read_only=True)
-    income_type_name = serializers.CharField(source='income_type.name', read_only=True)
+    income_type_name = serializers.CharField(source='income_type.category', read_only=True)
     
     class Meta:
         model = Income

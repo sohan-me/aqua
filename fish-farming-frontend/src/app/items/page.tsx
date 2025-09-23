@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Search, Edit, Trash2, Package, DollarSign, Fish, Activity, Stethoscope } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Package, DollarSign, Fish, Activity, Stethoscope, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
 import { useApi } from '@/hooks/useApi';
 import { toast } from 'sonner';
 
@@ -19,19 +19,25 @@ interface Item {
   name: string;
   item_type: 'inventory_part' | 'non_inventory' | 'service' | 'payment' | 'discount';
   uom: string;
+  category: number | null;
+  category_name?: string;
   income_account: number | null;
   income_account_name?: string;
   expense_account: number | null;
   expense_account_name?: string;
   asset_account: number | null;
   asset_account_name?: string;
-  is_species: boolean;
-  is_feed: boolean;
-  is_medicine: boolean;
+  cost_of_goods_sold_account: number | null;
+  cost_of_goods_sold_account_name?: string;
   description: string;
   active: boolean;
   created_at: string;
   current_price?: number;
+  current_stock?: number;
+  min_stock_level?: number;
+  max_stock_level?: number;
+  stock_status?: string;
+  is_low_stock?: boolean;
 }
 
 interface Account {
@@ -39,6 +45,13 @@ interface Account {
   name: string;
   code: string;
   account_type: string;
+}
+
+interface ItemCategory {
+  item_category_id: number;
+  name: string;
+  description: string;
+  parent: number | null;
 }
 
 const ITEM_TYPES = [
@@ -56,6 +69,7 @@ const UOM_OPTIONS = [
 export default function ItemsPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [categories, setCategories] = useState<ItemCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
@@ -65,14 +79,15 @@ export default function ItemsPage() {
     name: '',
     item_type: 'inventory_part' as 'inventory_part' | 'non_inventory' | 'service' | 'payment' | 'discount',
     uom: 'pcs',
+    category: '',
     income_account: '',
     expense_account: '',
-    asset_account: '',
-    is_species: false,
-    is_feed: false,
-    is_medicine: false,
+    cost_of_goods_sold_account: '',
     description: '',
     active: true,
+    current_stock: 0,
+    min_stock_level: 0,
+    max_stock_level: 0,
   });
 
   const { get, post, put, delete: del } = useApi();
@@ -84,19 +99,22 @@ export default function ItemsPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [itemsResponse, accountsResponse] = await Promise.all([
+      const [itemsResponse, accountsResponse, categoriesResponse] = await Promise.all([
         get('/items/'),
         get('/accounts/'),
+        get('/item-categories/'),
       ]);
       
       setItems(itemsResponse.results || itemsResponse);
       setAccounts(accountsResponse.results || accountsResponse);
+      setCategories(categoriesResponse.results || categoriesResponse);
     } catch (error: any) {
       console.error('Error fetching data:', error);
       const errorMessage = error?.response?.data?.detail || error?.message || 'Failed to fetch data';
       toast.error(`Error: ${errorMessage}`);
       setItems([]);
       setAccounts([]);
+      setCategories([]);
     } finally {
       setLoading(false);
     }
@@ -107,9 +125,10 @@ export default function ItemsPage() {
     try {
       const submitData = {
         ...formData,
+        category: formData.category && formData.category !== 'none' ? parseInt(formData.category) : null,
         income_account: formData.income_account && formData.income_account !== 'none' ? parseInt(formData.income_account) : null,
         expense_account: formData.expense_account && formData.expense_account !== 'none' ? parseInt(formData.expense_account) : null,
-        asset_account: formData.asset_account && formData.asset_account !== 'none' ? parseInt(formData.asset_account) : null,
+        cost_of_goods_sold_account: formData.cost_of_goods_sold_account && formData.cost_of_goods_sold_account !== 'none' ? parseInt(formData.cost_of_goods_sold_account) : null,
       };
 
       if (editingItem) {
@@ -135,14 +154,15 @@ export default function ItemsPage() {
       name: item.name,
       item_type: item.item_type,
       uom: item.uom,
+      category: item.category?.toString() || '',
       income_account: item.income_account?.toString() || '',
       expense_account: item.expense_account?.toString() || '',
-      asset_account: item.asset_account?.toString() || '',
-      is_species: item.is_species,
-      is_feed: item.is_feed,
-      is_medicine: item.is_medicine,
+      cost_of_goods_sold_account: item.cost_of_goods_sold_account?.toString() || '',
       description: item.description,
       active: item.active,
+      current_stock: item.current_stock || 0,
+      min_stock_level: item.min_stock_level || 0,
+      max_stock_level: item.max_stock_level || 0,
     });
     setIsDialogOpen(true);
   };
@@ -165,14 +185,15 @@ export default function ItemsPage() {
       name: '',
       item_type: 'inventory_part',
       uom: 'pcs',
+      category: '',
       income_account: '',
       expense_account: '',
-      asset_account: '',
-      is_species: false,
-      is_feed: false,
-      is_medicine: false,
+      cost_of_goods_sold_account: '',
       description: '',
       active: true,
+      current_stock: 0,
+      min_stock_level: 0,
+      max_stock_level: 0,
     });
   };
 
@@ -204,14 +225,41 @@ export default function ItemsPage() {
     }
   };
 
+  const getStockStatusBadge = (item: Item) => {
+    if (item.current_stock === undefined || item.current_stock === null) return null;
+    
+    const stock = Number(item.current_stock);
+    const minLevel = Number(item.min_stock_level) || 0;
+    
+    if (stock <= 0) {
+      return (
+        <Badge variant="destructive" className="text-xs">
+          <XCircle className="h-3 w-3 mr-1" />
+          Out of Stock
+        </Badge>
+      );
+    } else if (stock <= minLevel) {
+      return (
+        <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 text-xs">
+          <AlertTriangle className="h-3 w-3 mr-1" />
+          Low Stock
+        </Badge>
+      );
+    } else {
+      return (
+        <Badge variant="secondary" className="bg-green-100 text-green-800 text-xs">
+          <CheckCircle className="h-3 w-3 mr-1" />
+          In Stock
+        </Badge>
+      );
+    }
+  };
+
   const filteredItems = items.filter(item => {
     const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          item.description.toLowerCase().includes(searchTerm.toLowerCase());
     
     if (filterType === 'all') return matchesSearch;
-    if (filterType === 'species') return matchesSearch && item.is_species;
-    if (filterType === 'feed') return matchesSearch && item.is_feed;
-    if (filterType === 'medicine') return matchesSearch && item.is_medicine;
     
     return matchesSearch && item.item_type === filterType;
   });
@@ -242,8 +290,8 @@ export default function ItemsPage() {
               <Tabs defaultValue="basic" className="w-full">
                 <TabsList className="grid w-full grid-cols-3">
                   <TabsTrigger value="basic">Basic Info</TabsTrigger>
+                  <TabsTrigger value="stock">Stock</TabsTrigger>
                   <TabsTrigger value="accounts">Accounts</TabsTrigger>
-                  <TabsTrigger value="categories">Categories</TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="basic" className="space-y-4">
@@ -295,6 +343,25 @@ export default function ItemsPage() {
                       </Select>
                     </div>
                     <div className="space-y-2">
+                      <Label htmlFor="category">Category</Label>
+                      <Select
+                        value={formData.category}
+                        onValueChange={(value) => setFormData({ ...formData, category: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No category</SelectItem>
+                          {categories.map((category) => (
+                            <SelectItem key={category.item_category_id} value={category.item_category_id.toString()}>
+                              {category.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
                       <Label htmlFor="active">Status</Label>
                       <Select
                         value={formData.active.toString()}
@@ -322,6 +389,50 @@ export default function ItemsPage() {
                   </div>
                 </TabsContent>
                 
+                <TabsContent value="stock" className="space-y-4">
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="current_stock">Current Stock</Label>
+                      <Input
+                        id="current_stock"
+                        type="number"
+                        step="0.001"
+                        value={formData.current_stock}
+                        onChange={(e) => setFormData({ ...formData, current_stock: parseFloat(e.target.value) || 0 })}
+                        placeholder="0.000"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="min_stock_level">Min Stock Level</Label>
+                      <Input
+                        id="min_stock_level"
+                        type="number"
+                        step="0.001"
+                        value={formData.min_stock_level}
+                        onChange={(e) => setFormData({ ...formData, min_stock_level: parseFloat(e.target.value) || 0 })}
+                        placeholder="0.000"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="max_stock_level">Max Stock Level</Label>
+                      <Input
+                        id="max_stock_level"
+                        type="number"
+                        step="0.001"
+                        value={formData.max_stock_level}
+                        onChange={(e) => setFormData({ ...formData, max_stock_level: parseFloat(e.target.value) || 0 })}
+                        placeholder="0.000"
+                      />
+                    </div>
+                  </div>
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <p className="text-sm text-blue-800">
+                      <strong>Note:</strong> Stock levels are automatically updated when inventory transactions occur. 
+                      Set minimum stock level to receive low stock alerts.
+                    </p>
+                  </div>
+                </TabsContent>
+                
                 <TabsContent value="accounts" className="space-y-4">
                   <div className="grid grid-cols-1 gap-4">
                     <div className="space-y-2">
@@ -335,9 +446,9 @@ export default function ItemsPage() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">No income account</SelectItem>
-                          {accounts.filter(acc => acc.account_type === 'Income').map((account) => (
+                          {accounts.map((account) => (
                             <SelectItem key={account.account_id} value={account.account_id.toString()}>
-                              {account.code} - {account.name}
+                              {account.code} - {account.name} ({account.account_type})
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -354,28 +465,28 @@ export default function ItemsPage() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">No expense account</SelectItem>
-                          {accounts.filter(acc => acc.account_type === 'Expense').map((account) => (
+                          {accounts.map((account) => (
                             <SelectItem key={account.account_id} value={account.account_id.toString()}>
-                              {account.code} - {account.name}
+                              {account.code} - {account.name} ({account.account_type})
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="asset_account">Asset Account</Label>
+                      <Label htmlFor="cost_of_goods_sold_account">Cost of Goods Sold Account</Label>
                       <Select
-                        value={formData.asset_account}
-                        onValueChange={(value) => setFormData({ ...formData, asset_account: value })}
+                        value={formData.cost_of_goods_sold_account}
+                        onValueChange={(value) => setFormData({ ...formData, cost_of_goods_sold_account: value })}
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Select asset account" />
+                          <SelectValue placeholder="Select COGS account" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="none">No asset account</SelectItem>
-                          {accounts.filter(acc => acc.account_type.includes('Asset')).map((account) => (
+                          <SelectItem value="none">No COGS account</SelectItem>
+                          {accounts.map((account) => (
                             <SelectItem key={account.account_id} value={account.account_id.toString()}>
-                              {account.code} - {account.name}
+                              {account.code} - {account.name} ({account.account_type})
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -384,49 +495,6 @@ export default function ItemsPage() {
                   </div>
                 </TabsContent>
                 
-                <TabsContent value="categories" className="space-y-4">
-                  <div className="space-y-4">
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        id="is_species"
-                        checked={formData.is_species}
-                        onChange={(e) => setFormData({ ...formData, is_species: e.target.checked })}
-                        className="rounded"
-                      />
-                      <Label htmlFor="is_species" className="flex items-center space-x-2">
-                        <Fish className="h-4 w-4" />
-                        <span>This is a fish species</span>
-                      </Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        id="is_feed"
-                        checked={formData.is_feed}
-                        onChange={(e) => setFormData({ ...formData, is_feed: e.target.checked })}
-                        className="rounded"
-                      />
-                      <Label htmlFor="is_feed" className="flex items-center space-x-2">
-                        <Package className="h-4 w-4" />
-                        <span>This is a feed item</span>
-                      </Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        id="is_medicine"
-                        checked={formData.is_medicine}
-                        onChange={(e) => setFormData({ ...formData, is_medicine: e.target.checked })}
-                        className="rounded"
-                      />
-                      <Label htmlFor="is_medicine" className="flex items-center space-x-2">
-                        <Stethoscope className="h-4 w-4" />
-                        <span>This is a medicine item</span>
-                      </Label>
-                    </div>
-                  </div>
-                </TabsContent>
               </Tabs>
               
               <DialogFooter>
@@ -459,9 +527,6 @@ export default function ItemsPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Items</SelectItem>
-            <SelectItem value="species">Species</SelectItem>
-            <SelectItem value="feed">Feed</SelectItem>
-            <SelectItem value="medicine">Medicine</SelectItem>
             <SelectItem value="inventory_part">Inventory Parts</SelectItem>
             <SelectItem value="service">Services</SelectItem>
             <SelectItem value="payment">Payments</SelectItem>
@@ -494,6 +559,7 @@ export default function ItemsPage() {
                     <Badge className={getItemTypeColor(item.item_type)}>
                       {ITEM_TYPES.find(t => t.value === item.item_type)?.label}
                     </Badge>
+                    {getStockStatusBadge(item)}
                     {!item.active && (
                       <Badge variant="secondary" className="text-xs">Inactive</Badge>
                     )}
@@ -505,26 +571,6 @@ export default function ItemsPage() {
                   {item.description && (
                     <p className="text-sm text-gray-600">{item.description}</p>
                   )}
-                  <div className="flex flex-wrap gap-1">
-                    {item.is_species && (
-                      <Badge variant="outline" className="text-xs">
-                        <Fish className="h-3 w-3 mr-1" />
-                        Species
-                      </Badge>
-                    )}
-                    {item.is_feed && (
-                      <Badge variant="outline" className="text-xs">
-                        <Package className="h-3 w-3 mr-1" />
-                        Feed
-                      </Badge>
-                    )}
-                    {item.is_medicine && (
-                      <Badge variant="outline" className="text-xs">
-                        <Stethoscope className="h-3 w-3 mr-1" />
-                        Medicine
-                      </Badge>
-                    )}
-                  </div>
                   {item.income_account_name && (
                     <p className="text-sm text-gray-600">
                       <strong>Income Account:</strong> {item.income_account_name}
@@ -535,15 +581,37 @@ export default function ItemsPage() {
                       <strong>Expense Account:</strong> {item.expense_account_name}
                     </p>
                   )}
-                  {item.asset_account_name && (
+                  {item.cost_of_goods_sold_account_name && (
                     <p className="text-sm text-gray-600">
-                      <strong>Asset Account:</strong> {item.asset_account_name}
+                      <strong>COGS Account:</strong> {item.cost_of_goods_sold_account_name}
+                    </p>
+                  )}
+                  {item.category_name && (
+                    <p className="text-sm text-gray-600">
+                      <strong>Category:</strong> {item.category_name}
                     </p>
                   )}
                   {item.current_price && (
                     <p className="text-sm font-semibold text-green-600">
-                      <strong>Current Price:</strong> ${item.current_price.toFixed(2)}
+                      <strong>Current Price:</strong> ${Number(item.current_price).toFixed(2)}
                     </p>
+                  )}
+                  {item.current_stock !== undefined && item.current_stock !== null && (
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-blue-600">
+                        <strong>Current Stock:</strong> {Number(item.current_stock).toFixed(3)} {item.uom}
+                      </p>
+                      {item.min_stock_level && item.min_stock_level > 0 && (
+                        <p className="text-sm text-gray-600">
+                          <strong>Min Level:</strong> {Number(item.min_stock_level).toFixed(3)} {item.uom}
+                        </p>
+                      )}
+                      {item.max_stock_level && item.max_stock_level > 0 && (
+                        <p className="text-sm text-gray-600">
+                          <strong>Max Level:</strong> {Number(item.max_stock_level).toFixed(3)} {item.uom}
+                        </p>
+                      )}
+                    </div>
                   )}
                 </div>
                 <div className="flex justify-end space-x-2 mt-4">

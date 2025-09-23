@@ -32,6 +32,7 @@ interface FeedingLine {
   feed_name?: string;
   qty: number;
   unit_cost: number;
+  total_cost?: number;
 }
 
 interface Pond {
@@ -42,9 +43,13 @@ interface Pond {
 interface FeedItem {
   item_id: number;
   name: string;
-  is_feed: boolean;
-  item_type: string;
+  uom: string;
+  protein_content?: number;
+  feed_stage?: string;
   description: string;
+  current_stock: number;
+  cost_price?: number;
+  selling_price?: number;
 }
 
 export default function FeedingEventsPage() {
@@ -52,6 +57,7 @@ export default function FeedingEventsPage() {
   const [feedingLines, setFeedingLines] = useState<FeedingLine[]>([]);
   const [ponds, setPonds] = useState<Pond[]>([]);
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
+  console.log(feedItems);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -89,9 +95,14 @@ export default function FeedingEventsPage() {
         firstEvent: (feedingResponse.results || feedingResponse)[0]
       });
       
-      // Filter for feed items only
+      // Filter for feed items from the items endpoint
       const allItems = itemsResponse.results || itemsResponse;
-      const feedItems = allItems.filter((item: any) => item.is_feed === true);
+      const feedItems = allItems.filter((item: any) => 
+        item.protein_content !== null || 
+        item.feed_stage !== null && item.feed_stage !== '' ||
+        item.name.toLowerCase().includes('feed') ||
+        item.description.toLowerCase().includes('feed')
+      );
       console.log('Feed Items Debug:', {
         allItems: allItems.length,
         feedItems: feedItems.length,
@@ -164,7 +175,7 @@ export default function FeedingEventsPage() {
       const feedingData = {
         ...formData,
         pond: parseInt(formData.pond_id),
-        memo: `${totals.totalFeedKg.toFixed(2)} kg feed, ৳${totals.totalCost.toFixed(2)} total cost`,
+        memo: `${totals.totalFeedKg.toFixed(2)} units feed, ৳${totals.totalCost.toFixed(2)} total cost`,
       };
 
       if (editingFeeding) {
@@ -175,7 +186,7 @@ export default function FeedingEventsPage() {
         
         // Create feeding lines
         for (const line of lineItems) {
-          if (line.item_id && line.qty > 0) {
+          if (line.item_id && line.qty && line.qty > 0) {
             await post('/feeding-lines/', {
               feeding_event: response.feeding_id,
               item: line.item_id,
@@ -345,7 +356,8 @@ export default function FeedingEventsPage() {
                               ) : (
                                 feedItems.map((feed) => (
                                   <SelectItem key={feed.item_id} value={feed.item_id.toString()}>
-                                    {feed.name}
+                                    {feed.name} ({feed.uom}) - Stock: {feed.current_stock} {feed.uom}
+                                    {feed.protein_content && ` - ${feed.protein_content}% protein`}
                                   </SelectItem>
                                 ))
                               )}
@@ -354,7 +366,7 @@ export default function FeedingEventsPage() {
                         </div>
                         
                         <div className="space-y-2">
-                          <Label>Quantity (kg)</Label>
+                          <Label>Quantity ({line.item_id ? feedItems.find(f => f.item_id === line.item_id)?.uom || 'kg' : 'kg'})</Label>
                           <Input
                             type="number"
                             step="0.01"
@@ -406,7 +418,7 @@ export default function FeedingEventsPage() {
                 <div className="grid grid-cols-2 gap-4 text-center">
                   <div className="p-4 bg-green-50 rounded-lg">
                     <div className="text-2xl font-bold text-green-600">
-                      {calculateTotals().totalFeedKg.toFixed(2)} kg
+                      {calculateTotals().totalFeedKg.toFixed(2)} units
                     </div>
                     <div className="text-sm text-green-600">Total Feed</div>
                   </div>
@@ -479,7 +491,7 @@ export default function FeedingEventsPage() {
                 <TableRow key={event.feeding_id}>
                   <TableCell className="font-medium">{event.pond_name}</TableCell>
                   <TableCell>{new Date(event.event_date).toLocaleDateString()}</TableCell>
-                  <TableCell>{event.total_feed_kg ? Number(event.total_feed_kg).toFixed(2) : '0.00'} kg</TableCell>
+                  <TableCell>{event.total_feed_kg ? Number(event.total_feed_kg).toFixed(2) : '0.00'} units</TableCell>
                   <TableCell>৳{event.total_cost ? Number(event.total_cost).toFixed(2) : '0.00'}</TableCell>
                   <TableCell>
                     <div className="flex space-x-2">

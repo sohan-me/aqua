@@ -263,6 +263,13 @@ export interface FeedType {
   created_at: string;
 }
 
+export interface SampleType {
+  id: number;
+  name: string;
+  icon: string;
+  color: string;
+}
+
 export interface FeedingBand {
   id: number;
   name: string;
@@ -632,9 +639,8 @@ export interface Item {
   income_account: number | null;
   expense_account: number | null;
   asset_account: number | null;
-  is_species: boolean;
-  is_feed: boolean;
-  is_medicine: boolean;
+  protein_content?: number;
+  feed_stage?: string;
   description: string;
   active: boolean;
   created_at: string;
@@ -857,6 +863,9 @@ export const apiService = {
   createFeedType: (data: Partial<FeedType>) => api.post<FeedType>('/feed-types/', data),
   updateFeedType: (id: number, data: Partial<FeedType>) => api.put<FeedType>(`/feed-types/${id}/`, data),
   deleteFeedType: (id: number) => api.delete(`/feed-types/${id}/`),
+
+  // Sample Types
+  getSampleTypes: () => api.get<SampleType[]>('/sample-types/'),
 
   // Feeds
   getFeeds: (params?: PaginationParams) => api.get<PaginatedResponse<Feed>>('/feeds/', { params }),

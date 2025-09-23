@@ -155,9 +155,25 @@ export default function ChartAccountsPage() {
     setExpandedNodes(newExpanded);
   };
 
+  const flattenAccounts = (accounts: Account[]): Account[] => {
+    const flattened: Account[] = [];
+    
+    const flatten = (items: Account[]) => {
+      items.forEach(item => {
+        flattened.push(item);
+        if (item.children && item.children.length > 0) {
+          flatten(item.children);
+        }
+      });
+    };
+    
+    flatten(accounts);
+    return flattened;
+  };
+
   const renderAccountTree = (accounts: Account[], level = 0) => {
     return accounts.map((account) => (
-      <div key={account.account_id} className="border-l-2 border-gray-100 ml-4">
+      <div key={account.account_id} className={`border-l-2 border-gray-100 ${level > 0 ? `ml-${Math.min(level * 4, 16)}` : ''}`}>
         <div className="flex items-center space-x-2 p-2 hover:bg-gray-50 rounded">
           <div className="flex items-center flex-1">
             {account.children && account.children.length > 0 ? (
@@ -175,13 +191,28 @@ export default function ChartAccountsPage() {
               <div className="w-6" />
             )}
             <div className="flex items-center space-x-2 flex-1">
+              {/* Level indicator */}
+              {level > 0 && (
+                <div className="flex items-center space-x-1">
+                  {Array.from({ length: level }, (_, i) => (
+                    <div key={i} className="w-1 h-4 bg-gray-300 rounded"></div>
+                  ))}
+                </div>
+              )}
               <Badge variant="outline" className="text-xs">
                 {account.account_type}
               </Badge>
               <span className="font-mono text-sm text-gray-600">{account.code}</span>
-              <span className="font-medium">{account.name}</span>
+              <span className={`font-medium ${level === 0 ? 'text-lg' : level === 1 ? 'text-base' : 'text-sm'}`}>
+                {account.name}
+              </span>
               {!account.active && (
                 <Badge variant="secondary" className="text-xs">Inactive</Badge>
+              )}
+              {level > 0 && (
+                <Badge variant="outline" className="text-xs">
+                  Level {level + 1}
+                </Badge>
               )}
             </div>
           </div>
@@ -204,7 +235,7 @@ export default function ChartAccountsPage() {
           </div>
         </div>
         {account.children && account.children.length > 0 && expandedNodes.has(account.account_id) && (
-          <div className="ml-4">
+          <div className={`${level > 0 ? `ml-${Math.min((level + 1) * 4, 16)}` : 'ml-4'}`}>
             {renderAccountTree(account.children, level + 1)}
           </div>
         )}
@@ -290,9 +321,9 @@ export default function ChartAccountsPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">No parent (Root account)</SelectItem>
-                      {accounts.map((account) => (
+                      {flattenAccounts(accounts).map((account) => (
                         <SelectItem key={account.account_id} value={account.account_id.toString()}>
-                          {account.code} - {account.name}
+                          {account.full_path || `${account.code} - ${account.name}`}
                         </SelectItem>
                       ))}
                     </SelectContent>
