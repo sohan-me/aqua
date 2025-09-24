@@ -69,7 +69,8 @@ const navigation = [
     submenu: [
       { name: 'Ponds', href: '/ponds', icon: Fish },
       { name: 'Species', href: '/species', icon: Fish },
-      { name: 'Stocking Events', href: '/stocking-events', icon: Package },
+      { name: 'Inventory Management', href: '/inventory', icon: Archive },
+      { name: 'Fish Stocking', href: '/stocking-events', icon: Package },
       { name: 'Feeding Events', href: '/feeding-events', icon: Activity },
       { name: 'Medicine Events', href: '/medicine-events', icon: Stethoscope },
       { name: 'Other Pond Events', href: '/other-pond-events', icon: Calendar },

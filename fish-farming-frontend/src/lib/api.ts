@@ -65,6 +65,11 @@ export interface Species {
   optimal_temp_max?: number;
   optimal_ph_min?: number;
   optimal_ph_max?: number;
+  parent?: number;
+  parent_name?: string;
+  children?: Species[];
+  full_path?: string;
+  level?: number;
   created_at: string;
 }
 
@@ -76,6 +81,10 @@ export interface Pond {
   volume_m3: string;
   location: string;
   is_active: boolean;
+  leasing_date?: string;
+  leasing_end_date?: string;
+  rate_per_decimal?: number;
+  total_leasing_money?: number;
   created_at: string;
   updated_at: string;
   user_username: string;
@@ -595,6 +604,28 @@ export interface Customer {
   updated_at: string;
 }
 
+export interface CustomerStock {
+  customer_stock_id: number;
+  user: number;
+  user_username: string;
+  customer: number;
+  customer_name: string;
+  pond?: number;
+  pond_name?: string;
+  item: number;
+  item_name: string;
+  item_type: string;
+  current_stock: number;
+  min_stock_level: number;
+  max_stock_level?: number;
+  unit: string;
+  packet_size?: number;
+  unit_cost?: string;
+  stock_status: 'out_of_stock' | 'low_stock' | 'in_stock' | 'overstocked';
+  last_updated: string;
+  created_at: string;
+}
+
 export interface PaymentTerms {
   terms_id: number;
   name: string;
@@ -630,15 +661,37 @@ export interface Vendor {
   }>;
 }
 
+export interface StockEntry {
+  entry_id: number;
+  user: number;
+  item: number;
+  item_name?: string;
+  quantity: number;
+  unit: string;
+  packet_size?: number;
+  gallon_size?: number;
+  unit_cost?: number;
+  total_cost?: number;
+  entry_date: string;
+  supplier?: string;
+  batch_number?: string;
+  expiry_date?: string;
+  notes?: string;
+  kg_equivalent?: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Item {
   item_id: number;
   user: number;
   name: string;
   item_type: string;
-  uom: string;
+  category: string | null;
   income_account: number | null;
   expense_account: number | null;
   asset_account: number | null;
+  cost_of_goods_sold_account: number | null;
   protein_content?: number;
   feed_stage?: string;
   description: string;
@@ -646,9 +699,19 @@ export interface Item {
   created_at: string;
   updated_at: string;
   user_username: string;
+  category_name?: string;
+  total_stock_kg?: number;
+  stock_summary?: string[];
+  stock_entries?: StockEntry[];
   income_account_name: string | null;
   expense_account_name: string | null;
   asset_account_name: string | null;
+  cost_of_goods_sold_account_name?: string | null;
+  current_stock?: number;
+  min_stock_level?: number;
+  max_stock_level?: number;
+  stock_status?: string;
+  is_low_stock?: boolean;
 }
 
 export interface Bill {
@@ -814,6 +877,7 @@ export const apiService = {
 
   // Species
   getSpecies: (params?: PaginationParams) => api.get<PaginatedResponse<Species>>('/species/', { params }),
+  getSpeciesTree: () => api.get<Species[]>('/species/?tree=true'),
   getSpeciesById: (id: number) => api.get<Species>(`/species/${id}/`),
   createSpecies: (data: Partial<Species>) => api.post<Species>('/species/', data),
   updateSpecies: (id: number, data: Partial<Species>) => api.put<Species>(`/species/${id}/`, data),
@@ -1066,5 +1130,20 @@ export const apiService = {
   createPayrollRun: (data: Partial<PayrollRun>) => api.post<PayrollRun>('/payroll-runs/', data),
   updatePayrollRun: (id: number, data: Partial<PayrollRun>) => api.put<PayrollRun>(`/payroll-runs/${id}/`, data),
   deletePayrollRun: (id: number) => api.delete(`/payroll-runs/${id}/`),
+
+  // Customer Stocks
+  getCustomerStocks: (params?: PaginationParams) => api.get<PaginatedResponse<CustomerStock>>('/customer-stocks/', { params }),
+  getCustomerStockById: (id: number) => api.get<CustomerStock>(`/customer-stocks/${id}/`),
+  createCustomerStock: (data: Partial<CustomerStock>) => api.post<CustomerStock>('/customer-stocks/', data),
+  updateCustomerStock: (id: number, data: Partial<CustomerStock>) => api.put<CustomerStock>(`/customer-stocks/${id}/`, data),
+  deleteCustomerStock: (id: number) => api.delete(`/customer-stocks/${id}/`),
+
+  // Stock Entries
+  getStockEntries: (params?: PaginationParams) => api.get<PaginatedResponse<StockEntry>>('/stock-entries/', { params }),
+  getStockEntryById: (id: number) => api.get<StockEntry>(`/stock-entries/${id}/`),
+  createStockEntry: (data: Partial<StockEntry>) => api.post<StockEntry>('/stock-entries/', data),
+  updateStockEntry: (id: number, data: Partial<StockEntry>) => api.put<StockEntry>(`/stock-entries/${id}/`, data),
+  deleteStockEntry: (id: number) => api.delete(`/stock-entries/${id}/`),
+  getStockEntriesByItem: (itemId: number) => api.get<StockEntry[]>(`/stock-entries/by_item/?item_id=${itemId}`),
 
 };

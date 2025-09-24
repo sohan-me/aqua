@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Search, Edit, Trash2, Package, Calendar, Fish, Scale } from 'lucide-react';
+import { Search, Edit, Trash2, Plus, Package } from 'lucide-react';
 import { useApi } from '@/hooks/useApi';
 import { toast } from 'sonner';
 
@@ -18,22 +18,20 @@ interface FeedingEvent {
   feeding_id: number;
   pond_id: number;
   pond_name?: string;
+  feed_item?: number;
+  feed_item_name?: string;
   event_date: string;
+  feeding_time?: string;
+  packet_qty?: number;
+  packet_size?: number;
+  amount_kg?: number;
+  total_amount_display?: string;
   memo: string;
   created_at: string;
   total_feed_kg: number;
   total_cost: number;
 }
 
-interface FeedingLine {
-  feeding_line_id: number;
-  feeding_id: number;
-  item_id: number;
-  feed_name?: string;
-  qty: number;
-  unit_cost: number;
-  total_cost?: number;
-}
 
 interface Pond {
   pond_id: number;
@@ -54,21 +52,25 @@ interface FeedItem {
 
 export default function FeedingEventsPage() {
   const [feedingEvents, setFeedingEvents] = useState<FeedingEvent[]>([]);
-  const [feedingLines, setFeedingLines] = useState<FeedingLine[]>([]);
   const [ponds, setPonds] = useState<Pond[]>([]);
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
+  const [pondFeeds, setPondFeeds] = useState<any[]>([]);
+  const [selectedFeed, setSelectedFeed] = useState<any>(null);
   console.log(feedItems);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingFeeding, setEditingFeeding] = useState<FeedingEvent | null>(null);
-  const [showFeedingLines, setShowFeedingLines] = useState<number | null>(null);
   const [formData, setFormData] = useState({
     pond_id: '',
+    feed_item: '',
     event_date: '',
+    feeding_time: '',
+    packet_qty: '',
+    packet_size: '',
+    amount_kg: '',
     memo: '',
   });
-  const [lineItems, setLineItems] = useState<Partial<FeedingLine>[]>([]);
 
   const { get, post, put, delete: del } = useApi();
 
@@ -117,85 +119,77 @@ export default function FeedingEventsPage() {
     }
   };
 
-  const fetchFeedingLines = async (feedingId: number) => {
+
+  const fetchPondFeeds = async (pondId: number) => {
     try {
-      const response = await get(`/feeding-events/${feedingId}/lines/`);
-      setFeedingLines(response.results || response);
+      const response = await get(`/customer-stocks/?pond=${pondId}`);
+      const feeds = response.results || response;
+      // Filter for feed items only
+      const feedItems = feeds.filter((stock: any) => 
+        stock.item_type === 'inventory_part' && 
+        (stock.item_name.toLowerCase().includes('feed') || 
+         stock.category === 'feed' ||
+         stock.current_stock > 0)
+      );
+      setPondFeeds(feedItems);
+      console.log('Pond feeds:', feedItems);
     } catch (error) {
-      console.error('Error fetching feeding lines:', error);
+      console.error('Error fetching pond feeds:', error);
+      setPondFeeds([]);
     }
   };
 
-  const calculateTotals = () => {
-    const totalFeedKg = lineItems.reduce((sum, line) => sum + (line.qty || 0), 0);
-    const totalCost = lineItems.reduce((sum, line) => sum + ((line.qty || 0) * (line.unit_cost || 0)), 0);
-    return { totalFeedKg, totalCost };
-  };
 
-  const addLineItem = () => {
-    setLineItems([...lineItems, {
-      item_id: 0,
-      qty: 0,
-      unit_cost: 0,
-    }]);
-  };
 
-  const updateLineItem = (index: number, field: keyof FeedingLine, value: any) => {
-    const updated = [...lineItems];
-    updated[index] = { ...updated[index], [field]: value };
-    
-    // Auto-calculation logic
-    if (field === 'qty' || field === 'unit_cost') {
-      // If quantity or unit cost changes, calculate total cost
-      const quantity = updated[index].qty || 0;
-      const unitCost = updated[index].unit_cost || 0;
-      updated[index].total_cost = quantity * unitCost;
-    } else if (field === 'total_cost') {
-      // If total cost changes, calculate unit cost
-      const quantity = updated[index].qty || 0;
-      const totalCost = updated[index].total_cost || 0;
-      if (quantity > 0) {
-        updated[index].unit_cost = totalCost / quantity;
-      } else {
-        updated[index].unit_cost = 0;
-      }
+  const handlePondChange = (pondId: string) => {
+    setFormData({ ...formData, pond_id: pondId });
+    if (pondId) {
+      fetchPondFeeds(parseInt(pondId));
+    } else {
+      setPondFeeds([]);
+      setSelectedFeed(null);
     }
-    
-    setLineItems(updated);
   };
 
-  const removeLineItem = (index: number) => {
-    setLineItems(lineItems.filter((_, i) => i !== index));
+  const handleFeedSelection = (feed: any) => {
+    setSelectedFeed(feed);
+    // Auto-populate packet size if available
+    if (feed.packet_size) {
+      setFormData({ ...formData, packet_size: feed.packet_size.toString(), feed_item: feed.item.toString() });
+    } else {
+      setFormData({ ...formData, feed_item: feed.item.toString() });
+    }
   };
+
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const totals = calculateTotals();
+      // Calculate amount_kg if packet information is provided
+      let calculatedAmountKg = null;
+      if (formData.packet_qty && formData.packet_size) {
+        calculatedAmountKg = parseFloat(formData.packet_qty) * parseFloat(formData.packet_size);
+      } else if (formData.amount_kg) {
+        calculatedAmountKg = parseFloat(formData.amount_kg);
+      }
+      
       const feedingData = {
         ...formData,
         pond: parseInt(formData.pond_id),
-        memo: `${totals.totalFeedKg.toFixed(2)} units feed, ৳${totals.totalCost.toFixed(2)} total cost`,
+        feed_item: formData.feed_item ? parseInt(formData.feed_item) : null,
+        packet_qty: formData.packet_qty ? parseFloat(formData.packet_qty) : null,
+        packet_size: formData.packet_size ? parseFloat(formData.packet_size) : null,
+        amount_kg: calculatedAmountKg,
+        feeding_time: formData.feeding_time || null,
+        memo: formData.memo || `${calculatedAmountKg ? calculatedAmountKg.toFixed(2) + ' kg' : '0 kg'} feed consumed`,
       };
 
       if (editingFeeding) {
         await put(`/feeding-events/${editingFeeding.feeding_id}/`, feedingData);
         toast.success('Feeding event updated successfully');
       } else {
-        const response = await post('/feeding-events/', feedingData);
-        
-        // Create feeding lines
-        for (const line of lineItems) {
-          if (line.item_id && line.qty && line.qty > 0) {
-            await post('/feeding-lines/', {
-              feeding_event: response.feeding_id,
-              item: line.item_id,
-              qty: line.qty,
-              unit_cost: line.unit_cost || 0,
-            });
-          }
-        }
-        
+        await post('/feeding-events/', feedingData);
         toast.success('Feeding event created successfully');
       }
       
@@ -213,10 +207,20 @@ export default function FeedingEventsPage() {
     setEditingFeeding(feeding);
     setFormData({
       pond_id: feeding.pond_id.toString(),
+      feed_item: feeding.feed_item?.toString() || '',
       event_date: feeding.event_date,
+      feeding_time: feeding.feeding_time || '',
+      packet_qty: feeding.packet_qty?.toString() || '',
+      packet_size: feeding.packet_size?.toString() || '',
+      amount_kg: feeding.amount_kg?.toString() || '',
       memo: feeding.memo,
     });
-    setLineItems([]);
+    
+    // Fetch pond feeds when editing
+    if (feeding.pond_id) {
+      fetchPondFeeds(feeding.pond_id);
+    }
+    
     setIsDialogOpen(true);
   };
 
@@ -243,10 +247,16 @@ export default function FeedingEventsPage() {
   const resetForm = () => {
     setFormData({
       pond_id: '',
+      feed_item: '',
       event_date: '',
+      feeding_time: '',
+      packet_qty: '',
+      packet_size: '',
+      amount_kg: '',
       memo: '',
     });
-    setLineItems([]);
+    setPondFeeds([]);
+    setSelectedFeed(null);
   };
 
   const filteredFeedingEvents = feedingEvents.filter(event =>
@@ -283,7 +293,7 @@ export default function FeedingEventsPage() {
                   <Label htmlFor="pond_id">Pond *</Label>
                   <Select
                     value={formData.pond_id}
-                    onValueChange={(value) => setFormData({ ...formData, pond_id: value })}
+                    onValueChange={handlePondChange}
                   >
                     <SelectTrigger className="h-12">
                       <SelectValue placeholder="Select pond" />
@@ -309,6 +319,92 @@ export default function FeedingEventsPage() {
                   />
                 </div>
               </div>
+              
+              {/* Feed Selection */}
+              {formData.pond_id && pondFeeds.length > 0 && (
+                <div className="space-y-2 py-4">
+                  <Label htmlFor="feed_selection">Select Feed from Pond Stock</Label>
+                  <Select onValueChange={(value) => {
+                    const feed = pondFeeds.find(f => f.customer_stock_id.toString() === value);
+                    if (feed) handleFeedSelection(feed);
+                  }}>
+                    <SelectTrigger className="h-12">
+                      <SelectValue placeholder="Select feed from pond stock" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {pondFeeds.map((feed) => (
+                        <SelectItem key={feed.customer_stock_id} value={feed.customer_stock_id.toString()}>
+                          {feed.item_name} - {feed.current_stock} {feed.unit} {feed.packet_size && `(${feed.packet_size} kg/packet)`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              
+              {/* Feeding Details */}
+              <div className="grid grid-cols-2 gap-6 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="feeding_time">Feeding Time</Label>
+                  <Input
+                    id="feeding_time"
+                    type="time"
+                    value={formData.feeding_time}
+                    onChange={(e) => setFormData({ ...formData, feeding_time: e.target.value })}
+                    className="h-12"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="amount_kg">Amount (kg)</Label>
+                  <Input
+                    id="amount_kg"
+                    type="number"
+                    step="0.1"
+                    value={formData.amount_kg}
+                    onChange={(e) => setFormData({ ...formData, amount_kg: e.target.value })}
+                    placeholder="Enter amount in kg"
+                    className="h-12"
+                  />
+                </div>
+              </div>
+              
+              {/* Packet Information */}
+              <div className="grid grid-cols-2 gap-6 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="packet_qty">Number of Packets</Label>
+                  <Input
+                    id="packet_qty"
+                    type="number"
+                    step="0.1"
+                    value={formData.packet_qty}
+                    onChange={(e) => setFormData({ ...formData, packet_qty: e.target.value })}
+                    placeholder="Enter number of packets"
+                    className="h-12"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="packet_size">Packet Size (kg)</Label>
+                  <Input
+                    id="packet_size"
+                    type="number"
+                    step="0.1"
+                    value={formData.packet_size}
+                    onChange={(e) => setFormData({ ...formData, packet_size: e.target.value })}
+                    placeholder="Enter packet size in kg"
+                    className="h-12"
+                  />
+                </div>
+              </div>
+              
+              {/* Calculated Amount Display */}
+              {formData.packet_qty && formData.packet_size && (
+                <div className="bg-blue-50 p-4 rounded-lg mb-4">
+                  <p className="text-blue-800 font-medium">
+                    Total Amount: {formData.packet_qty} packets × {formData.packet_size} kg = {(parseFloat(formData.packet_qty) * parseFloat(formData.packet_size)).toFixed(2)} kg
+                  </p>
+                </div>
+              )}
+              
               <div className="space-y-2">
                 <Label htmlFor="memo">Memo</Label>
                 <Textarea
@@ -321,123 +417,6 @@ export default function FeedingEventsPage() {
                 />
               </div>
 
-              {/* Feeding Lines */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <Label>Feeding Lines</Label>
-                  <Button type="button" variant="outline" onClick={addLineItem}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Line
-                  </Button>
-                </div>
-
-                <div className="space-y-4 max-h-80 overflow-y-auto">
-                  {lineItems.map((line, index) => (
-                    <Card key={index} className="p-6">
-                      <div className="grid grid-cols-4 gap-4 items-end">
-                        <div className="space-y-2">
-                          <Label>Feed Type</Label>
-                          <Select
-                            value={line.item_id?.toString() || ''}
-                            onValueChange={(value) => updateLineItem(index, 'item_id', parseInt(value))}
-                          >
-                            <SelectTrigger className="h-12">
-                              <SelectValue placeholder="Select feed" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {feedItems.length === 0 ? (
-                                <div className="p-4 text-center text-gray-500">
-                                  <Package className="h-8 w-8 mx-auto mb-2 text-gray-400" />
-                                  <p className="text-sm">No feed types available</p>
-                                  <p className="text-xs text-gray-400 mt-1">
-                                    Go to Master Data → Feed Types to add feed types
-                                  </p>
-                                </div>
-                              ) : (
-                                feedItems.map((feed) => (
-                                  <SelectItem key={feed.item_id} value={feed.item_id.toString()}>
-                                    {feed.name} ({feed.uom}) - Stock: {feed.current_stock} {feed.uom}
-                                    {feed.protein_content && ` - ${feed.protein_content}% protein`}
-                                  </SelectItem>
-                                ))
-                              )}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <Label>Quantity ({line.item_id ? feedItems.find(f => f.item_id === line.item_id)?.uom || 'kg' : 'kg'})</Label>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            value={line.qty || ''}
-                            onChange={(e) => updateLineItem(index, 'qty', parseFloat(e.target.value) || 0)}
-                            placeholder="Feed quantity"
-                            className="h-12"
-                          />
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <Label>Unit Cost (৳)</Label>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            value={line.unit_cost || ''}
-                            onChange={(e) => updateLineItem(index, 'unit_cost', parseFloat(e.target.value) || 0)}
-                            placeholder="Cost per kg"
-                            className="h-12"
-                          />
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <Label>Total Cost (৳)</Label>
-                          <div className="flex items-center space-x-2">
-                            <Input
-                              type="number"
-                              step="0.01"
-                              value={line.total_cost || 0}
-                              onChange={(e) => updateLineItem(index, 'total_cost', parseFloat(e.target.value) || 0)}
-                              className="h-12"
-                            />
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => removeLineItem(index)}
-                              className="text-red-600 hover:text-red-700 h-12 px-3"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-
-                <div className="grid grid-cols-2 gap-4 text-center">
-                  <div className="p-4 bg-green-50 rounded-lg">
-                    <div className="text-2xl font-bold text-green-600">
-                      {calculateTotals().totalFeedKg.toFixed(2)} units
-                    </div>
-                    <div className="text-sm text-green-600">Total Feed</div>
-                  </div>
-                  <div className="p-4 bg-purple-50 rounded-lg">
-                    <div className="text-2xl font-bold text-purple-600">
-                      ৳${calculateTotals().totalCost.toFixed(2)}
-                    </div>
-                    <div className="text-sm text-purple-600">Total Cost (৳)</div>
-                  </div>
-                </div>
-                
-                {/* Auto-calculation note */}
-                <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-                  <p className="text-sm text-blue-700">
-                    <strong>💡 Auto-calculation:</strong> Enter quantity + unit cost to calculate total cost, 
-                    or enter quantity + total cost to calculate unit cost automatically.
-                  </p>
-                </div>
-              </div>
 
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
@@ -480,8 +459,10 @@ export default function FeedingEventsPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Pond</TableHead>
+                <TableHead>Feed Item</TableHead>
                 <TableHead>Date</TableHead>
-                <TableHead>Total Feed</TableHead>
+                <TableHead>Time</TableHead>
+                <TableHead>Amount</TableHead>
                 <TableHead>Total Cost (৳)</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
@@ -490,8 +471,17 @@ export default function FeedingEventsPage() {
               {filteredFeedingEvents.map((event) => (
                 <TableRow key={event.feeding_id}>
                   <TableCell className="font-medium">{event.pond_name}</TableCell>
+                  <TableCell>{event.feed_item_name || '-'}</TableCell>
                   <TableCell>{new Date(event.event_date).toLocaleDateString()}</TableCell>
-                  <TableCell>{event.total_feed_kg ? Number(event.total_feed_kg).toFixed(2) : '0.00'} units</TableCell>
+                  <TableCell>{event.feeding_time || '-'}</TableCell>
+                  <TableCell>
+                    {event.total_amount_display || 
+                     (event.packet_qty && event.packet_size ? 
+                       `${event.packet_qty} packets (${(event.packet_qty * event.packet_size).toFixed(2)} kg)` :
+                       event.amount_kg ? `${event.amount_kg} kg` :
+                       event.total_feed_kg ? `${Number(event.total_feed_kg).toFixed(2)} units` : '0.00 units'
+                     )}
+                  </TableCell>
                   <TableCell>৳{event.total_cost ? Number(event.total_cost).toFixed(2) : '0.00'}</TableCell>
                   <TableCell>
                     <div className="flex space-x-2">
@@ -501,20 +491,6 @@ export default function FeedingEventsPage() {
                         onClick={() => handleEdit(event)}
                       >
                         <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          if (showFeedingLines === event.feeding_id) {
-                            setShowFeedingLines(null);
-                          } else {
-                            setShowFeedingLines(event.feeding_id);
-                            fetchFeedingLines(event.feeding_id);
-                          }
-                        }}
-                      >
-                        <Package className="h-4 w-4" />
                       </Button>
                       <Button
                         variant="outline"

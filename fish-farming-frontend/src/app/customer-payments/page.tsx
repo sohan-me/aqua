@@ -211,7 +211,7 @@ export default function CustomerPaymentsPage() {
                   <Select
                     value={formData.customer_id}
                     onValueChange={(value) => {
-                      setFormData({ ...formData, customer_id: value, invoice_id: '' });
+                      setFormData({ ...formData, customer_id: value });
                       fetchCustomerInvoices(value);
                     }}
                   >

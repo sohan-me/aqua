@@ -3,8 +3,44 @@
   import { usePonds } from '@/hooks/useApi';
   import { Pond } from '@/lib/api';
   import { formatDate, extractApiData } from '@/lib/utils';
-  import { Fish, Plus, MapPin, Droplets, Activity } from 'lucide-react';
+  import { Fish, Plus, MapPin, Droplets, Activity, Calendar, AlertTriangle } from 'lucide-react';
   import Link from 'next/link';
+
+  // Helper function to get leasing status
+  const getLeasingStatus = (leasingEndDate: string | undefined) => {
+    if (!leasingEndDate) return null;
+    
+    const endDate = new Date(leasingEndDate);
+    const today = new Date();
+    const timeDiff = endDate.getTime() - today.getTime();
+    const daysRemaining = Math.ceil(timeDiff / (1000 * 3600 * 24));
+    
+    if (daysRemaining > 30) {
+      return {
+        text: `Lease Active (${daysRemaining} days)`,
+        color: 'bg-green-100 text-green-800',
+        icon: Calendar
+      };
+    } else if (daysRemaining > 0) {
+      return {
+        text: `Expires Soon (${daysRemaining} days)`,
+        color: 'bg-yellow-100 text-yellow-800',
+        icon: AlertTriangle
+      };
+    } else if (daysRemaining === 0) {
+      return {
+        text: 'Expires Today',
+        color: 'bg-orange-100 text-orange-800',
+        icon: AlertTriangle
+      };
+    } else {
+      return {
+        text: `Expired (${Math.abs(daysRemaining)} days ago)`,
+        color: 'bg-red-100 text-red-800',
+        icon: AlertTriangle
+      };
+    }
+  };
 
   export default function PondsPage() {
     const { data: pondsData, isLoading } = usePonds();
@@ -87,6 +123,26 @@
                         <span>{pond.location}</span>
                       </div>
                     )}
+                    
+                    {/* Leasing Status */}
+                    {(() => {
+                      const leasingStatus = getLeasingStatus(pond.leasing_end_date);
+                      if (leasingStatus) {
+                        const IconComponent = leasingStatus.icon;
+                        return (
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center text-sm text-gray-600">
+                              <IconComponent className="h-4 w-4 mr-2 text-orange-500" />
+                              <span>Lease Status:</span>
+                            </div>
+                            <span className={`px-2 py-1 text-xs rounded-full ${leasingStatus.color}`}>
+                              {leasingStatus.text}
+                            </span>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
                     
                     <div className="text-xs text-gray-500">
                       Created: {formatDate(pond.created_at)}

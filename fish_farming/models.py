@@ -163,8 +163,15 @@ class Item(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='items')
     name = models.CharField(max_length=200, help_text="Tilapia, Rui, Feed X, Medicine Y, Net, Boat Rent, etc.")
     item_type = models.CharField(max_length=20, choices=ITEM_TYPE_CHOICES)
-    uom = models.CharField(max_length=20, help_text="kg, pcs, pack, hr, etc.")
-    category = models.ForeignKey(ItemCategory, on_delete=models.SET_NULL, null=True, blank=True, related_name='items')
+    category = models.CharField(max_length=50, blank=True, choices=[
+        ('feed', 'Feed'),
+        ('medicine', 'Medicine'),
+        ('equipment', 'Equipment'),
+        ('chemical', 'Chemical'),
+        ('supplies', 'Supplies'),
+        ('maintenance', 'Maintenance'),
+        ('other', 'Other'),
+    ])
     income_account = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, blank=True, related_name='income_items')
     expense_account = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, blank=True, related_name='expense_items')
     asset_account = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, blank=True, related_name='asset_items')
@@ -227,6 +234,88 @@ class Item(models.Model):
             return 'overstocked'
         else:
             return 'in_stock'
+    
+    def get_category_display(self):
+        """Get the display name for the category"""
+        if self.category:
+            # Get the display value from the choices
+            choices_dict = dict(self._meta.get_field('category').choices)
+            return choices_dict.get(self.category, self.category)
+        return ''
+    
+    def get_total_stock_kg(self):
+        """Calculate total stock in kg from all stock entries"""
+        total_kg = 0
+        for entry in self.stock_entries.all():
+            if entry.unit in ['packet', 'pack'] and entry.packet_size:
+                # Convert packets to kg using entry's packet size
+                total_kg += entry.quantity * entry.packet_size
+            elif entry.unit == 'kg':
+                # Already in kg
+                total_kg += entry.quantity
+            elif entry.unit == 'pcs':
+                # Convert pieces to kg - assuming 1 piece = 1 kg for feed items
+                # This is a simplified conversion - in reality, you'd need proper conversion rates
+                total_kg += entry.quantity
+            elif entry.unit == 'ml':
+                # Convert ml to kg - assuming 1 ml = 0.001 kg for medicine
+                total_kg += entry.quantity * Decimal('0.001')
+            # Add other unit conversions as needed
+        return total_kg
+    
+    def get_stock_summary(self):
+        """Get a summary of all stock entries"""
+        entries = []
+        for entry in self.stock_entries.all():
+            if entry.unit in ['packet', 'pack'] and entry.packet_size:
+                kg_equivalent = entry.quantity * entry.packet_size
+                entries.append(f"{entry.quantity} {entry.unit} ({kg_equivalent} kg)")
+            else:
+                entries.append(f"{entry.quantity} {entry.unit}")
+        return entries
+
+
+class StockEntry(models.Model):
+    """Individual stock entries for items - allows multiple stock additions"""
+    entry_id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='stock_entries')
+    item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='stock_entries')
+    quantity = models.DecimalField(max_digits=15, decimal_places=3, help_text="Quantity added")
+    unit = models.CharField(max_length=20, help_text="Unit of measurement")
+    packet_size = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Packet size in kg (e.g., 10, 25)")
+    gallon_size = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Gallon size in litres (e.g., 5, 10, 20)")
+    unit_cost = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, help_text="Cost per unit")
+    total_cost = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, help_text="Total cost for this entry")
+    entry_date = models.DateField(help_text="Date when stock was added")
+    supplier = models.CharField(max_length=200, blank=True, help_text="Supplier name")
+    batch_number = models.CharField(max_length=100, blank=True, help_text="Batch or lot number")
+    expiry_date = models.DateField(null=True, blank=True, help_text="Expiry date if applicable")
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-entry_date', '-created_at']
+        verbose_name = 'Stock Entry'
+        verbose_name_plural = 'Stock Entries'
+    
+    def __str__(self):
+        return f"{self.item.name} - {self.quantity} {self.unit} ({self.entry_date})"
+    
+    def get_kg_equivalent(self):
+        """Get the kg equivalent of this stock entry"""
+        if self.unit in ['packet', 'pack'] and self.packet_size:
+            return self.quantity * self.packet_size
+        elif self.unit == 'kg':
+            return self.quantity
+        else:
+            return 0  # Unknown unit conversion
+    
+    def save(self, *args, **kwargs):
+        # Auto-calculate total cost
+        if self.unit_cost and self.quantity:
+            self.total_cost = self.unit_cost * self.quantity
+        super().save(*args, **kwargs)
 
 
 class ItemPrice(models.Model):
@@ -369,6 +458,9 @@ class BillLine(models.Model):
     item = models.ForeignKey(Item, on_delete=models.CASCADE, null=True, blank=True, related_name='bill_lines')
     description = models.CharField(max_length=200, blank=True)
     qty = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    unit = models.CharField(max_length=20, blank=True, help_text="Unit of measurement (kg, packet, pieces, etc.)")
+    packet_size = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Packet size in kg")
+    gallon_size = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Gallon size in litres")
     cost = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     line_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     
@@ -782,7 +874,7 @@ class StockingLine(models.Model):
     """Stocking line items"""
     stocking_line_id = models.AutoField(primary_key=True)
     stocking_event = models.ForeignKey(StockingEvent, on_delete=models.CASCADE, related_name='lines')
-    item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='stocking_lines', help_text="Species/fry item")
+    species = models.ForeignKey('Species', on_delete=models.CASCADE, related_name='stocking_lines', help_text="Fish species stocked")
     qty_pcs = models.PositiveIntegerField(help_text="Number of pieces stocked")
     pcs_per_kg_at_stocking = models.DecimalField(max_digits=15, decimal_places=10, null=True, blank=True, help_text="Pieces per kg at stocking")
     weight_kg = models.DecimalField(max_digits=15, decimal_places=10, null=True, blank=True)
@@ -794,7 +886,7 @@ class StockingLine(models.Model):
         ordering = ['stocking_event', 'stocking_line_id']
     
     def __str__(self):
-        return f"{self.item.name} - {self.qty_pcs} pcs ({self.stocking_event.event_date})"
+        return f"{self.species.name} - {self.qty_pcs} pcs ({self.stocking_event.event_date})"
 
 
 class FeedingEvent(models.Model):
@@ -802,13 +894,22 @@ class FeedingEvent(models.Model):
     feeding_id = models.AutoField(primary_key=True)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='feeding_events')
     pond = models.ForeignKey('Pond', on_delete=models.CASCADE, related_name='feeding_events')
+    feed_item = models.ForeignKey('Item', on_delete=models.CASCADE, null=True, blank=True, related_name='feeding_events', help_text="Feed item used")
     event_date = models.DateField()
+    feeding_time = models.TimeField(null=True, blank=True, help_text="Time of feeding")
+    
+    # Feed quantity tracking
+    packet_qty = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Number of packets used")
+    packet_size = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Size of each packet in kg")
+    amount_kg = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total amount in kg (calculated or direct input)")
+    
     memo = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
         ordering = ['-event_date', '-created_at']
+    
     
     def __str__(self):
         return f"Feeding-{self.feeding_id} - {self.pond.customer.name} ({self.event_date})"
@@ -829,6 +930,9 @@ class FeedingLine(models.Model):
     
     # Optional inventory transaction link
     inv_txn_line = models.ForeignKey(InventoryTransactionLine, on_delete=models.SET_NULL, null=True, blank=True, related_name='feeding_lines')
+    
+    # Customer stock link for pond-specific feeding
+    customer_stock = models.ForeignKey('CustomerStock', on_delete=models.SET_NULL, null=True, blank=True, related_name='feeding_lines', help_text="Customer/pond stock used for feeding")
     
     memo = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -1235,6 +1339,11 @@ class Pond(models.Model):
     location = models.CharField(max_length=200, blank=True)
     notes = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
+    # Leasing information
+    leasing_date = models.DateField(null=True, blank=True, help_text="Date when pond was leased")
+    leasing_end_date = models.DateField(null=True, blank=True, help_text="Date when pond leasing ends")
+    rate_per_decimal = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Leasing rate per decimal")
+    total_leasing_money = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, help_text="Total leasing amount (auto-calculated: area × rate)")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -1274,8 +1383,8 @@ class Pond(models.Model):
         super().save(*args, **kwargs)
 
 
-class Species(models.Model):
-    """Fish species model"""
+class Species(MPTTModel):
+    """Fish species model with hierarchical structure"""
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='species')
     name = models.CharField(max_length=100)
     scientific_name = models.CharField(max_length=150, blank=True, null=True)
@@ -1284,15 +1393,23 @@ class Species(models.Model):
     optimal_temp_max = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     optimal_ph_min = models.DecimalField(max_digits=3, decimal_places=1, null=True, blank=True)
     optimal_ph_max = models.DecimalField(max_digits=3, decimal_places=1, null=True, blank=True)
+    parent = TreeForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='children')
     created_at = models.DateTimeField(auto_now_add=True)
     
+    class MPTTMeta:
+        order_insertion_by = ['name']
+    
     class Meta:
-        ordering = ['name']
         verbose_name_plural = 'Species'
         unique_together = ['user', 'name']
     
     def __str__(self):
         return self.name
+    
+    def get_full_path(self):
+        """Get the full hierarchical path of the species"""
+        ancestors = self.get_ancestors(include_self=True)
+        return ' > '.join([ancestor.name for ancestor in ancestors])
 
 
 class Stocking(models.Model):
@@ -2218,3 +2335,66 @@ class MedicalDiagnostic(models.Model):
             from django.utils import timezone
             self.applied_at = timezone.now()
         super().save(*args, **kwargs)
+
+
+# ===================== CUSTOMER STOCK MANAGEMENT =====================
+
+class CustomerStock(models.Model):
+    """Customer/Pond-specific inventory tracking"""
+    customer_stock_id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='customer_stocks')
+    customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='stocks')
+    pond = models.ForeignKey('Pond', on_delete=models.SET_NULL, null=True, blank=True, related_name='stocks', help_text="Pond this stock belongs to (for internal customers)")
+    item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='customer_stocks')
+    
+    # Stock quantities
+    current_stock = models.DecimalField(max_digits=15, decimal_places=3, default=0, help_text="Current stock quantity")
+    min_stock_level = models.DecimalField(max_digits=15, decimal_places=3, default=0, help_text="Minimum stock level for alerts")
+    max_stock_level = models.DecimalField(max_digits=15, decimal_places=3, null=True, blank=True, help_text="Maximum stock level")
+    
+    # Unit tracking
+    unit = models.CharField(max_length=20, help_text="Unit of measurement (kg, pcs, bags, etc.)")
+    unit_cost = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, help_text="Cost per unit")
+    
+    # Tracking
+    last_updated = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['customer', 'item']
+        unique_together = ['user', 'customer', 'item']
+        verbose_name = 'Customer Stock'
+        verbose_name_plural = 'Customer Stocks'
+    
+    def __str__(self):
+        return f"{self.customer.name} - {self.item.name} ({self.current_stock} {self.unit})"
+    
+    def is_low_stock(self):
+        """Check if stock is below minimum level"""
+        return self.current_stock <= self.min_stock_level
+    
+    def get_stock_status(self):
+        """Get stock status for display"""
+        if self.current_stock <= 0:
+            return 'out_of_stock'
+        elif self.is_low_stock():
+            return 'low_stock'
+        elif self.max_stock_level and self.current_stock >= self.max_stock_level:
+            return 'overstocked'
+        else:
+            return 'in_stock'
+    
+    def add_stock(self, quantity, unit_cost=None):
+        """Add stock to customer inventory"""
+        self.current_stock += quantity
+        if unit_cost:
+            self.unit_cost = unit_cost
+        self.save(update_fields=['current_stock', 'unit_cost', 'last_updated'])
+    
+    def remove_stock(self, quantity):
+        """Remove stock from customer inventory"""
+        if self.current_stock >= quantity:
+            self.current_stock -= quantity
+            self.save(update_fields=['current_stock', 'last_updated'])
+            return True
+        return False

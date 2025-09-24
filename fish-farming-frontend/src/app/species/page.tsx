@@ -1,18 +1,76 @@
 'use client';
 
-import { useState } from 'react';
-import { useSpecies, useDeleteSpecies } from '@/hooks/useApi';
+import { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { useSpeciesTree, useDeleteSpecies, useCreateSpecies, useUpdateSpecies } from '@/hooks/useApi';
 import { Species } from '@/lib/api';
-import { formatDate, extractApiData } from '@/lib/utils';
-import { Fish, Plus, Edit, Trash2, Eye } from 'lucide-react';
-import Link from 'next/link';
+import { formatDate } from '@/lib/utils';
+import { Fish, Plus, Edit, Trash2, Search, BookOpen, ChevronRight, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function SpeciesPage() {
-  const { data: speciesData, isLoading } = useSpecies();
+  const [species, setSpecies] = useState<Species[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingSpecies, setEditingSpecies] = useState<Species | null>(null);
+  const [expandedNodes, setExpandedNodes] = useState<Set<number>>(new Set());
+  const [formData, setFormData] = useState({
+    name: '',
+    scientific_name: '',
+    parent: '',
+  });
+
+  const { data: speciesTreeData, isLoading } = useSpeciesTree();
   const deleteSpecies = useDeleteSpecies();
-  
-  const species = extractApiData<Species>(speciesData?.data);
+  const createSpecies = useCreateSpecies();
+  const updateSpecies = useUpdateSpecies();
+
+  useEffect(() => {
+    if (speciesTreeData) {
+      setSpecies(speciesTreeData.data || speciesTreeData);
+      setLoading(false);
+    }
+  }, [speciesTreeData]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const submitData = {
+        ...formData,
+        parent: formData.parent && formData.parent !== 'none' ? parseInt(formData.parent) : null,
+      };
+
+      if (editingSpecies) {
+        await updateSpecies.mutateAsync({ id: editingSpecies.id, data: submitData });
+        toast.success('Species updated successfully');
+      } else {
+        await createSpecies.mutateAsync(submitData);
+        toast.success('Species created successfully');
+      }
+      setIsDialogOpen(false);
+      setEditingSpecies(null);
+      resetForm();
+    } catch (error) {
+      console.error('Error saving species:', error);
+      toast.error('Failed to save species');
+    }
+  };
+
+  const handleEdit = (species: Species) => {
+    setEditingSpecies(species);
+    setFormData({
+      name: species.name,
+      scientific_name: species.scientific_name,
+      parent: species.parent?.toString() || '',
+    });
+    setIsDialogOpen(true);
+  };
 
   const handleDelete = async (id: number, name: string) => {
     if (window.confirm(`Are you sure you want to delete the species "${name}"? This action cannot be undone and will affect all related stocking records.`)) {
@@ -24,105 +82,235 @@ export default function SpeciesPage() {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      scientific_name: '',
+      parent: '',
+    });
+  };
+
+  const toggleNode = (speciesId: number) => {
+    const newExpanded = new Set(expandedNodes);
+    if (newExpanded.has(speciesId)) {
+      newExpanded.delete(speciesId);
+    } else {
+      newExpanded.add(speciesId);
+    }
+    setExpandedNodes(newExpanded);
+  };
+
+  const flattenSpecies = (species: Species[]): Species[] => {
+    const flattened: Species[] = [];
+    
+    const flatten = (items: Species[]) => {
+      items.forEach(item => {
+        flattened.push(item);
+        if (item.children && item.children.length > 0) {
+          flatten(item.children);
+        }
+      });
+    };
+    
+    flatten(species);
+    return flattened;
+  };
+
+  const renderSpeciesTree = (species: Species[], level = 0) => {
+    return species.map((spec) => (
+      <div key={spec.id} className={`border-l-2 border-gray-100 ${level > 0 ? `ml-${Math.min(level * 4, 16)}` : ''}`}>
+        <div className="flex items-center space-x-2 p-2 hover:bg-gray-50 rounded">
+          <div className="flex items-center flex-1">
+            {spec.children && spec.children.length > 0 ? (
+              <button
+                onClick={() => toggleNode(spec.id)}
+                className="p-1 hover:bg-gray-200 rounded"
+              >
+                {expandedNodes.has(spec.id) ? (
+                  <ChevronDown className="h-4 w-4" />
+                ) : (
+                  <ChevronRight className="h-4 w-4" />
+                )}
+              </button>
+            ) : (
+              <div className="w-6" />
+            )}
+            <div className="flex items-center space-x-2 flex-1">
+              {/* Level indicator */}
+              {level > 0 && (
+                <div className="flex items-center space-x-1">
+                  {Array.from({ length: level }, (_, i) => (
+                    <div key={i} className="w-1 h-4 bg-gray-300 rounded"></div>
+                  ))}
+                </div>
+              )}
+              <Badge variant="outline" className="text-xs">
+                <Fish className="h-3 w-3 mr-1" />
+                Species
+              </Badge>
+              <span className={`font-medium ${level === 0 ? 'text-lg' : level === 1 ? 'text-base' : 'text-sm'}`}>
+                {spec.name}
+              </span>
+              {spec.scientific_name && (
+                <span className="text-sm text-gray-600 italic">({spec.scientific_name})</span>
+              )}
+              {level > 0 && (
+                <Badge variant="outline" className="text-xs">
+                  Level {level + 1}
+                </Badge>
+              )}
+            </div>
+          </div>
+          <div className="flex space-x-1">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleEdit(spec)}
+            >
+              <Edit className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleDelete(spec.id, spec.name)}
+              className="text-red-600 hover:text-red-700"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+        {spec.children && spec.children.length > 0 && expandedNodes.has(spec.id) && (
+          <div className={`${level > 0 ? `ml-${Math.min((level + 1) * 4, 16)}` : 'ml-4'}`}>
+            {renderSpeciesTree(spec.children, level + 1)}
+          </div>
+        )}
       </div>
-    );
-  }
+    ));
+  };
+
+  const filteredSpecies = species.filter(spec =>
+    spec.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (spec.scientific_name && spec.scientific_name.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
 
   return (
     <div className="space-y-6">
-      <div className="md:flex space-y-3 md:space-y-0 items-center justify-between">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Fish Species</h1>
-          <p className="text-gray-600">Manage fish species for your farming operations</p>
+          <p className="text-gray-600 mt-1">Manage fish species with hierarchical organization</p>
         </div>
-        <Link
-          style={{color: "white"}}
-          href="/species/new"
-          className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Add Species
-        </Link>
-      </div>
-
-      {/* Summary Card */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">Total Species</h3>
-            <p className="text-3xl font-bold text-blue-600">{species.length}</p>
-          </div>
-          <div className="rounded-full bg-blue-100 p-3">
-            <Fish className="h-8 w-8 text-blue-600" />
-          </div>
-        </div>
-      </div>
-
-      {/* Species List */}
-      {species.length === 0 ? (
-        <div className="text-center py-12">
-          <Fish className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">No species found</h3>
-          <p className="mt-1 text-sm text-gray-500">Get started by adding your first fish species.</p>
-          <div className="mt-6">
-            <Link
-              href="/species/new"
-              className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            >
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button onClick={() => { setEditingSpecies(null); resetForm(); }}>
               <Plus className="h-4 w-4 mr-2" />
               Add Species
-            </Link>
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="w-[95vw] max-w-4xl max-h-[95vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{editingSpecies ? 'Edit Species' : 'Add New Species'}</DialogTitle>
+              <DialogDescription>
+                {editingSpecies ? 'Update species information' : 'Add a new fish species to your collection'}
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleSubmit}>
+              <div className="grid grid-cols-2 gap-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Species Name *</Label>
+                  <Input
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="e.g., Tilapia"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="scientific_name">Scientific Name</Label>
+                  <Input
+                    id="scientific_name"
+                    value={formData.scientific_name}
+                    onChange={(e) => setFormData({ ...formData, scientific_name: e.target.value })}
+                    placeholder="e.g., Oreochromis niloticus"
+                  />
+                </div>
+                <div className="space-y-2 col-span-2">
+                  <Label htmlFor="parent">Parent Species</Label>
+                  <select
+                    id="parent"
+                    value={formData.parent}
+                    onChange={(e) => setFormData({ ...formData, parent: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="none">No parent (Root species)</option>
+                    {flattenSpecies(species).map((spec) => (
+                      <option key={spec.id} value={spec.id.toString()}>
+                        {spec.full_path || spec.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit">
+                  {editingSpecies ? 'Update' : 'Create'} Species
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {/* Search */}
+      <div className="flex items-center space-x-2">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+          <Input
+            placeholder="Search species..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+      </div>
+
+      {/* Species Tree */}
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading species...</p>
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {species.map((spec) => (
-            <div key={spec.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-gray-900">{spec.name}</h3>
-                  <p className="text-sm text-gray-600 italic">{spec.scientific_name}</p>
-                  {spec.description && (
-                    <p className="text-sm text-gray-500 mt-2">{spec.description}</p>
-                  )}
-                </div>
-                <div className="flex space-x-2 ml-4">
-                  <Link
-                    href={`/species/${spec.id}`}
-                    className="text-blue-600 hover:text-blue-900"
-                    title="View Details"
-                  >
-                    <Eye className="h-4 w-4" />
-                  </Link>
-                  <Link
-                    href={`/species/${spec.id}/edit`}
-                    className="text-green-600 hover:text-green-900"
-                    title="Edit"
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Link>
-                  <button
-                    onClick={() => handleDelete(spec.id, spec.name)}
-                    className="text-red-600 hover:text-red-900"
-                    title="Delete"
-                    disabled={deleteSpecies.isPending}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Species Collection</CardTitle>
+            <CardDescription>
+              Hierarchical view of your fish species. Click arrows to expand/collapse.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {filteredSpecies.length > 0 ? (
+              <div className="space-y-1">
+                {renderSpeciesTree(filteredSpecies)}
               </div>
-              
-              
-              <div className="mt-4 pt-4 border-t border-gray-200">
-                <p className="text-xs text-gray-500">Created: {formatDate(spec.created_at)}</p>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <BookOpen className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p>No species found</p>
+                {searchTerm && (
+                  <p className="text-sm mt-1">Try adjusting your search terms</p>
+                )}
               </div>
-            </div>
-          ))}
-        </div>
+            )}
+          </CardContent>
+        </Card>
       )}
     </div>
   );

@@ -11,7 +11,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Plus, Search, Edit, Trash2, Banknote, Calendar, DollarSign, Building } from 'lucide-react';
-import { useApi } from '@/hooks/useApi';
+import { useApi, useVendors } from '@/hooks/useApi';
+import { extractApiData } from '@/lib/utils';
 import { toast } from 'sonner';
 
 interface BillPayment {
@@ -51,7 +52,6 @@ const PAYMENT_METHODS = [
 
 export default function BillPaymentsPage() {
   const [payments, setPayments] = useState<BillPayment[]>([]);
-  const [vendors, setVendors] = useState<Vendor[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -59,15 +59,24 @@ export default function BillPaymentsPage() {
   const [editingPayment, setEditingPayment] = useState<BillPayment | null>(null);
   const [formData, setFormData] = useState({
     vendor_id: '',
-    bill_id: '',
-    payment_date: '',
+    bill_id: 'none',
+    payment_date: new Date().toISOString().split('T')[0],
     amount: '',
-    payment_method: '',
+    payment_method: 'Cash',
     reference: '',
     memo: '',
   });
 
   const { get, post, put, delete: del } = useApi();
+  const { data: vendorsData, isLoading: vendorsLoading } = useVendors();
+  
+  // Extract vendors data using the utility function
+  const vendors = extractApiData<Vendor>(vendorsData?.data);
+  
+  // Debug logging
+  console.log('Vendors data:', vendorsData);
+  console.log('Extracted vendors:', vendors);
+  console.log('Vendors loading:', vendorsLoading);
 
   useEffect(() => {
     fetchData();
@@ -76,14 +85,12 @@ export default function BillPaymentsPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [paymentsResponse, vendorsResponse, billsResponse] = await Promise.all([
+      const [paymentsResponse, billsResponse] = await Promise.all([
         get('/bill-payments/'),
-        get('/vendors/'),
         get('/bills/'),
       ]);
       
       setPayments(paymentsResponse.results || paymentsResponse);
-      setVendors(vendorsResponse.results || vendorsResponse);
       setBills(billsResponse.results || billsResponse);
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -98,7 +105,7 @@ export default function BillPaymentsPage() {
     try {
       const paymentData = {
         ...formData,
-        bill_id: formData.bill_id ? parseInt(formData.bill_id) : null,
+        bill_id: formData.bill_id && formData.bill_id !== 'none' ? parseInt(formData.bill_id) : null,
         amount: parseFloat(formData.amount) || 0,
         reference: formData.reference || `PAY-${Date.now()}`,
       };
@@ -200,17 +207,27 @@ export default function BillPaymentsPage() {
                   <Label htmlFor="vendor_id">Vendor *</Label>
                   <Select
                     value={formData.vendor_id}
-                    onValueChange={(value) => setFormData({ ...formData, vendor_id: value, bill_id: '' })}
+                    onValueChange={(value) => setFormData({ ...formData, vendor_id: value, bill_id: 'none' })}
                   >
                     <SelectTrigger className="h-12">
                       <SelectValue placeholder="Select vendor" />
                     </SelectTrigger>
                     <SelectContent>
-                      {vendors.map((vendor) => (
-                        <SelectItem key={vendor.vendor_id} value={vendor.vendor_id.toString()}>
-                          {vendor.name}
+                      {vendorsLoading ? (
+                        <SelectItem value="loading" disabled>
+                          Loading vendors...
                         </SelectItem>
-                      ))}
+                      ) : vendors.length === 0 ? (
+                        <SelectItem value="no-vendors" disabled>
+                          No vendors available
+                        </SelectItem>
+                      ) : (
+                        vendors.map((vendor) => (
+                          <SelectItem key={vendor.vendor_id} value={vendor.vendor_id.toString()}>
+                            {vendor.name}
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -225,10 +242,10 @@ export default function BillPaymentsPage() {
                       <SelectValue placeholder="Select bill (optional)" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">No bill</SelectItem>
+                      <SelectItem value="none">No bill</SelectItem>
                       {getFilteredBills().map((bill) => (
                         <SelectItem key={bill.bill_id} value={bill.bill_id.toString()}>
-                          {bill.bill_number} (${bill.balance_amount.toFixed(2)})
+                          {bill.bill_number} (${(bill.balance_amount || 0).toFixed(2)})
                         </SelectItem>
                       ))}
                     </SelectContent>

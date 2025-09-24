@@ -14,12 +14,27 @@ import { Plus, Search, Edit, Trash2, Package, DollarSign, Fish, Activity, Stetho
 import { useApi } from '@/hooks/useApi';
 import { toast } from 'sonner';
 
+interface StockEntry {
+  entry_id: number;
+  item: number;
+  quantity: number;
+  unit: string;
+  unit_cost?: number;
+  total_cost?: number;
+  entry_date: string;
+  supplier?: string;
+  batch_number?: string;
+  expiry_date?: string;
+  notes?: string;
+  kg_equivalent?: number;
+  created_at: string;
+}
+
 interface Item {
   item_id: number;
   name: string;
   item_type: 'inventory_part' | 'non_inventory' | 'service' | 'payment' | 'discount';
-  uom: string;
-  category: number | null;
+  category: string | null;
   category_name?: string;
   income_account: number | null;
   income_account_name?: string;
@@ -38,6 +53,9 @@ interface Item {
   max_stock_level?: number;
   stock_status?: string;
   is_low_stock?: boolean;
+  total_stock_kg?: number;
+  stock_summary?: string[];
+  stock_entries?: StockEntry[];
 }
 
 interface Account {
@@ -47,12 +65,6 @@ interface Account {
   account_type: string;
 }
 
-interface ItemCategory {
-  item_category_id: number;
-  name: string;
-  description: string;
-  parent: number | null;
-}
 
 const ITEM_TYPES = [
   { value: 'inventory_part', label: 'Inventory Part' },
@@ -62,14 +74,10 @@ const ITEM_TYPES = [
   { value: 'discount', label: 'Discount' },
 ];
 
-const UOM_OPTIONS = [
-  'kg', 'pcs', 'pack', 'hr', 'day', 'month', 'year', 'liter', 'gallon', 'ton', 'box', 'bottle'
-];
 
 export default function ItemsPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [categories, setCategories] = useState<ItemCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
@@ -78,14 +86,12 @@ export default function ItemsPage() {
   const [formData, setFormData] = useState({
     name: '',
     item_type: 'inventory_part' as 'inventory_part' | 'non_inventory' | 'service' | 'payment' | 'discount',
-    uom: 'pcs',
     category: '',
     income_account: '',
     expense_account: '',
     cost_of_goods_sold_account: '',
     description: '',
     active: true,
-    current_stock: 0,
     min_stock_level: 0,
     max_stock_level: 0,
   });
@@ -99,22 +105,19 @@ export default function ItemsPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [itemsResponse, accountsResponse, categoriesResponse] = await Promise.all([
+      const [itemsResponse, accountsResponse] = await Promise.all([
         get('/items/'),
         get('/accounts/'),
-        get('/item-categories/'),
       ]);
       
       setItems(itemsResponse.results || itemsResponse);
       setAccounts(accountsResponse.results || accountsResponse);
-      setCategories(categoriesResponse.results || categoriesResponse);
     } catch (error: any) {
       console.error('Error fetching data:', error);
       const errorMessage = error?.response?.data?.detail || error?.message || 'Failed to fetch data';
       toast.error(`Error: ${errorMessage}`);
       setItems([]);
       setAccounts([]);
-      setCategories([]);
     } finally {
       setLoading(false);
     }
@@ -125,7 +128,7 @@ export default function ItemsPage() {
     try {
       const submitData = {
         ...formData,
-        category: formData.category && formData.category !== 'none' ? parseInt(formData.category) : null,
+        category: formData.category && formData.category !== 'none' ? formData.category : null,
         income_account: formData.income_account && formData.income_account !== 'none' ? parseInt(formData.income_account) : null,
         expense_account: formData.expense_account && formData.expense_account !== 'none' ? parseInt(formData.expense_account) : null,
         cost_of_goods_sold_account: formData.cost_of_goods_sold_account && formData.cost_of_goods_sold_account !== 'none' ? parseInt(formData.cost_of_goods_sold_account) : null,
@@ -153,14 +156,12 @@ export default function ItemsPage() {
     setFormData({
       name: item.name,
       item_type: item.item_type,
-      uom: item.uom,
-      category: item.category?.toString() || '',
+      category: item.category || '',
       income_account: item.income_account?.toString() || '',
       expense_account: item.expense_account?.toString() || '',
       cost_of_goods_sold_account: item.cost_of_goods_sold_account?.toString() || '',
       description: item.description,
       active: item.active,
-      current_stock: item.current_stock || 0,
       min_stock_level: item.min_stock_level || 0,
       max_stock_level: item.max_stock_level || 0,
     });
@@ -184,14 +185,12 @@ export default function ItemsPage() {
     setFormData({
       name: '',
       item_type: 'inventory_part',
-      uom: 'pcs',
       category: '',
       income_account: '',
       expense_account: '',
       cost_of_goods_sold_account: '',
       description: '',
       active: true,
-      current_stock: 0,
       min_stock_level: 0,
       max_stock_level: 0,
     });
@@ -226,9 +225,9 @@ export default function ItemsPage() {
   };
 
   const getStockStatusBadge = (item: Item) => {
-    if (item.current_stock === undefined || item.current_stock === null) return null;
+    if (item.total_stock_kg === undefined || item.total_stock_kg === null) return null;
     
-    const stock = Number(item.current_stock);
+    const stock = Number(item.total_stock_kg);
     const minLevel = Number(item.min_stock_level) || 0;
     
     if (stock <= 0) {
@@ -288,9 +287,10 @@ export default function ItemsPage() {
             </DialogHeader>
             <form onSubmit={handleSubmit}>
               <Tabs defaultValue="basic" className="w-full">
-                <TabsList className="grid w-full grid-cols-3">
+                <TabsList className="grid w-full grid-cols-4">
                   <TabsTrigger value="basic">Basic Info</TabsTrigger>
                   <TabsTrigger value="stock">Stock</TabsTrigger>
+                  <TabsTrigger value="stock-entries">Stock Entries</TabsTrigger>
                   <TabsTrigger value="accounts">Accounts</TabsTrigger>
                 </TabsList>
                 
@@ -325,24 +325,6 @@ export default function ItemsPage() {
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="uom">Unit of Measure</Label>
-                      <Select
-                        value={formData.uom}
-                        onValueChange={(value) => setFormData({ ...formData, uom: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {UOM_OPTIONS.map((uom) => (
-                            <SelectItem key={uom} value={uom}>
-                              {uom}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
                       <Label htmlFor="category">Category</Label>
                       <Select
                         value={formData.category}
@@ -353,11 +335,13 @@ export default function ItemsPage() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">No category</SelectItem>
-                          {categories.map((category) => (
-                            <SelectItem key={category.item_category_id} value={category.item_category_id.toString()}>
-                              {category.name}
-                            </SelectItem>
-                          ))}
+                          <SelectItem value="feed">Feed</SelectItem>
+                          <SelectItem value="medicine">Medicine</SelectItem>
+                          <SelectItem value="equipment">Equipment</SelectItem>
+                          <SelectItem value="chemical">Chemical</SelectItem>
+                          <SelectItem value="supplies">Supplies</SelectItem>
+                          <SelectItem value="maintenance">Maintenance</SelectItem>
+                          <SelectItem value="other">Other</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -392,15 +376,17 @@ export default function ItemsPage() {
                 <TabsContent value="stock" className="space-y-4">
                   <div className="grid grid-cols-3 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="current_stock">Current Stock</Label>
+                      <Label htmlFor="total_stock_kg">Total Stock (kg)</Label>
                       <Input
-                        id="current_stock"
+                        id="total_stock_kg"
                         type="number"
                         step="0.001"
-                        value={formData.current_stock}
-                        onChange={(e) => setFormData({ ...formData, current_stock: parseFloat(e.target.value) || 0 })}
+                        value={editingItem?.total_stock_kg || 0}
+                        readOnly
+                        className="bg-gray-50"
                         placeholder="0.000"
                       />
+                      <p className="text-xs text-gray-500">Calculated from stock entries</p>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="min_stock_level">Min Stock Level</Label>
@@ -430,6 +416,89 @@ export default function ItemsPage() {
                       <strong>Note:</strong> Stock levels are automatically updated when inventory transactions occur. 
                       Set minimum stock level to receive low stock alerts.
                     </p>
+                  </div>
+                </TabsContent>
+                
+                <TabsContent value="stock-entries" className="space-y-4">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-semibold">Stock Entries</h3>
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => {/* TODO: Add stock entry functionality */}}
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Stock Entry
+                      </Button>
+                    </div>
+                    
+                    {editingItem && editingItem.stock_entries && editingItem.stock_entries.length > 0 ? (
+                      <div className="space-y-2">
+                        <h4 className="font-medium">Stock History:</h4>
+                        <div className="space-y-2">
+                          {editingItem.stock_entries.map((entry) => (
+                            <div key={entry.entry_id} className="p-3 border rounded-lg bg-gray-50">
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <p className="font-medium">{entry.quantity} {entry.unit}</p>
+                                  {entry.kg_equivalent && (
+                                    <p className="text-sm text-gray-600">
+                                      = {entry.kg_equivalent.toFixed(2)} kg
+                                    </p>
+                                  )}
+                                  <p className="text-sm text-gray-500">
+                                    Added on {new Date(entry.entry_date).toLocaleDateString()}
+                                  </p>
+                                  {entry.supplier && (
+                                    <p className="text-sm text-gray-500">
+                                      Supplier: {entry.supplier}
+                                    </p>
+                                  )}
+                                  {entry.batch_number && (
+                                    <p className="text-sm text-gray-500">
+                                      Batch: {entry.batch_number}
+                                    </p>
+                                  )}
+                                  {entry.unit_cost && (
+                                    <p className="text-sm text-green-600">
+                                      Cost: ${Number(entry.unit_cost).toFixed(2)} per {entry.unit}
+                                    </p>
+                                  )}
+                                </div>
+                                <div className="text-right">
+                                  {entry.total_cost && (
+                                    <p className="font-semibold text-green-600">
+                                      ${Number(entry.total_cost).toFixed(2)}
+                                    </p>
+                                  )}
+                                  {entry.expiry_date && (
+                                    <p className="text-xs text-orange-600">
+                                      Expires: {new Date(entry.expiry_date).toLocaleDateString()}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                              {entry.notes && (
+                                <p className="text-sm text-gray-600 mt-2">{entry.notes}</p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : editingItem ? (
+                      <div className="text-center py-8 text-gray-500">
+                        <Package className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                        <p>No stock entries found for this item.</p>
+                        <p className="text-sm">Add stock entries to track inventory additions.</p>
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-gray-500">
+                        <Package className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                        <p>Save the item first to add stock entries.</p>
+                      </div>
+                    )}
                   </div>
                 </TabsContent>
                 
@@ -552,7 +621,6 @@ export default function ItemsPage() {
                     <CardTitle className="text-lg">{item.name}</CardTitle>
                     <CardDescription className="flex items-center mt-1">
                       {getItemTypeIcon(item.item_type)}
-                      <span className="ml-2">{item.uom}</span>
                     </CardDescription>
                   </div>
                   <div className="flex flex-col space-y-1">
@@ -586,9 +654,9 @@ export default function ItemsPage() {
                       <strong>COGS Account:</strong> {item.cost_of_goods_sold_account_name}
                     </p>
                   )}
-                  {item.category_name && (
+                  {item.category && (
                     <p className="text-sm text-gray-600">
-                      <strong>Category:</strong> {item.category_name}
+                      <strong>Category:</strong> {item.category}
                     </p>
                   )}
                   {item.current_price && (
@@ -596,19 +664,29 @@ export default function ItemsPage() {
                       <strong>Current Price:</strong> ${Number(item.current_price).toFixed(2)}
                     </p>
                   )}
-                  {item.current_stock !== undefined && item.current_stock !== null && (
+                  {item.total_stock_kg !== undefined && item.total_stock_kg !== null && (
                     <div className="space-y-1">
                       <p className="text-sm font-semibold text-blue-600">
-                        <strong>Current Stock:</strong> {Number(item.current_stock).toFixed(3)} {item.uom}
+                        <strong>Total Stock:</strong> {Number(item.total_stock_kg).toFixed(2)} kg
                       </p>
+                      {item.stock_summary && item.stock_summary.length > 0 && (
+                        <div className="text-sm text-gray-600">
+                          <strong>Stock Breakdown:</strong>
+                          <ul className="list-disc list-inside ml-2">
+                            {item.stock_summary.map((summary, index) => (
+                              <li key={index} className="text-xs">{summary}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                       {item.min_stock_level && item.min_stock_level > 0 && (
                         <p className="text-sm text-gray-600">
-                          <strong>Min Level:</strong> {Number(item.min_stock_level).toFixed(3)} {item.uom}
+                          <strong>Min Level:</strong> {Number(item.min_stock_level).toFixed(3)} kg
                         </p>
                       )}
                       {item.max_stock_level && item.max_stock_level > 0 && (
                         <p className="text-sm text-gray-600">
-                          <strong>Max Level:</strong> {Number(item.max_stock_level).toFixed(3)} {item.uom}
+                          <strong>Max Level:</strong> {Number(item.max_stock_level).toFixed(3)} kg
                         </p>
                       )}
                     </div>

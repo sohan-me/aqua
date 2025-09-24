@@ -15,6 +15,17 @@ import { Plus, Search, Edit, Trash2, Receipt, Calendar, DollarSign, FileText } f
 import { useApi } from '@/hooks/useApi';
 import { toast } from 'sonner';
 
+// UOM options for different item categories
+const UOM_OPTIONS = {
+  feed: ['kg', 'packet', 'pack'],
+  medicine: ['kg', 'litre', 'pieces'],
+  equipment: ['pieces'],
+  chemical: ['kg', 'litre', 'gallon'],
+  supplies: ['kg', 'pieces'],
+  maintenance: ['pieces'],
+  other: ['kg', 'pieces'],
+};
+
 interface Bill {
   bill_id: number;
   vendor: number; // This is the vendor ID from the ForeignKey
@@ -44,6 +55,9 @@ interface BillLine {
   item_name?: string;
   description?: string;
   qty?: number; // Quantity field name from API
+  unit?: string; // Unit of measurement
+  packet_size?: number; // Packet size in kg
+  gallon_size?: number; // Gallon size in litres
   cost?: number; // Cost field name from API
   line_amount?: number; // Line amount field name from API
   // Expense mode fields
@@ -64,6 +78,7 @@ interface Item {
   item_id: number;
   name: string;
   item_type: string;
+  category?: string | null;
 }
 
 interface Account {
@@ -177,6 +192,9 @@ export default function BillsPage() {
     if (activeTab === 'items') {
       newLineItem.item = 0;
       newLineItem.qty = 0;
+      newLineItem.unit = 'kg'; // Default unit
+      newLineItem.packet_size = 0;
+      newLineItem.gallon_size = 0;
       newLineItem.cost = 0;
       newLineItem.line_amount = 0;
     } else {
@@ -187,9 +205,25 @@ export default function BillsPage() {
     setLineItems([...lineItems, newLineItem]);
   };
 
+  const getUomOptionsForItem = (itemId: number) => {
+    const item = items.find(i => i.item_id === itemId);
+    if (item && item.category) {
+      return UOM_OPTIONS[item.category as keyof typeof UOM_OPTIONS] || ['kg', 'pieces'];
+    }
+    return ['kg', 'pieces'];
+  };
+
   const updateLineItem = (index: number, field: keyof BillLine, value: any) => {
     const updated = [...lineItems];
     updated[index] = { ...updated[index], [field]: value };
+    
+    // If item changes, reset unit to first available option for that category
+    if (field === 'item' && updated[index].is_item) {
+      const uomOptions = getUomOptionsForItem(value);
+      updated[index].unit = uomOptions[0] || 'kg';
+      updated[index].packet_size = 0;
+      updated[index].gallon_size = 0;
+    }
     
     // Calculate total cost for item mode
     if (updated[index].is_item && (field === 'qty' || field === 'cost')) {
@@ -280,6 +314,9 @@ export default function BillsPage() {
             billLineData.item = line.item || null;
             billLineData.description = line.description || '';
             billLineData.qty = line.qty || 0;
+            billLineData.unit = line.unit || 'kg';
+            billLineData.packet_size = line.packet_size || null;
+            billLineData.gallon_size = line.gallon_size || null;
             billLineData.cost = line.cost || 0;
             billLineData.line_amount = line.line_amount || 0;
           } else {
@@ -307,6 +344,9 @@ export default function BillsPage() {
             billLineData.item = line.item || null;
             billLineData.description = line.description || '';
             billLineData.qty = line.qty || 0;
+            billLineData.unit = line.unit || 'kg';
+            billLineData.packet_size = line.packet_size || null;
+            billLineData.gallon_size = line.gallon_size || null;
             billLineData.cost = line.cost || 0;
             billLineData.line_amount = line.line_amount || 0;
           } else {
@@ -377,6 +417,9 @@ export default function BillsPage() {
         item_name: line.item_name || '',
         description: line.description || '',
         qty: line.qty || 0,
+        unit: line.unit || 'kg',
+        packet_size: line.packet_size || 0,
+        gallon_size: line.gallon_size || 0,
         cost: line.cost || 0,
         line_amount: line.line_amount || 0,
         // Expense mode fields
@@ -677,81 +720,140 @@ export default function BillsPage() {
                         const actualIndex = lineItems.findIndex(item => item === line);
                         return (
                         <Card key={actualIndex} className="p-6">
-                          <div className="grid grid-cols-6 gap-4 items-end">
-                            <div className="space-y-2">
-                              <Label>Item List</Label>
-                              <Select
-                                value={line.item?.toString() || ''}
-                                onValueChange={(value) => updateLineItem(actualIndex, 'item', parseInt(value))}
-                              >
-                                <SelectTrigger className="h-12">
-                                  <SelectValue placeholder="Select item" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {items.map((item) => (
-                                    <SelectItem key={item.item_id} value={item.item_id.toString()}>
-                                      {item.name} ({item.item_type})
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                          <div className="space-y-4">
+                            {/* First row - Item and Description */}
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label>Item List</Label>
+                                <Select
+                                  value={line.item?.toString() || ''}
+                                  onValueChange={(value) => updateLineItem(actualIndex, 'item', parseInt(value))}
+                                >
+                                  <SelectTrigger className="h-12">
+                                    <SelectValue placeholder="Select item" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {items.map((item) => (
+                                      <SelectItem key={item.item_id} value={item.item_id.toString()}>
+                                        {item.name} ({item.category || 'No Category'})
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              
+                              <div className="space-y-2">
+                                <Label>Description</Label>
+                                <Input
+                                  value={line.description || ''}
+                                  onChange={(e) => updateLineItem(actualIndex, 'description', e.target.value)}
+                                  placeholder="Description"
+                                  className="h-12"
+                                />
+                              </div>
                             </div>
                             
-                            <div className="space-y-2">
-                              <Label>Description</Label>
-                              <Input
-                                value={line.description || ''}
-                                onChange={(e) => updateLineItem(actualIndex, 'description', e.target.value)}
-                                placeholder="Description"
-                                className="h-12"
-                              />
+                            {/* Second row - Quantity, Unit, and Packet Size */}
+                            <div className="grid grid-cols-3 gap-4">
+                              <div className="space-y-2">
+                                <Label>Quantity</Label>
+                                <Input
+                                  type="number"
+                                  value={line.qty || ''}
+                                  onChange={(e) => updateLineItem(actualIndex, 'qty', parseInt(e.target.value) || 0)}
+                                  placeholder="Quantity"
+                                  className="h-12"
+                                />
+                              </div>
+                              
+                              <div className="space-y-2">
+                                <Label>Unit of Measure</Label>
+                                <Select
+                                  value={line.unit || 'kg'}
+                                  onValueChange={(value) => updateLineItem(actualIndex, 'unit', value)}
+                                >
+                                  <SelectTrigger className="h-12">
+                                    <SelectValue placeholder="Select unit" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {getUomOptionsForItem(line.item || 0).map((uom) => (
+                                      <SelectItem key={uom} value={uom}>
+                                        {uom}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              
+                              {/* Conditional packet size field */}
+                              {(line.unit === 'packet' || line.unit === 'pack') && (
+                                <div className="space-y-2">
+                                  <Label>Packet Size (kg)</Label>
+                                  <Input
+                                    type="number"
+                                    step="0.1"
+                                    value={line.packet_size || ''}
+                                    onChange={(e) => updateLineItem(actualIndex, 'packet_size', parseFloat(e.target.value) || 0)}
+                                    placeholder="e.g., 10, 25"
+                                    className="h-12"
+                                  />
+                                </div>
+                              )}
+                              
+                              {/* Conditional gallon size field */}
+                              {line.unit === 'gallon' && (
+                                <div className="space-y-2">
+                                  <Label>Gallon Size (litres)</Label>
+                                  <Input
+                                    type="number"
+                                    step="0.1"
+                                    value={line.gallon_size || ''}
+                                    onChange={(e) => updateLineItem(actualIndex, 'gallon_size', parseFloat(e.target.value) || 0)}
+                                    placeholder="e.g., 5, 10, 20"
+                                    className="h-12"
+                                  />
+                                </div>
+                              )}
                             </div>
                             
-                            <div className="space-y-2">
-                              <Label>QTY</Label>
-                              <Input
-                                type="number"
-                                value={line.qty || ''}
-                                onChange={(e) => updateLineItem(actualIndex, 'qty', parseInt(e.target.value) || 0)}
-                                placeholder="Quantity"
-                                className="h-12"
-                              />
-                            </div>
-                            
-                            <div className="space-y-2">
-                              <Label>Cost per Unit</Label>
-                              <Input
-                                type="number"
-                                step="0.01"
-                                value={line.cost || ''}
-                                onChange={(e) => updateLineItem(actualIndex, 'cost', parseFloat(e.target.value) || 0)}
-                                placeholder="Cost per unit"
-                                className="h-12"
-                              />
-                            </div>
-                            
-                            <div className="space-y-2">
-                              <Label>Amount</Label>
-                              <Input
-                                type="number"
-                                step="0.01"
-                                value={line.line_amount || 0}
-                                readOnly
-                                className="bg-gray-50 h-12"
-                              />
-                            </div>
-                            
-                            <div className="space-y-2">
-                              <Label>Actions</Label>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => removeLineItem(actualIndex)}
-                                className="text-red-600 hover:text-red-700 h-12 px-3"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
+                            {/* Third row - Cost, Amount, and Actions */}
+                            <div className="grid grid-cols-3 gap-4">
+                              <div className="space-y-2">
+                                <Label>Cost per Unit</Label>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  value={line.cost || ''}
+                                  onChange={(e) => updateLineItem(actualIndex, 'cost', parseFloat(e.target.value) || 0)}
+                                  placeholder="Cost per unit"
+                                  className="h-12"
+                                />
+                              </div>
+                              
+                              <div className="space-y-2">
+                                <Label>Total Amount</Label>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  value={line.line_amount || 0}
+                                  readOnly
+                                  className="bg-gray-50 h-12"
+                                />
+                              </div>
+                              
+                              <div className="space-y-2">
+                                <Label>Actions</Label>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => removeLineItem(actualIndex)}
+                                  className="text-red-600 hover:text-red-700 h-12 px-3 w-full"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Remove
+                                </Button>
+                              </div>
                             </div>
                           </div>
                         </Card>

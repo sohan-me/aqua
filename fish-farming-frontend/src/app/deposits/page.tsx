@@ -133,7 +133,7 @@ export default function DepositsPage() {
       
       // Only include total_amount if it's specified or no customer payments are selected
       if (specifiedAmount > 0 || !hasSelectedPayments) {
-        depositData.total_amount = specifiedAmount;
+        depositData.amount = specifiedAmount.toString();
       }
 
       if (editingDeposit) {
@@ -208,7 +208,7 @@ export default function DepositsPage() {
 
   const filteredDeposits = deposits.filter(deposit =>
     deposit.bank_account_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    deposit.reference.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    deposit.reference?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     deposit.memo.toLowerCase().includes(searchTerm.toLowerCase())
   );
 

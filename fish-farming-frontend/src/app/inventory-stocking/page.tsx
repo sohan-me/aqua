@@ -511,8 +511,8 @@ export default function InventoryStockingPage() {
                           {line.item_name || `Item #${line.item_id}`}
                         </TableCell>
                         <TableCell>{line.qty}</TableCell>
-                        <TableCell>${line.unit_cost.toFixed(2)}</TableCell>
-                        <TableCell>${(line.qty * line.unit_cost).toFixed(2)}</TableCell>
+                        <TableCell>${Number(line.unit_cost).toFixed(2)}</TableCell>
+                        <TableCell>${(line.qty * Number(line.unit_cost)).toFixed(2)}</TableCell>
                         <TableCell>{line.pond_name || '-'}</TableCell>
                         <TableCell>{line.memo || '-'}</TableCell>
                       </TableRow>

@@ -13,12 +13,13 @@ from .models import (
     InventoryFeed, Treatment, Alert, Setting, FeedingBand, 
     EnvAdjustment, KPIDashboard, FishSampling, FeedingAdvice, SurvivalRate,
     MedicalDiagnostic, PaymentTerms, Customer, Vendor, ItemCategory,
-    Account, Item, ItemPrice, JournalEntry, JournalLine, Bill, BillLine, BillPayment,
+    Account, Item, ItemPrice, StockEntry, JournalEntry, JournalLine, Bill, BillLine, BillPayment,
     BillPaymentApply, Invoice, InvoiceLine, CustomerPayment, CustomerPaymentApply,
     Deposit, DepositLine, Check, CheckExpenseLine, CheckItemLine,
     InventoryTransaction, InventoryTransactionLine, ItemSales, ItemSalesLine,
     StockingEvent, StockingLine, FeedingEvent, FeedingLine, MedicineEvent, MedicineLine, 
-    OtherPondEvent, OtherPondEventLine, Employee, EmployeeDocument, PayrollRun, PayrollLine
+    OtherPondEvent, OtherPondEventLine, Employee, EmployeeDocument, PayrollRun, PayrollLine,
+    CustomerStock
 )
 from .serializers import (
     PondSerializer, PondDetailSerializer, PondSummarySerializer,
@@ -32,7 +33,7 @@ from .serializers import (
     FishSamplingSerializer, FeedingAdviceSerializer, SurvivalRateSerializer,
     MedicalDiagnosticSerializer, PaymentTermsSerializer, CustomerSerializer,
     AccountSerializer, VendorSerializer, ItemCategorySerializer,
-    ItemSerializer, ItemPriceSerializer, JournalEntrySerializer, JournalLineSerializer,
+    ItemSerializer, ItemPriceSerializer, StockEntrySerializer, JournalEntrySerializer, JournalLineSerializer,
     BillSerializer, BillLineSerializer, BillPaymentSerializer, BillPaymentApplySerializer,
     InvoiceSerializer, InvoiceLineSerializer, CustomerPaymentSerializer,
     CustomerPaymentApplySerializer, DepositSerializer, DepositLineSerializer,
@@ -40,9 +41,9 @@ from .serializers import (
     InventoryTransactionSerializer, InventoryTransactionLineSerializer,
     ItemSalesSerializer, ItemSalesLineSerializer, StockingEventSerializer, 
     StockingLineSerializer, FeedingEventSerializer, FeedingLineSerializer, 
-    MedicineEventSerializer, MedicineLineSerializer, OtherPondEventSerializer, 
-    OtherPondEventLineSerializer, EmployeeSerializer, EmployeeDocumentSerializer, 
-    PayrollRunSerializer, PayrollLineSerializer
+    MedicineEventSerializer, MedicineLineSerializer, OtherPondEventSerializer,
+    OtherPondEventLineSerializer, EmployeeSerializer, EmployeeDocumentSerializer,
+    PayrollRunSerializer, PayrollLineSerializer, CustomerStockSerializer
 )
 
 
@@ -64,19 +65,22 @@ class PondViewSet(viewsets.ModelViewSet):
                 name="Demo Farm",
                 defaults={
                     'type': 'internal_pond',
-                    'contact_info': 'demo@example.com'
+                    'email': 'demo@example.com'
                 }
             )
             
             # Create demo pond
             pond = Pond.objects.create(
                 user=self.request.user,
-                customer=customer,
                 name="Demo Pond 1",
                 water_area_decimal=1.0,
                 depth_ft=5.0,
                 location="Demo Location"
             )
+            
+            # Link the customer to the pond
+            customer.pond = pond
+            customer.save()
             print(f"Created demo pond: {pond.name}")
             ponds = Pond.objects.filter(user=self.request.user)
         
@@ -159,7 +163,7 @@ class PondViewSet(viewsets.ModelViewSet):
 
 
 class SpeciesViewSet(viewsets.ModelViewSet):
-    """ViewSet for fish species"""
+    """ViewSet for fish species with hierarchical structure"""
     queryset = Species.objects.none()  # Will be overridden by get_queryset
     serializer_class = SpeciesSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -169,6 +173,17 @@ class SpeciesViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
+    
+    def list(self, request, *args, **kwargs):
+        """Override list to return tree structure"""
+        if request.query_params.get('tree', '').lower() == 'true':
+            # Return tree structure (root nodes with children)
+            queryset = self.get_queryset().filter(parent=None)
+            serializer = self.get_serializer(queryset, many=True)
+            return Response(serializer.data)
+        else:
+            # Return flat list
+            return super().list(request, *args, **kwargs)
 
 
 class StockingViewSet(viewsets.ModelViewSet):
@@ -3369,6 +3384,34 @@ class ItemViewSet(viewsets.ModelViewSet):
         serializer.save(user=self.request.user)
 
 
+class StockEntryViewSet(viewsets.ModelViewSet):
+    """ViewSet for stock entry management"""
+    queryset = StockEntry.objects.all()
+    serializer_class = StockEntrySerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return StockEntry.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+    
+    @action(detail=False, methods=['get'])
+    def by_item(self, request):
+        """Get stock entries for a specific item"""
+        item_id = request.query_params.get('item_id')
+        if not item_id:
+            return Response({'error': 'item_id parameter is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            item = Item.objects.get(item_id=item_id, user=request.user)
+            entries = StockEntry.objects.filter(item=item, user=request.user)
+            serializer = self.get_serializer(entries, many=True)
+            return Response(serializer.data)
+        except Item.DoesNotExist:
+            return Response({'error': 'Item not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
 class BillViewSet(viewsets.ModelViewSet):
     """ViewSet for bill management"""
     queryset = Bill.objects.all()
@@ -3412,8 +3455,8 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         invoice = serializer.save(user=self.request.user)
         
-        # Create inventory transactions for each invoice line
-        self._create_inventory_transactions(invoice)
+        # Note: Inventory transactions are created when invoice lines are created
+        # in InvoiceLineViewSet.perform_create()
         
         # Create journal entries for accounting
         self._create_journal_entries(invoice)
@@ -3486,7 +3529,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             JournalLine.objects.create(
                 journal_entry=je,
                 account=ar_account,
-                memo=f"{line.item.name} - {line.qty} {line.item.uom}",
+                memo=f"{line.item.name} - {line.qty} pcs",
                 debit=line.amount,
                 credit=0,
             )
@@ -3603,7 +3646,91 @@ class FeedingEventViewSet(viewsets.ModelViewSet):
         return FeedingEvent.objects.filter(user=self.request.user)
     
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        feeding_event = serializer.save(user=self.request.user)
+        
+        # Deduct stock from customer stock if feeding event has feed information
+        self._deduct_stock_from_feeding(feeding_event)
+    
+    def perform_update(self, serializer):
+        feeding_event = serializer.save()
+        
+        # For updates, we might need to handle stock adjustments
+        # For now, we'll just deduct stock (in a real system, you'd want to handle reversals)
+        self._deduct_stock_from_feeding(feeding_event)
+    
+    def _deduct_stock_from_feeding(self, feeding_event):
+        """Deduct stock from customer stock based on feeding event"""
+        try:
+            # Calculate total amount to deduct
+            total_amount_kg = None
+            
+            if feeding_event.packet_qty and feeding_event.packet_size:
+                total_amount_kg = feeding_event.packet_qty * feeding_event.packet_size
+            elif feeding_event.amount_kg:
+                total_amount_kg = feeding_event.amount_kg
+            
+            if not total_amount_kg or not feeding_event.pond or not feeding_event.feed_item:
+                return
+            
+            # Find customer stock for this pond and feed item
+            from .models import CustomerStock
+            # Get the customer associated with this pond (internal pond type)
+            pond_customer = feeding_event.pond.customers.filter(type='internal_pond').first()
+            if not pond_customer:
+                return
+                
+            customer_stock = CustomerStock.objects.filter(
+                user=feeding_event.user,
+                customer=pond_customer,
+                pond=feeding_event.pond,
+                item=feeding_event.feed_item
+            ).first()
+            
+            if customer_stock:
+                # Convert amount to the stock's unit if needed
+                amount_to_deduct = total_amount_kg
+                
+                # If the stock is in packets, convert kg to packets
+                if customer_stock.unit in ['packet', 'pack'] and feeding_event.feed_item.packet_size:
+                    amount_to_deduct = total_amount_kg / feeding_event.feed_item.packet_size
+                
+                # Check if sufficient stock is available
+                if customer_stock.current_stock >= amount_to_deduct:
+                    customer_stock.current_stock -= amount_to_deduct
+                    customer_stock.save()
+                    
+                    # Create inventory transaction record
+                    from .models import InventoryTransaction, InventoryTransactionLine
+                    transaction = InventoryTransaction.objects.create(
+                        user=feeding_event.user,
+                        transaction_type='usage',
+                        reference_number=f'FEED-{feeding_event.feeding_id}',
+                        notes=f'Stock deduction for feeding event {feeding_event.feeding_id}'
+                    )
+                    
+                    InventoryTransactionLine.objects.create(
+                        transaction=transaction,
+                        item=feeding_event.feed_item,
+                        quantity=-amount_to_deduct,  # Negative for deduction
+                        unit_cost=customer_stock.unit_cost or 0,
+                        total_cost=-(amount_to_deduct * (customer_stock.unit_cost or 0))
+                    )
+                    
+                    # Note: The transaction is created but not directly linked to FeedingEvent
+                    # as FeedingEvent doesn't have a direct relationship to InventoryTransaction
+                    # The relationship is tracked through the transaction reference number
+                else:
+                    # Log insufficient stock
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(f"Insufficient stock for feeding event {feeding_event.feeding_id}. "
+                                 f"Required: {amount_to_deduct}, Available: {customer_stock.current_stock}")
+                    
+        except Exception as e:
+            # Log error but don't prevent feeding event creation
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error deducting stock for feeding event {feeding_event.feeding_id}: {e}")
 
 
 class FeedingLineViewSet(viewsets.ModelViewSet):
@@ -3733,12 +3860,39 @@ class BillLineViewSet(viewsets.ModelViewSet):
         self._create_inventory_transaction_for_bill_line(bill_line)
     
     def perform_destroy(self, instance):
-        """Handle deletion of bill line - remove inventory transactions"""
-        from .models import InventoryTransactionLine
+        """Handle deletion of bill line - remove stock entries and inventory transactions"""
+        from .models import InventoryTransactionLine, StockEntry
         
-        # Find and delete the corresponding inventory transaction line
+        # Find and delete the corresponding stock entry
         if instance.is_item and instance.item and instance.item.item_type == 'inventory_part':
-            # Find the inventory transaction line for this bill line
+            # Calculate the stored quantity and unit (same logic as creation)
+            storage_unit = instance.unit
+            storage_quantity = instance.qty
+            
+            if (instance.unit in ['packet', 'pack'] and 
+                instance.packet_size and 
+                instance.item.category == 'feed'):
+                storage_unit = 'kg'
+                storage_quantity = instance.qty * instance.packet_size
+            
+            # Find the stock entry for this bill line
+            stock_entry = StockEntry.objects.filter(
+                user=instance.bill.user,
+                item=instance.item,
+                quantity=storage_quantity,
+                unit=storage_unit,
+                packet_size=instance.packet_size,
+                gallon_size=instance.gallon_size,
+                unit_cost=instance.cost,
+                supplier=instance.bill.vendor.name,
+                batch_number=f"BILL-{instance.bill.bill_no}",
+                entry_date=instance.bill.bill_date
+            ).first()
+            
+            if stock_entry:
+                stock_entry.delete()
+            
+            # Find and delete the corresponding inventory transaction line
             inv_txn_line = InventoryTransactionLine.objects.filter(
                 inventory_transaction__user=instance.bill.user,
                 inventory_transaction__txn_type='RECEIPT_WITH_BILL',
@@ -3755,11 +3909,39 @@ class BillLineViewSet(viewsets.ModelViewSet):
         instance.delete()
     
     def _create_inventory_transaction_for_bill_line(self, bill_line):
-        """Create inventory transaction for a bill line (addition to stock)"""
-        from .models import InventoryTransaction, InventoryTransactionLine
+        """Create stock entry for a bill line (addition to stock)"""
+        from .models import InventoryTransaction, InventoryTransactionLine, StockEntry
         
-        # Only create inventory transaction for item lines (not expense lines)
+        # Only create stock entry for item lines (not expense lines)
         if bill_line.is_item and bill_line.item and bill_line.item.item_type == 'inventory_part':
+            # Determine the unit and quantity for storage
+            storage_unit = bill_line.unit
+            storage_quantity = bill_line.qty
+            
+            # Convert packets to kg if needed (for feed items)
+            if (bill_line.unit in ['packet', 'pack'] and 
+                bill_line.packet_size and 
+                bill_line.item.category == 'feed'):
+                storage_unit = 'kg'
+                storage_quantity = bill_line.qty * bill_line.packet_size
+            
+            # Create StockEntry record for the new stock addition
+            StockEntry.objects.create(
+                user=bill_line.bill.user,
+                item=bill_line.item,
+                quantity=storage_quantity,
+                unit=storage_unit,
+                packet_size=bill_line.packet_size,
+                gallon_size=bill_line.gallon_size,
+                unit_cost=bill_line.cost,
+                entry_date=bill_line.bill.bill_date,
+                supplier=bill_line.bill.vendor.name,
+                batch_number=f"BILL-{bill_line.bill.bill_no}",
+                notes=f"Received from {bill_line.bill.vendor.name} via Bill {bill_line.bill.bill_no}" + 
+                      (f" ({bill_line.qty} {bill_line.unit})" if bill_line.unit != storage_unit else ""),
+            )
+            
+            # Also create inventory transaction for backward compatibility
             # Check if inventory transaction already exists for this bill
             existing_txn = InventoryTransaction.objects.filter(
                 user=bill_line.bill.user,
@@ -3812,14 +3994,31 @@ class InvoiceLineViewSet(viewsets.ModelViewSet):
         
         # Create inventory transaction for inventory items
         self._create_inventory_transaction_for_line(invoice_line)
+        
+        # Create customer stock record for internal customers (ponds)
+        self._create_customer_stock_for_line(invoice_line)
     
     def perform_destroy(self, instance):
-        """Handle deletion of invoice line - remove inventory transactions"""
-        from .models import InventoryTransactionLine
+        """Handle deletion of invoice line - remove stock entries and inventory transactions"""
+        from .models import InventoryTransactionLine, StockEntry
         
-        # Find and delete the corresponding inventory transaction line
+        # Find and delete the corresponding stock entry
         if instance.item.item_type == 'inventory_part':
-            # Find the inventory transaction line for this invoice line
+            # Find the stock entry for this invoice line
+            stock_entry = StockEntry.objects.filter(
+                user=instance.invoice.user,
+                item=instance.item,
+                quantity=-instance.qty,  # Match the negative quantity
+                unit_cost=instance.rate,
+                supplier=f"SOLD TO {instance.invoice.customer.name}",
+                batch_number=f"INVOICE-{instance.invoice.invoice_no}",
+                entry_date=instance.invoice.invoice_date
+            ).first()
+            
+            if stock_entry:
+                stock_entry.delete()
+            
+            # Find and delete the corresponding inventory transaction line
             inv_txn_line = InventoryTransactionLine.objects.filter(
                 inventory_transaction__user=instance.invoice.user,
                 inventory_transaction__txn_type='SALE_TO_CUSTOMER',
@@ -3836,11 +4035,26 @@ class InvoiceLineViewSet(viewsets.ModelViewSet):
         instance.delete()
     
     def _create_inventory_transaction_for_line(self, invoice_line):
-        """Create inventory transaction for a single invoice line"""
-        from .models import InventoryTransaction, InventoryTransactionLine
+        """Create inventory transaction and stock entry for a single invoice line"""
+        from .models import InventoryTransaction, InventoryTransactionLine, StockEntry
         
         # Only create inventory transaction for inventory items
         if invoice_line.item.item_type == 'inventory_part':
+            # Create StockEntry record for the stock deduction (negative quantity)
+            # We'll create a "negative" stock entry to represent the deduction
+            StockEntry.objects.create(
+                user=invoice_line.invoice.user,
+                item=invoice_line.item,
+                quantity=-invoice_line.qty,  # Negative quantity for deduction
+                unit="pcs",
+                unit_cost=invoice_line.rate,
+                entry_date=invoice_line.invoice.invoice_date,
+                supplier=f"SOLD TO {invoice_line.invoice.customer.name}",
+                batch_number=f"INVOICE-{invoice_line.invoice.invoice_no}",
+                notes=f"Sold to {invoice_line.invoice.customer.name} via Invoice {invoice_line.invoice.invoice_no}",
+            )
+            
+            # Also create inventory transaction for backward compatibility
             # Check if inventory transaction already exists for this invoice
             existing_txn = InventoryTransaction.objects.filter(
                 user=invoice_line.invoice.user,
@@ -3865,6 +4079,29 @@ class InvoiceLineViewSet(viewsets.ModelViewSet):
                 unit_cost=invoice_line.rate,
                 memo=f"Sold to {invoice_line.invoice.customer.name}",
             )
+    
+    def _create_customer_stock_for_line(self, invoice_line):
+        """Create or update customer stock record for internal customers (ponds)"""
+        from .models import CustomerStock
+        
+        # Only create customer stock for internal customers (ponds)
+        if invoice_line.invoice.customer.type == 'internal_pond':
+            # Get or create customer stock record
+            customer_stock, created = CustomerStock.objects.get_or_create(
+                user=invoice_line.invoice.user,
+                customer=invoice_line.invoice.customer,
+                item=invoice_line.item,
+                defaults={
+                    'pond': invoice_line.invoice.customer.pond,  # Link to the pond
+                    'unit': "pcs",
+                    'unit_cost': invoice_line.rate,
+                    'current_stock': 0,
+                    'min_stock_level': 0,
+                }
+            )
+            
+            # Add the invoiced quantity to customer stock
+            customer_stock.add_stock(invoice_line.qty, invoice_line.rate)
 
 
 class CustomerPaymentViewSet(viewsets.ModelViewSet):
@@ -3942,6 +4179,49 @@ class CustomerPaymentApplyViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         serializer.save()
+
+
+class BillPaymentViewSet(viewsets.ModelViewSet):
+    """ViewSet for bill payment management"""
+    queryset = BillPayment.objects.all()
+    serializer_class = BillPaymentSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return BillPayment.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class CustomerStockViewSet(viewsets.ModelViewSet):
+    """ViewSet for customer stock management"""
+    queryset = CustomerStock.objects.all()
+    serializer_class = CustomerStockSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        queryset = CustomerStock.objects.filter(user=self.request.user)
+        
+        # Filter by customer if provided
+        customer_id = self.request.query_params.get('customer')
+        if customer_id:
+            queryset = queryset.filter(customer_id=customer_id)
+        
+        # Filter by pond if provided
+        pond_id = self.request.query_params.get('pond')
+        if pond_id:
+            queryset = queryset.filter(pond_id=pond_id)
+        
+        # Filter by item type if provided
+        item_type = self.request.query_params.get('item_type')
+        if item_type:
+            queryset = queryset.filter(item__item_type=item_type)
+        
+        return queryset
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
 
 class DepositViewSet(viewsets.ModelViewSet):

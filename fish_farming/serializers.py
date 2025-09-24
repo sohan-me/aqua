@@ -5,7 +5,7 @@ from rest_framework_recursive.fields import RecursiveField
 from .models import (
     # Core Master Data
     PaymentTerms, Customer, Vendor, ItemCategory,
-    Account, Item, ItemPrice,
+    Account, Item, ItemPrice, StockEntry,
     
     # Accounting Models
     JournalEntry, JournalLine, Bill, BillLine, BillPayment, BillPaymentApply,
@@ -13,7 +13,7 @@ from .models import (
     Deposit, DepositLine, Check, CheckExpenseLine, CheckItemLine,
     
     # Inventory Models
-    InventoryTransaction, InventoryTransactionLine,
+    InventoryTransaction, InventoryTransactionLine, CustomerStock,
     
     # Item Sales & Issues
     ItemSales, ItemSalesLine,
@@ -117,20 +117,42 @@ class AccountTreeSerializer(serializers.ModelSerializer):
         return ' > '.join([f"{ancestor.code} - {ancestor.name}" if ancestor.code else ancestor.name for ancestor in ancestors])
 
 
+class StockEntrySerializer(serializers.ModelSerializer):
+    item_name = serializers.CharField(source='item.name', read_only=True)
+    kg_equivalent = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = StockEntry
+        fields = '__all__'
+        read_only_fields = ['entry_id', 'user', 'total_cost', 'created_at', 'updated_at']
+    
+    def get_kg_equivalent(self, obj):
+        return obj.get_kg_equivalent()
+
+
 class ItemSerializer(serializers.ModelSerializer):
     user_username = serializers.CharField(source='user.username', read_only=True)
-    category_name = serializers.CharField(source='category.name', read_only=True)
+    category_name = serializers.CharField(source='get_category_display', read_only=True)
     income_account_name = serializers.CharField(source='income_account.name', read_only=True)
     expense_account_name = serializers.CharField(source='expense_account.name', read_only=True)
     asset_account_name = serializers.CharField(source='asset_account.name', read_only=True)
     cost_of_goods_sold_account_name = serializers.CharField(source='cost_of_goods_sold_account.name', read_only=True)
     stock_status = serializers.CharField(source='get_stock_status', read_only=True)
     is_low_stock = serializers.BooleanField(read_only=True)
+    total_stock_kg = serializers.SerializerMethodField()
+    stock_summary = serializers.SerializerMethodField()
+    stock_entries = StockEntrySerializer(many=True, read_only=True)
     
     class Meta:
         model = Item
         fields = '__all__'
         read_only_fields = ['item_id', 'user', 'created_at', 'updated_at']
+    
+    def get_total_stock_kg(self, obj):
+        return obj.get_total_stock_kg()
+    
+    def get_stock_summary(self, obj):
+        return obj.get_stock_summary()
 
 
 class ItemPriceSerializer(serializers.ModelSerializer):
@@ -377,8 +399,8 @@ class StockingEventSerializer(serializers.ModelSerializer):
 
 
 class StockingLineSerializer(serializers.ModelSerializer):
-    item_id = serializers.IntegerField(source='item.item_id', read_only=True)
-    item_name = serializers.CharField(source='item.name', read_only=True)
+    species_id = serializers.IntegerField(source='species.id', read_only=True)
+    species_name = serializers.CharField(source='species.name', read_only=True)
     stocking_id = serializers.IntegerField(source='stocking_event.stocking_id', read_only=True)
     
     class Meta:
@@ -390,11 +412,22 @@ class StockingLineSerializer(serializers.ModelSerializer):
 class FeedingEventSerializer(serializers.ModelSerializer):
     user_username = serializers.CharField(source='user.username', read_only=True)
     pond_name = serializers.CharField(source='pond.name', read_only=True)
+    feed_item_name = serializers.CharField(source='feed_item.name', read_only=True)
+    total_amount_display = serializers.SerializerMethodField()
     
     class Meta:
         model = FeedingEvent
         fields = '__all__'
         read_only_fields = ['feeding_id', 'user', 'created_at', 'updated_at']
+    
+    def get_total_amount_display(self, obj):
+        """Get display text for total amount (packets + kg)"""
+        if obj.packet_qty and obj.packet_size:
+            total_kg = obj.packet_qty * obj.packet_size
+            return f"{obj.packet_qty} packets ({total_kg} kg)"
+        elif obj.amount_kg:
+            return f"{obj.amount_kg} kg"
+        return "No amount specified"
 
 
 class FeedingLineSerializer(serializers.ModelSerializer):
@@ -499,11 +532,26 @@ class PayrollLineSerializer(serializers.ModelSerializer):
 
 class SpeciesSerializer(serializers.ModelSerializer):
     user_username = serializers.CharField(source='user.username', read_only=True)
+    parent_name = serializers.CharField(source='parent.name', read_only=True)
+    children = serializers.SerializerMethodField()
+    full_path = serializers.SerializerMethodField()
     
     class Meta:
         model = Species
         fields = '__all__'
-        read_only_fields = ['user', 'created_at']
+        read_only_fields = ['user', 'created_at', 'lft', 'rght', 'tree_id', 'level']
+    
+    def get_children(self, obj):
+        """Get children of the species"""
+        if hasattr(obj, 'children'):
+            return SpeciesSerializer(obj.children.all(), many=True).data
+        return []
+    
+    def get_full_path(self, obj):
+        """Get the full hierarchical path"""
+        if hasattr(obj, 'get_full_path'):
+            return obj.get_full_path()
+        return obj.name
 
 
 class PondSerializer(serializers.ModelSerializer):
@@ -851,6 +899,31 @@ class MedicalDiagnosticSerializer(serializers.ModelSerializer):
         model = MedicalDiagnostic
         fields = '__all__'
         read_only_fields = ['user', 'created_at', 'updated_at', 'applied_at']
+    
+    def create(self, validated_data):
+        # Automatically set the user from the request
+        validated_data['user'] = self.context['request'].user
+        return super().create(validated_data)
+
+
+class CustomerStockSerializer(serializers.ModelSerializer):
+    """Serializer for customer stock management"""
+    user_username = serializers.CharField(source='user.username', read_only=True)
+    customer_name = serializers.CharField(source='customer.name', read_only=True)
+    pond_name = serializers.CharField(source='pond.name', read_only=True)
+    item_name = serializers.CharField(source='item.name', read_only=True)
+    item_type = serializers.CharField(source='item.item_type', read_only=True)
+    packet_size = serializers.DecimalField(source='item.packet_size', read_only=True, max_digits=10, decimal_places=2)
+    stock_status = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = CustomerStock
+        fields = '__all__'
+        read_only_fields = ['customer_stock_id', 'user', 'created_at', 'last_updated']
+    
+    def get_stock_status(self, obj):
+        """Get stock status for display"""
+        return obj.get_stock_status()
     
     def create(self, validated_data):
         # Automatically set the user from the request

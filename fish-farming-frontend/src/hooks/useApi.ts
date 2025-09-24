@@ -142,6 +142,10 @@ export function useSpecies(params?: PaginationParams) {
   return useApiQuery(['species', JSON.stringify(params || {})], () => apiService.getSpecies(params));
 }
 
+export function useSpeciesTree() {
+  return useApiQuery(['species', 'tree'], () => apiService.getSpeciesTree());
+}
+
 export function useSpeciesById(id: number) {
   return useApiQuery(
     ['species', id.toString()],
@@ -1123,6 +1127,16 @@ export function useVendor(id: number) {
   });
 }
 
+export function useCustomerStocks(params?: PaginationParams) {
+  return useApiQuery(['customer-stocks', JSON.stringify(params || {})], () => apiService.getCustomerStocks(params));
+}
+
+export function useCustomerStock(id: number) {
+  return useApiQuery(['customer-stocks', id.toString()], () => apiService.getCustomerStockById(id), {
+    enabled: !!id,
+  });
+}
+
 export function useCreateVendor() {
   return useApiMutation(['vendors'], apiService.createVendor);
 }
@@ -1133,6 +1147,18 @@ export function useUpdateVendor() {
 
 export function useDeleteVendor() {
   return useApiMutation(['vendors'], apiService.deleteVendor);
+}
+
+export function useCreateCustomerStock() {
+  return useApiMutation(['customer-stocks'], apiService.createCustomerStock);
+}
+
+export function useUpdateCustomerStock() {
+  return useApiMutation(['customer-stocks'], apiService.updateCustomerStock);
+}
+
+export function useDeleteCustomerStock() {
+  return useApiMutation(['customer-stocks'], apiService.deleteCustomerStock);
 }
 
 export function useVendorCategories() {

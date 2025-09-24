@@ -302,7 +302,7 @@ export default function StockLevelsPage() {
                       <span className="ml-1">{getStatusLabel(stock.status)}</span>
                     </Badge>
                   </TableCell>
-                  <TableCell>${stock.unit_cost.toFixed(2)}</TableCell>
+                  <TableCell>${Number(stock.unit_cost).toFixed(2)}</TableCell>
                   <TableCell className="font-medium">${stock.total_value.toFixed(2)}</TableCell>
                 </TableRow>
               ))}

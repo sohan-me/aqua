@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Plus, Search, Edit, Trash2, Package, Calendar, Fish, Scale, X } from 'lucide-react';
 import { useApi } from '@/hooks/useApi';
-import { useStockingEvents, usePonds, useItems, useCreateStockingEvent, useUpdateStockingEvent, useDeleteStockingEvent } from '@/hooks/useApi';
+import { useStockingEvents, usePonds, useSpecies, useCreateStockingEvent, useUpdateStockingEvent, useDeleteStockingEvent } from '@/hooks/useApi';
 import { toast } from 'sonner';
 
 interface StockingEvent {
@@ -31,8 +31,8 @@ interface StockingEvent {
 interface StockingLine {
   stocking_line_id: number;
   stocking_id: number;
-  item_id: number;
-  item_name?: string;
+  species_id: number;
+  species_name?: string;
   qty_pcs: number;
   pcs_per_kg_at_stocking: number;
   weight_kg: number | null;
@@ -46,10 +46,10 @@ interface Pond {
 }
 
 
-interface Item {
-  item_id: number;
+interface Species {
+  id: number;
   name: string;
-  is_species: boolean;
+  scientific_name?: string;
 }
 
 
@@ -57,7 +57,7 @@ export default function StockingEventsPage() {
   const [stockingEvents, setStockingEvents] = useState<StockingEvent[]>([]);
   const [stockingLines, setStockingLines] = useState<StockingLine[]>([]);
   const [ponds, setPonds] = useState<Pond[]>([]);
-  const [items, setItems] = useState<Item[]>([]);
+  const [species, setSpecies] = useState<Species[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -80,23 +80,44 @@ export default function StockingEventsPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [stockingResponse, pondsResponse, itemsResponse] = await Promise.all([
+      const [stockingResponse, pondsResponse, speciesResponse] = await Promise.all([
         get('/stocking-events/'),
         get('/ponds/'),
-        get('/items/'),
+        get('/species/?tree=true'),
       ]);
       
       setStockingEvents(stockingResponse.results || stockingResponse);
       setPonds(pondsResponse.results || pondsResponse);
-      const allItems = itemsResponse.results || itemsResponse;
-      const speciesItems = allItems.filter((item: Item) => item.is_species);
-      setItems(speciesItems);
+      
+      // Flatten the species tree for the dropdown
+      const allSpecies = flattenSpeciesTree(speciesResponse);
+      setSpecies(allSpecies);
     } catch (error) {
       console.error('Error fetching data:', error);
       toast.error('Failed to fetch data');
     } finally {
       setLoading(false);
     }
+  };
+
+  const flattenSpeciesTree = (speciesTree: any[]): Species[] => {
+    const flattened: Species[] = [];
+    
+    const flatten = (items: any[]) => {
+      items.forEach(item => {
+        flattened.push({
+          id: item.id,
+          name: item.full_path || item.name,
+          scientific_name: item.scientific_name || '',
+        });
+        if (item.children && item.children.length > 0) {
+          flatten(item.children);
+        }
+      });
+    };
+    
+    flatten(speciesTree);
+    return flattened;
   };
 
   const fetchStockingLines = async (stockingId: number) => {
@@ -121,7 +142,7 @@ export default function StockingEventsPage() {
 
   const addLineItem = () => {
     setLineItems([...lineItems, {
-      item_id: 0,
+      species_id: 0,
       qty_pcs: 0,
       pcs_per_kg_at_stocking: 0,
       weight_kg: null,
@@ -189,7 +210,7 @@ export default function StockingEventsPage() {
         // Create stocking lines
         for (const line of lineItems) {
           await post(`/stocking-events/${response.stocking_id}/add_line/`, {
-            item: line.item_id,
+            species: line.species_id,
             qty_pcs: line.qty_pcs || 0,
             pcs_per_kg_at_stocking: line.pcs_per_kg_at_stocking || 0,
             weight_kg: line.weight_kg || 0,
@@ -257,25 +278,37 @@ export default function StockingEventsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Stocking Events</h1>
+          <h1 className="text-3xl font-bold text-gray-900">Fish Stocking</h1>
           <p className="text-gray-600 mt-1">Record fish stocking activities and fry placement</p>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={() => { setEditingStocking(null); resetForm(); }}>
               <Plus className="h-4 w-4 mr-2" />
-              Add Stocking Event
+              Add Fish Stocking
             </Button>
           </DialogTrigger>
-          <DialogContent className="w-[95vw] max-w-7xl max-h-[95vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>{editingStocking ? 'Edit Stocking Event' : 'Add New Stocking Event'}</DialogTitle>
-              <DialogDescription>
-                {editingStocking ? 'Update stocking event information' : 'Record a new fish stocking event'}
+          <DialogContent className="w-[95vw] max-w-6xl max-h-[95vh] overflow-y-auto bg-gradient-to-br from-blue-50 to-green-50">
+            <DialogHeader className="pb-6 border-b border-gray-200">
+              <DialogTitle className="flex items-center gap-3 text-2xl font-bold text-gray-900">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <Fish className="h-6 w-6 text-blue-600" />
+                </div>
+                {editingStocking ? 'Edit Fish Stocking' : 'Add New Fish Stocking'}
+              </DialogTitle>
+              <DialogDescription className="text-base text-gray-600 mt-2">
+                {editingStocking ? 'Update fish stocking event information' : 'Record a new fish stocking event with species and quantities'}
               </DialogDescription>
             </DialogHeader>
-            <form onSubmit={handleSubmit}>
-              <div className="grid grid-cols-2 gap-6 py-4">
+            <form onSubmit={handleSubmit} className="space-y-8">
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900 mb-6 flex items-center gap-3">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <Calendar className="h-5 w-5 text-blue-600" />
+                  </div>
+                  Event Information
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label htmlFor="pond_id">Pond *</Label>
                   <Select
@@ -328,140 +361,159 @@ export default function StockingEventsPage() {
                 />
               </div>
 
-              {/* Stocking Lines */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <Label>Stocking Lines</Label>
-                  <Button type="button" variant="outline" onClick={addLineItem}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Line
-                  </Button>
-                </div>
+              </div>
 
-                <div className="space-y-4 max-h-80 overflow-y-auto">
-                  {lineItems.map((line, index) => (
-                    <Card key={index} className="p-6">
-                      <div className="grid grid-cols-6 gap-4 items-end">
-                        <div className="space-y-2">
-                          <Label>Species</Label>
-                          <Select
-                            value={line.item_id?.toString() || ''}
-                            onValueChange={(value) => updateLineItem(index, 'item_id', parseInt(value))}
-                          >
-                            <SelectTrigger className="h-12">
-                              <SelectValue placeholder="Select species" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {items.map((item) => (
-                                <SelectItem key={item.item_id} value={item.item_id.toString()}>
-                                  {item.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <Label>Quantity (pcs)</Label>
-                          <Input
-                            type="number"
-                            value={line.qty_pcs || ''}
-                            onChange={(e) => updateLineItem(index, 'qty_pcs', parseInt(e.target.value) || 0)}
-                            placeholder="Number of fish"
-                            className="h-12"
-                          />
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <Label>Pcs per kg</Label>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            value={line.pcs_per_kg_at_stocking || ''}
-                            onChange={(e) => updateLineItem(index, 'pcs_per_kg_at_stocking', parseFloat(e.target.value) || 0)}
-                            placeholder="Fish per kg"
-                            className="h-12"
-                          />
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <Label>Weight (kg)</Label>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            value={line.weight_kg || ''}
-                            onChange={(e) => updateLineItem(index, 'weight_kg', parseFloat(e.target.value) || 0)}
-                            placeholder="Total weight"
-                            className="h-12"
-                          />
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <Label>Unit Cost</Label>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            value={line.unit_cost || ''}
-                            onChange={(e) => updateLineItem(index, 'unit_cost', parseFloat(e.target.value) || 0)}
-                            placeholder="Cost per kg"
-                            className="h-12"
-                          />
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <Label>Memo</Label>
-                          <div className="flex items-center space-x-2">
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900 mb-6 flex items-center gap-3">
+                  <div className="p-2 bg-green-100 rounded-lg">
+                    <Package className="h-5 w-5 text-green-600" />
+                  </div>
+                  Species & Quantities
+                </h3>
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-base font-medium text-gray-700">Stocking Lines</Label>
+                    <Button type="button" variant="outline" onClick={addLineItem} className="bg-white border-green-200 text-green-700 hover:bg-green-50">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Species
+                    </Button>
+                  </div>
+
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-gray-50">
+                        <TableHead className="font-semibold">Species</TableHead>
+                        <TableHead className="font-semibold">Quantity (pcs)</TableHead>
+                        <TableHead className="font-semibold">Pcs per kg</TableHead>
+                        <TableHead className="font-semibold">Weight (kg)</TableHead>
+                        <TableHead className="font-semibold">Unit Cost</TableHead>
+                        <TableHead className="font-semibold">Memo</TableHead>
+                        <TableHead className="font-semibold w-16">Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {lineItems.map((line, index) => (
+                        <TableRow key={index} className="hover:bg-blue-50">
+                          <TableCell>
+                            <Select
+                              value={line.species_id?.toString() || ''}
+                              onValueChange={(value) => updateLineItem(index, 'species_id', parseInt(value))}
+                            >
+                              <SelectTrigger className="h-10">
+                                <SelectValue placeholder="Select species" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {species.map((spec) => (
+                                  <SelectItem key={spec.id} value={spec.id.toString()}>
+                                    {spec.scientific_name ? `${spec.name} (${spec.scientific_name})` : spec.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              value={line.qty_pcs || ''}
+                              onChange={(e) => updateLineItem(index, 'qty_pcs', parseInt(e.target.value) || 0)}
+                              placeholder="Number of fish"
+                              className="h-10"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={line.pcs_per_kg_at_stocking || ''}
+                              onChange={(e) => updateLineItem(index, 'pcs_per_kg_at_stocking', parseFloat(e.target.value) || 0)}
+                              placeholder="Fish per kg"
+                              className="h-10"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={line.weight_kg || ''}
+                              onChange={(e) => updateLineItem(index, 'weight_kg', parseFloat(e.target.value) || 0)}
+                              placeholder="Total weight"
+                              className="h-10"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={line.unit_cost || ''}
+                              onChange={(e) => updateLineItem(index, 'unit_cost', parseFloat(e.target.value) || 0)}
+                              placeholder="Cost per kg"
+                              className="h-10"
+                            />
+                          </TableCell>
+                          <TableCell>
                             <Input
                               value={line.memo || ''}
                               onChange={(e) => updateLineItem(index, 'memo', e.target.value)}
                               placeholder="Notes"
-                              className="h-12"
+                              className="h-10"
                             />
+                          </TableCell>
+                          <TableCell>
                             <Button
                               type="button"
                               variant="outline"
                               size="sm"
                               onClick={() => removeLineItem(index)}
-                              className="text-red-600 hover:text-red-700 h-12 px-3"
+                              className="h-10 w-10 p-0 text-red-600 hover:bg-red-50 border-red-200"
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </div>
 
-                <div className="grid grid-cols-3 gap-4 text-center">
-                  <div className="p-4 bg-blue-50 rounded-lg">
-                    <div className="text-2xl font-bold text-blue-600">
-                      {calculateTotals().totalFish.toLocaleString()}
+                <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-6 rounded-xl border border-purple-200">
+                  <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                    <Scale className="h-5 w-5 text-purple-600" />
+                    Summary
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-white p-4 rounded-lg shadow-sm border border-blue-200 text-center">
+                      <div className="text-2xl font-bold text-blue-600 mb-1">
+                        {calculateTotals().totalFish.toLocaleString()}
+                      </div>
+                      <div className="text-sm font-medium text-blue-600">Total Fish</div>
                     </div>
-                    <div className="text-sm text-blue-600">Total Fish</div>
-                  </div>
-                  <div className="p-4 bg-green-50 rounded-lg">
-                    <div className="text-2xl font-bold text-green-600">
-                      {calculateTotals().totalWeight.toFixed(2)} kg
+                    <div className="bg-white p-4 rounded-lg shadow-sm border border-green-200 text-center">
+                      <div className="text-2xl font-bold text-green-600 mb-1">
+                        {calculateTotals().totalWeight.toFixed(2)} kg
+                      </div>
+                      <div className="text-sm font-medium text-green-600">Total Weight</div>
                     </div>
-                    <div className="text-sm text-green-600">Total Weight</div>
-                  </div>
-                  <div className="p-4 bg-purple-50 rounded-lg">
-                    <div className="text-2xl font-bold text-purple-600">
-                      ${calculateTotals().totalCost.toFixed(2)}
+                    <div className="bg-white p-4 rounded-lg shadow-sm border border-purple-200 text-center">
+                      <div className="text-2xl font-bold text-purple-600 mb-1">
+                        ${calculateTotals().totalCost.toFixed(2)}
+                      </div>
+                      <div className="text-sm font-medium text-purple-600">Total Cost</div>
                     </div>
-                    <div className="text-sm text-purple-600">Total Cost</div>
                   </div>
+                </div>
                 </div>
               </div>
 
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit">
-                  {editingStocking ? 'Update' : 'Create'} Stocking Event
-                </Button>
+              <DialogFooter className="pt-6 border-t border-gray-200 bg-gray-50 -mx-6 -mb-6 px-6 py-4 rounded-b-xl">
+                <div className="flex gap-3 w-full">
+                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} className="flex-1">
+                    Cancel
+                  </Button>
+                  <Button type="submit" className="flex-1 bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700">
+                    {editingStocking ? 'Update' : 'Create'} Fish Stocking
+                  </Button>
+                </div>
               </DialogFooter>
             </form>
           </DialogContent>
@@ -473,7 +525,7 @@ export default function StockingEventsPage() {
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
           <Input
-            placeholder="Search stocking events..."
+            placeholder="Search fish stocking events..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10"
@@ -486,7 +538,7 @@ export default function StockingEventsPage() {
         <div className="flex items-center justify-center py-12">
           <div className="text-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading stocking events...</p>
+            <p className="text-gray-600">Loading fish stocking events...</p>
           </div>
         </div>
       ) : (
@@ -555,14 +607,16 @@ export default function StockingEventsPage() {
       {/* Stocking Event Details Modal */}
       {showStockingLines && (
         <Dialog open={true} onOpenChange={() => setShowStockingLines(null)}>
-          <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Package className="h-5 w-5" />
-                Stocking Event Details
+          <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto bg-gradient-to-br from-blue-50 to-green-50">
+            <DialogHeader className="pb-6 border-b border-gray-200">
+              <DialogTitle className="flex items-center gap-3 text-2xl font-bold text-gray-900">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <Fish className="h-6 w-6 text-blue-600" />
+                </div>
+                Fish Stocking Details
               </DialogTitle>
-              <DialogDescription>
-                Comprehensive view of stocking event and line items
+              <DialogDescription className="text-base text-gray-600 mt-2">
+                Comprehensive view of fish stocking event and species details
               </DialogDescription>
             </DialogHeader>
             
@@ -573,7 +627,7 @@ export default function StockingEventsPage() {
                 if (!event) return null;
                 
                 return (
-                  <div className="bg-gradient-to-r from-blue-50 to-green-50 p-6 rounded-lg border">
+                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
                     <div className="flex items-center justify-between mb-4">
                       <div>
                         <h3 className="text-2xl font-bold text-gray-900">{event.pond_name}</h3>
@@ -630,47 +684,49 @@ export default function StockingEventsPage() {
                 </CardHeader>
                 <CardContent>
                   {stockingLines.length > 0 ? (
-                    <div className="space-y-4">
-                      {stockingLines.map((line, index) => (
-                        <Card key={line.stocking_line_id} className="border-l-4 border-l-blue-500">
-                          <CardContent className="pt-4">
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                              <div className="space-y-2">
-                                <Label className="text-sm font-medium text-gray-600">Species</Label>
-                                <p className="text-lg font-semibold text-blue-700">{line.item_name}</p>
-                              </div>
-                              <div className="space-y-2">
-                                <Label className="text-sm font-medium text-gray-600">Quantity (pieces)</Label>
-                                <p className="text-lg font-semibold">{line.qty_pcs.toLocaleString()}</p>
-                              </div>
-                              <div className="space-y-2">
-                                <Label className="text-sm font-medium text-gray-600">Pieces per kg</Label>
-                                <p className="text-lg font-semibold">
-                                  {line.pcs_per_kg_at_stocking ? Number(line.pcs_per_kg_at_stocking).toFixed(2) : 'N/A'}
-                                </p>
-                              </div>
-                              <div className="space-y-2">
-                                <Label className="text-sm font-medium text-gray-600">Weight (kg)</Label>
-                                <p className="text-lg font-semibold text-green-600">
-                                  {line.weight_kg ? Number(line.weight_kg).toFixed(2) : 'N/A'}
-                                </p>
-                              </div>
-                              <div className="space-y-2">
-                                <Label className="text-sm font-medium text-gray-600">Unit Cost</Label>
-                                <p className="text-lg font-semibold text-purple-600">
-                                  {line.unit_cost ? `$${Number(line.unit_cost).toFixed(2)}` : 'N/A'}
-                                </p>
-                              </div>
-                              {line.memo && (
-                                <div className="space-y-2 md:col-span-2 lg:col-span-4">
-                                  <Label className="text-sm font-medium text-gray-600">Memo</Label>
-                                  <p className="text-sm text-gray-700 bg-gray-50 p-2 rounded">{line.memo}</p>
-                                </div>
-                              )}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
+                    <div className="border border-gray-200 rounded-lg overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-gray-50">
+                            <TableHead className="font-semibold">Species</TableHead>
+                            <TableHead className="font-semibold">Quantity (pcs)</TableHead>
+                            <TableHead className="font-semibold">Pcs per kg</TableHead>
+                            <TableHead className="font-semibold">Weight (kg)</TableHead>
+                            <TableHead className="font-semibold">Unit Cost ($)</TableHead>
+                            <TableHead className="font-semibold">Memo</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {stockingLines.map((line, index) => (
+                            <TableRow key={line.stocking_line_id} className="hover:bg-blue-50">
+                              <TableCell className="font-medium text-blue-700">
+                                {line.species_name}
+                              </TableCell>
+                              <TableCell className="font-semibold">
+                                {line.qty_pcs.toLocaleString()}
+                              </TableCell>
+                              <TableCell>
+                                {line.pcs_per_kg_at_stocking ? Number(line.pcs_per_kg_at_stocking).toFixed(2) : 'N/A'}
+                              </TableCell>
+                              <TableCell className="text-green-600">
+                                {line.weight_kg ? Number(line.weight_kg).toFixed(2) : 'N/A'}
+                              </TableCell>
+                              <TableCell className="text-purple-600">
+                                {line.unit_cost ? `$${Number(line.unit_cost).toFixed(2)}` : 'N/A'}
+                              </TableCell>
+                              <TableCell className="max-w-xs">
+                                {line.memo ? (
+                                  <div className="text-sm text-gray-700 bg-gray-50 p-2 rounded">
+                                    {line.memo}
+                                  </div>
+                                ) : (
+                                  <span className="text-gray-400">-</span>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
                     </div>
                   ) : (
                     <div className="text-center py-8">
@@ -689,14 +745,14 @@ export default function StockingEventsPage() {
       {filteredStockingEvents.length === 0 && !loading && (
         <div className="text-center py-12">
           <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No stocking events found</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No fish stocking events found</h3>
           <p className="text-gray-600 mb-4">
-            {searchTerm ? 'No stocking events match your search criteria.' : 'Get started by recording your first stocking event.'}
+            {searchTerm ? 'No fish stocking events match your search criteria.' : 'Get started by recording your first fish stocking event.'}
           </p>
           {!searchTerm && (
             <Button onClick={() => setIsDialogOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />
-              Add Stocking Event
+              Add Fish Stocking
             </Button>
           )}
         </div>

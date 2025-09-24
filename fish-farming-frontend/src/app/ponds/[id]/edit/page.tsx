@@ -19,9 +19,22 @@ export default function EditPondPage() {
     water_area_decimal: '',
     depth_ft: '',
     location: '',
-    is_active: true
+    is_active: true,
+    leasing_date: '',
+    leasing_end_date: '',
+    rate_per_decimal: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Calculate total leasing money based on area and rate
+  const calculateTotalLeasingMoney = () => {
+    const area = parseFloat(formData.water_area_decimal);
+    const rate = parseFloat(formData.rate_per_decimal);
+    if (area && rate) {
+      return area * rate;
+    }
+    return null;
+  };
 
   // Populate form when pond data loads
   useEffect(() => {
@@ -31,7 +44,10 @@ export default function EditPondPage() {
         water_area_decimal: pond.data.water_area_decimal?.toString() || '',
         depth_ft: pond.data.depth_ft?.toString() || '',
         location: pond.data.location || '',
-        is_active: pond.data.is_active ?? true
+        is_active: pond.data.is_active ?? true,
+        leasing_date: pond.data.leasing_date || '',
+        leasing_end_date: pond.data.leasing_end_date || '',
+        rate_per_decimal: pond.data.rate_per_decimal?.toString() || ''
       });
     }
   }, [pond]);
@@ -41,6 +57,8 @@ export default function EditPondPage() {
     setIsSubmitting(true);
 
     try {
+      const totalLeasingMoney = calculateTotalLeasingMoney();
+      
       await updatePond.mutateAsync({
         id: pondId,
         data: {
@@ -48,7 +66,11 @@ export default function EditPondPage() {
           water_area_decimal: parseFloat(formData.water_area_decimal),
           depth_ft: parseFloat(formData.depth_ft),
           location: formData.location,
-          is_active: formData.is_active
+          is_active: formData.is_active,
+          leasing_date: formData.leasing_date || null,
+          leasing_end_date: formData.leasing_end_date || null,
+          rate_per_decimal: formData.rate_per_decimal ? parseFloat(formData.rate_per_decimal) : null,
+          total_leasing_money: totalLeasingMoney
         }
       });
       
@@ -176,6 +198,70 @@ export default function EditPondPage() {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
               placeholder="e.g., 5.00"
             />
+          </div>
+        </div>
+
+        {/* Leasing Information Section */}
+        <div className="mt-8 border-t border-gray-200 pt-6">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Leasing Information</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label htmlFor="leasing_date" className="block text-sm font-medium text-gray-700 mb-2">
+                Leasing Start Date
+              </label>
+              <input
+                type="date"
+                id="leasing_date"
+                name="leasing_date"
+                value={formData.leasing_date}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="leasing_end_date" className="block text-sm font-medium text-gray-700 mb-2">
+                Leasing End Date
+              </label>
+              <input
+                type="date"
+                id="leasing_end_date"
+                name="leasing_end_date"
+                value={formData.leasing_end_date}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="rate_per_decimal" className="block text-sm font-medium text-gray-700 mb-2">
+                Rate per Decimal
+              </label>
+              <input
+                type="number"
+                id="rate_per_decimal"
+                name="rate_per_decimal"
+                min="0"
+                step="0.01"
+                value={formData.rate_per_decimal}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
+                placeholder="e.g., 1500.00"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Total Leasing Money (Auto-calculated)
+              </label>
+              <div className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-700">
+                {calculateTotalLeasingMoney() ? 
+                  `৳${calculateTotalLeasingMoney()?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 
+                  'Enter area and rate to calculate'
+                }
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Calculated as: Area (decimal) × Rate per Decimal</p>
+            </div>
           </div>
         </div>
 

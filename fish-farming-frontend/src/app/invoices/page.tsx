@@ -51,8 +51,16 @@ interface Item {
   item_type: string;
   uom: string;
   current_stock: number;
+  total_stock_kg?: number;
   selling_price?: number;
   income_account?: number;
+  stock_entries?: Array<{
+    entry_id: number;
+    quantity: number;
+    unit: string;
+    packet_size?: number;
+    kg_equivalent?: number;
+  }>;
 }
 
 export default function InvoicesPage() {
@@ -76,6 +84,36 @@ export default function InvoicesPage() {
   const [lineItems, setLineItems] = useState<Partial<InvoiceLine>[]>([]);
 
   const { get, post, put, delete: del } = useApi();
+
+  // Calculate correct stock in kg from stock entries
+  const calculateCorrectStockKg = (item: Item): number => {
+    if (!item.stock_entries || item.stock_entries.length === 0) {
+      return item.total_stock_kg || 0;
+    }
+
+    let totalKg = 0;
+    for (const entry of item.stock_entries) {
+      const quantity = parseFloat(entry.quantity.toString());
+      
+      if (entry.unit === 'kg') {
+        totalKg += quantity;
+      } else if (entry.unit === 'pcs') {
+        // Convert pieces to kg - assuming 1 piece = 1 kg for feed items
+        totalKg += quantity;
+      } else if (entry.unit === 'packet' || entry.unit === 'pack') {
+        if (entry.packet_size) {
+          // Convert packets to kg using packet size
+          totalKg += quantity * parseFloat(entry.packet_size.toString());
+        } else {
+          // If no packet size, assume 1 packet = 1 kg
+          totalKg += quantity;
+        }
+      }
+    }
+    
+    // Round to avoid floating point precision issues
+    return Math.round(totalKg * 100) / 100;
+  };
 
   useEffect(() => {
     fetchData();
@@ -168,14 +206,22 @@ export default function InvoicesPage() {
     const item = items.find(i => i.item_id === itemId);
     if (!item) return { available: false, message: 'Item not found' };
     
-    if (item.current_stock < quantity) {
+    const availableStock = calculateCorrectStockKg(item);
+    if (availableStock <= 0) {
       return { 
         available: false, 
-        message: `Insufficient stock. Available: ${item.current_stock} ${item.uom}, Required: ${quantity} ${item.uom}` 
+        message: `Item is out of stock. Current stock: ${availableStock} kg` 
       };
     }
     
-    return { available: true, message: `Stock available: ${item.current_stock} ${item.uom}` };
+    if (availableStock < quantity) {
+      return { 
+        available: false, 
+        message: `Insufficient stock. Available: ${availableStock} kg, Required: ${quantity} kg` 
+      };
+    }
+    
+    return { available: true, message: `Stock available: ${availableStock} kg` };
   };
 
   const removeLineItem = (index: number) => {
@@ -523,12 +569,16 @@ export default function InvoicesPage() {
                               <SelectValue placeholder="Select item" />
                             </SelectTrigger>
                             <SelectContent>
-                              {items.map((item) => (
-                                <SelectItem key={item.item_id} value={item.item_id.toString()}>
-                                  {item.name} ({item.uom}) - Stock: {item.current_stock} {item.uom}
-                                  {item.selling_price && ` - $${item.selling_price}/${item.uom}`}
-                                </SelectItem>
-                              ))}
+                              {items.map((item) => {
+                                const correctStock = calculateCorrectStockKg(item);
+                                const stockDisplay = correctStock < 0 ? 'Out of Stock' : `${correctStock} kg`;
+                                return (
+                                  <SelectItem key={item.item_id} value={item.item_id.toString()}>
+                                    {item.name} - Stock: {stockDisplay}
+                                    {item.selling_price && ` - $${item.selling_price}/${item.uom}`}
+                                  </SelectItem>
+                                );
+                              })}
                             </SelectContent>
                           </Select>
                         </div>
