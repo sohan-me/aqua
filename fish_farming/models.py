@@ -172,6 +172,7 @@ class Item(models.Model):
         ('maintenance', 'Maintenance'),
         ('other', 'Other'),
     ])
+    unit = models.CharField(max_length=20, default='kg', help_text="Unit of measurement")
     income_account = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, blank=True, related_name='income_items')
     expense_account = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, blank=True, related_name='expense_items')
     asset_account = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, blank=True, related_name='asset_items')
@@ -262,6 +263,33 @@ class Item(models.Model):
                 total_kg += entry.quantity * Decimal('0.001')
             # Add other unit conversions as needed
         return total_kg
+    
+    def get_total_stock_in_unit(self):
+        """Calculate total stock in the item's unit from all stock entries"""
+        total_in_unit = 0
+        for entry in self.stock_entries.all():
+            if entry.unit == self.unit:
+                # Same unit, add directly
+                total_in_unit += entry.quantity
+            elif entry.unit in ['packet', 'pack'] and entry.packet_size and self.unit == 'kg':
+                # Convert packets to kg
+                total_in_unit += entry.quantity * entry.packet_size
+            elif entry.unit == 'ml' and self.unit == 'litre':
+                # Convert ml to litres
+                total_in_unit += entry.quantity / 1000
+            elif entry.unit == 'litre' and self.unit == 'ml':
+                # Convert litres to ml
+                total_in_unit += entry.quantity * 1000
+            elif entry.unit == 'gram' and self.unit == 'kg':
+                # Convert grams to kg
+                total_in_unit += entry.quantity / 1000
+            elif entry.unit == 'kg' and self.unit == 'gram':
+                # Convert kg to grams
+                total_in_unit += entry.quantity * 1000
+            else:
+                # For other cases, just add the quantity (simplified)
+                total_in_unit += entry.quantity
+        return total_in_unit
     
     def get_stock_summary(self):
         """Get a summary of all stock entries"""
@@ -551,6 +579,9 @@ class InvoiceLine(models.Model):
     item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='invoice_lines')
     description = models.CharField(max_length=200, blank=True)
     qty = models.DecimalField(max_digits=10, decimal_places=2)
+    unit = models.CharField(max_length=20, blank=True, help_text="Unit of measurement (kg, packet, pieces, etc.)")
+    packet_size = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Packet size in kg")
+    gallon_size = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Gallon size in litres")
     rate = models.DecimalField(max_digits=12, decimal_places=2)
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -563,7 +594,12 @@ class InvoiceLine(models.Model):
     
     def save(self, *args, **kwargs):
         # Auto-calculate amount
-        self.amount = self.qty * self.rate
+        # If packet_size is provided, multiply quantity by packet_size, otherwise use quantity as is
+        effective_qty = self.qty
+        if self.packet_size and self.packet_size > 0:
+            effective_qty = self.qty * self.packet_size
+        
+        self.amount = effective_qty * self.rate
         super().save(*args, **kwargs)
 
 

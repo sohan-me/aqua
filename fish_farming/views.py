@@ -3478,12 +3478,29 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             # Create inventory transaction for inventory items
             # Only inventory_part items should deduct from stock
             if line.item.item_type == 'inventory_part':
+                # Calculate quantity in kg for feed items
+                qty_in_kg = line.qty
+                
+                # For feed items, convert to kg based on unit
+                if line.item.category == 'feed':
+                    if line.unit == 'packet' and line.packet_size:
+                        # Convert packets to kg: quantity * packet_size
+                        qty_in_kg = line.qty * line.packet_size
+                    elif line.unit == 'gram':
+                        # Convert grams to kg: divide by 1000
+                        qty_in_kg = line.qty / 1000
+                    elif line.unit == 'ton':
+                        # Convert tons to kg: multiply by 1000
+                        qty_in_kg = line.qty * 1000
+                    # For kg, litre, piece, ml, box, bag, bottle - use as is
+                    # (assuming these are already in appropriate units for feed)
+                
                 InventoryTransactionLine.objects.create(
                     inventory_transaction=inv_txn,
                     item=line.item,
-                    qty=-line.qty,  # Negative for issue/sale
+                    qty=-qty_in_kg,  # Negative for issue/sale, now in kg
                     unit_cost=line.rate,
-                    memo=f"Sold to {invoice.customer.name}",
+                    memo=f"Sold to {invoice.customer.name} ({line.qty} {line.unit} = {qty_in_kg} kg)",
                 )
     
     @action(detail=False, methods=['get'])
@@ -3988,7 +4005,13 @@ class InvoiceLineViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         # Calculate amount before saving
         data = serializer.validated_data
-        data['amount'] = data['qty'] * data['rate']
+        
+        # If packet_size is provided, multiply quantity by packet_size, otherwise use quantity as is
+        effective_qty = data['qty']
+        if data.get('packet_size') and data['packet_size'] > 0:
+            effective_qty = data['qty'] * data['packet_size']
+        
+        data['amount'] = effective_qty * data['rate']
         
         invoice_line = serializer.save()
         
@@ -4046,7 +4069,9 @@ class InvoiceLineViewSet(viewsets.ModelViewSet):
                 user=invoice_line.invoice.user,
                 item=invoice_line.item,
                 quantity=-invoice_line.qty,  # Negative quantity for deduction
-                unit="pcs",
+                unit=invoice_line.unit,  # Use the invoice line's unit instead of hardcoded "pcs"
+                packet_size=invoice_line.packet_size,
+                gallon_size=invoice_line.gallon_size,
                 unit_cost=invoice_line.rate,
                 entry_date=invoice_line.invoice.invoice_date,
                 supplier=f"SOLD TO {invoice_line.invoice.customer.name}",
@@ -4093,7 +4118,7 @@ class InvoiceLineViewSet(viewsets.ModelViewSet):
                 item=invoice_line.item,
                 defaults={
                     'pond': invoice_line.invoice.customer.pond,  # Link to the pond
-                    'unit': "pcs",
+                    'unit': invoice_line.unit,  # Use the invoice line's unit instead of hardcoded "pcs"
                     'unit_cost': invoice_line.rate,
                     'current_stock': 0,
                     'min_stock_level': 0,
@@ -4101,7 +4126,12 @@ class InvoiceLineViewSet(viewsets.ModelViewSet):
             )
             
             # Add the invoiced quantity to customer stock
-            customer_stock.add_stock(invoice_line.qty, invoice_line.rate)
+            # Calculate effective quantity: if packet_size is provided, multiply qty by packet_size
+            effective_qty = invoice_line.qty
+            if invoice_line.packet_size and invoice_line.packet_size > 0:
+                effective_qty = invoice_line.qty * invoice_line.packet_size
+            
+            customer_stock.add_stock(effective_qty, invoice_line.rate)
 
 
 class CustomerPaymentViewSet(viewsets.ModelViewSet):

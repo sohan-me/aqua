@@ -17,13 +17,13 @@ import { toast } from 'sonner';
 
 // UOM options for different item categories
 const UOM_OPTIONS = {
-  feed: ['kg', 'packet', 'pack'],
-  medicine: ['kg', 'litre', 'pieces'],
-  equipment: ['pieces'],
-  chemical: ['kg', 'litre', 'gallon'],
-  supplies: ['kg', 'pieces'],
-  maintenance: ['pieces'],
-  other: ['kg', 'pieces'],
+  feed: ['kg', 'litre', 'piece', 'gram', 'ml', 'ton', 'box', 'bag', 'bottle', 'packet'],
+  medicine: ['kg', 'litre', 'piece', 'gram', 'ml', 'ton', 'box', 'bag', 'bottle', 'packet'],
+  equipment: ['kg', 'litre', 'piece', 'gram', 'ml', 'ton', 'box', 'bag', 'bottle', 'packet'],
+  chemical: ['kg', 'litre', 'piece', 'gram', 'ml', 'ton', 'box', 'bag', 'bottle', 'packet'],
+  supplies: ['kg', 'litre', 'piece', 'gram', 'ml', 'ton', 'box', 'bag', 'bottle', 'packet'],
+  maintenance: ['kg', 'litre', 'piece', 'gram', 'ml', 'ton', 'box', 'bag', 'bottle', 'packet'],
+  other: ['kg', 'litre', 'piece', 'gram', 'ml', 'ton', 'box', 'bag', 'bottle', 'packet'],
 };
 
 interface Bill {
@@ -57,7 +57,6 @@ interface BillLine {
   qty?: number; // Quantity field name from API
   unit?: string; // Unit of measurement
   packet_size?: number; // Packet size in kg
-  gallon_size?: number; // Gallon size in litres
   cost?: number; // Cost field name from API
   line_amount?: number; // Line amount field name from API
   // Expense mode fields
@@ -194,7 +193,6 @@ export default function BillsPage() {
       newLineItem.qty = 0;
       newLineItem.unit = 'kg'; // Default unit
       newLineItem.packet_size = 0;
-      newLineItem.gallon_size = 0;
       newLineItem.cost = 0;
       newLineItem.line_amount = 0;
     } else {
@@ -206,11 +204,8 @@ export default function BillsPage() {
   };
 
   const getUomOptionsForItem = (itemId: number) => {
-    const item = items.find(i => i.item_id === itemId);
-    if (item && item.category) {
-      return UOM_OPTIONS[item.category as keyof typeof UOM_OPTIONS] || ['kg', 'pieces'];
-    }
-    return ['kg', 'pieces'];
+    // Return the comprehensive list of UOM options for all items
+    return ['kg', 'litre', 'piece', 'gram', 'ml', 'ton', 'box', 'bag', 'bottle', 'packet'];
   };
 
   const updateLineItem = (index: number, field: keyof BillLine, value: any) => {
@@ -222,7 +217,6 @@ export default function BillsPage() {
       const uomOptions = getUomOptionsForItem(value);
       updated[index].unit = uomOptions[0] || 'kg';
       updated[index].packet_size = 0;
-      updated[index].gallon_size = 0;
     }
     
     // Calculate total cost for item mode
@@ -316,7 +310,6 @@ export default function BillsPage() {
             billLineData.qty = line.qty || 0;
             billLineData.unit = line.unit || 'kg';
             billLineData.packet_size = line.packet_size || null;
-            billLineData.gallon_size = line.gallon_size || null;
             billLineData.cost = line.cost || 0;
             billLineData.line_amount = line.line_amount || 0;
           } else {
@@ -346,7 +339,6 @@ export default function BillsPage() {
             billLineData.qty = line.qty || 0;
             billLineData.unit = line.unit || 'kg';
             billLineData.packet_size = line.packet_size || null;
-            billLineData.gallon_size = line.gallon_size || null;
             billLineData.cost = line.cost || 0;
             billLineData.line_amount = line.line_amount || 0;
           } else {
@@ -419,7 +411,6 @@ export default function BillsPage() {
         qty: line.qty || 0,
         unit: line.unit || 'kg',
         packet_size: line.packet_size || 0,
-        gallon_size: line.gallon_size || 0,
         cost: line.cost || 0,
         line_amount: line.line_amount || 0,
         // Expense mode fields
@@ -786,7 +777,7 @@ export default function BillsPage() {
                               </div>
                               
                               {/* Conditional packet size field */}
-                              {(line.unit === 'packet' || line.unit === 'pack') && (
+                              {line.unit === 'packet' && (
                                 <div className="space-y-2">
                                   <Label>Packet Size (kg)</Label>
                                   <Input
@@ -800,20 +791,6 @@ export default function BillsPage() {
                                 </div>
                               )}
                               
-                              {/* Conditional gallon size field */}
-                              {line.unit === 'gallon' && (
-                                <div className="space-y-2">
-                                  <Label>Gallon Size (litres)</Label>
-                                  <Input
-                                    type="number"
-                                    step="0.1"
-                                    value={line.gallon_size || ''}
-                                    onChange={(e) => updateLineItem(actualIndex, 'gallon_size', parseFloat(e.target.value) || 0)}
-                                    placeholder="e.g., 5, 10, 20"
-                                    className="h-12"
-                                  />
-                                </div>
-                              )}
                             </div>
                             
                             {/* Third row - Cost, Amount, and Actions */}
@@ -1057,6 +1034,7 @@ export default function BillsPage() {
                         <TableHead>Item/Account</TableHead>
                         <TableHead>Description</TableHead>
                         <TableHead>Quantity</TableHead>
+                        <TableHead>Unit</TableHead>
                         <TableHead>Unit Cost</TableHead>
                         <TableHead>Amount</TableHead>
                       </TableRow>
@@ -1076,6 +1054,7 @@ export default function BillsPage() {
                             {line.is_item ? line.description : line.line_memo}
                           </TableCell>
                           <TableCell>{line.qty || '-'}</TableCell>
+                          <TableCell>{line.unit || '-'}</TableCell>
                           <TableCell>{line.cost ? `৳${Number(line.cost).toFixed(2)}` : '-'}</TableCell>
                           <TableCell className="font-medium text-right">
                             ৳{line.is_item ? (Number(line.line_amount || 0).toFixed(2)) : (Number(line.amount || 0).toFixed(2))}

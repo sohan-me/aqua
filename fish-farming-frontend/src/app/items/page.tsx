@@ -36,6 +36,7 @@ interface Item {
   item_type: 'inventory_part' | 'non_inventory' | 'service' | 'payment' | 'discount';
   category: string | null;
   category_name?: string;
+  unit?: string;
   income_account: number | null;
   income_account_name?: string;
   expense_account: number | null;
@@ -54,6 +55,7 @@ interface Item {
   stock_status?: string;
   is_low_stock?: boolean;
   total_stock_kg?: number;
+  total_stock_in_unit?: number;
   stock_summary?: string[];
   stock_entries?: StockEntry[];
 }
@@ -87,6 +89,7 @@ export default function ItemsPage() {
     name: '',
     item_type: 'inventory_part' as 'inventory_part' | 'non_inventory' | 'service' | 'payment' | 'discount',
     category: '',
+    unit: 'kg',
     income_account: '',
     expense_account: '',
     cost_of_goods_sold_account: '',
@@ -157,6 +160,7 @@ export default function ItemsPage() {
       name: item.name,
       item_type: item.item_type,
       category: item.category || '',
+      unit: item.unit || 'kg',
       income_account: item.income_account?.toString() || '',
       expense_account: item.expense_account?.toString() || '',
       cost_of_goods_sold_account: item.cost_of_goods_sold_account?.toString() || '',
@@ -186,6 +190,7 @@ export default function ItemsPage() {
       name: '',
       item_type: 'inventory_part',
       category: '',
+      unit: 'kg',
       income_account: '',
       expense_account: '',
       cost_of_goods_sold_account: '',
@@ -225,9 +230,10 @@ export default function ItemsPage() {
   };
 
   const getStockStatusBadge = (item: Item) => {
-    if (item.total_stock_kg === undefined || item.total_stock_kg === null) return null;
+    const stockInUnit = item.total_stock_in_unit !== undefined ? item.total_stock_in_unit : item.total_stock_kg;
+    if (stockInUnit === undefined || stockInUnit === null) return null;
     
-    const stock = Number(item.total_stock_kg);
+    const stock = Number(stockInUnit);
     const minLevel = Number(item.min_stock_level) || 0;
     
     if (stock <= 0) {
@@ -328,7 +334,23 @@ export default function ItemsPage() {
                       <Label htmlFor="category">Category</Label>
                       <Select
                         value={formData.category}
-                        onValueChange={(value) => setFormData({ ...formData, category: value })}
+                        onValueChange={(value) => {
+                          // Set default unit based on category
+                          let defaultUnit = 'kg';
+                          if (value === 'medicine') {
+                            defaultUnit = 'litre';
+                          } else if (value === 'equipment') {
+                            defaultUnit = 'piece';
+                          } else if (value === 'supplies') {
+                            defaultUnit = 'piece';
+                          }
+                          
+                          setFormData({ 
+                            ...formData, 
+                            category: value,
+                            unit: defaultUnit
+                          });
+                        }}
                       >
                         <SelectTrigger>
                           <SelectValue placeholder="Select category" />
@@ -342,6 +364,29 @@ export default function ItemsPage() {
                           <SelectItem value="supplies">Supplies</SelectItem>
                           <SelectItem value="maintenance">Maintenance</SelectItem>
                           <SelectItem value="other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="unit">Unit</Label>
+                      <Select
+                        value={formData.unit}
+                        onValueChange={(value) => setFormData({ ...formData, unit: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select unit" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="kg">Kilogram (kg)</SelectItem>
+                          <SelectItem value="litre">Litre (L)</SelectItem>
+                          <SelectItem value="piece">Piece</SelectItem>
+                          <SelectItem value="gram">Gram (g)</SelectItem>
+                          <SelectItem value="ml">Milliliter (ml)</SelectItem>
+                          <SelectItem value="ton">Ton</SelectItem>
+                          <SelectItem value="box">Box</SelectItem>
+                          <SelectItem value="bag">Bag</SelectItem>
+                          <SelectItem value="bottle">Bottle</SelectItem>
+                          <SelectItem value="packet">Packet</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -376,12 +421,12 @@ export default function ItemsPage() {
                 <TabsContent value="stock" className="space-y-4">
                   <div className="grid grid-cols-3 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="total_stock_kg">Total Stock (kg)</Label>
+                      <Label htmlFor="total_stock">Total Stock ({editingItem?.unit || 'kg'})</Label>
                       <Input
-                        id="total_stock_kg"
+                        id="total_stock"
                         type="number"
                         step="0.001"
-                        value={editingItem?.total_stock_kg || 0}
+                        value={editingItem?.total_stock_in_unit || editingItem?.total_stock_kg || 0}
                         readOnly
                         className="bg-gray-50"
                         placeholder="0.000"
@@ -389,7 +434,7 @@ export default function ItemsPage() {
                       <p className="text-xs text-gray-500">Calculated from stock entries</p>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="min_stock_level">Min Stock Level</Label>
+                      <Label htmlFor="min_stock_level">Min Stock Level ({editingItem?.unit || 'kg'})</Label>
                       <Input
                         id="min_stock_level"
                         type="number"
@@ -400,7 +445,7 @@ export default function ItemsPage() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="max_stock_level">Max Stock Level</Label>
+                      <Label htmlFor="max_stock_level">Max Stock Level ({editingItem?.unit || 'kg'})</Label>
                       <Input
                         id="max_stock_level"
                         type="number"
@@ -414,7 +459,7 @@ export default function ItemsPage() {
                   <div className="bg-blue-50 p-4 rounded-lg">
                     <p className="text-sm text-blue-800">
                       <strong>Note:</strong> Stock levels are automatically updated when inventory transactions occur. 
-                      Set minimum stock level to receive low stock alerts.
+                      Set minimum stock level to receive low stock alerts. Stock is displayed in the item's unit ({editingItem?.unit || 'kg'}).
                     </p>
                   </div>
                 </TabsContent>
@@ -659,15 +704,24 @@ export default function ItemsPage() {
                       <strong>Category:</strong> {item.category}
                     </p>
                   )}
+                  {item.unit && (
+                    <p className="text-sm text-gray-600">
+                      <strong>Unit:</strong> {item.unit}
+                    </p>
+                  )}
                   {item.current_price && (
                     <p className="text-sm font-semibold text-green-600">
                       <strong>Current Price:</strong> ${Number(item.current_price).toFixed(2)}
                     </p>
                   )}
-                  {item.total_stock_kg !== undefined && item.total_stock_kg !== null && (
+                  {(item.total_stock_in_unit !== undefined || item.total_stock_kg !== undefined) && (
                     <div className="space-y-1">
                       <p className="text-sm font-semibold text-blue-600">
-                        <strong>Total Stock:</strong> {Number(item.total_stock_kg).toFixed(2)} kg
+                        <strong>Total Stock:</strong> {
+                          item.total_stock_in_unit !== undefined 
+                            ? `${Number(item.total_stock_in_unit).toFixed(2)} ${item.unit || 'kg'}`
+                            : `${Number(item.total_stock_kg).toFixed(2)} kg`
+                        }
                       </p>
                       {item.stock_summary && item.stock_summary.length > 0 && (
                         <div className="text-sm text-gray-600">
@@ -681,12 +735,12 @@ export default function ItemsPage() {
                       )}
                       {item.min_stock_level && item.min_stock_level > 0 && (
                         <p className="text-sm text-gray-600">
-                          <strong>Min Level:</strong> {Number(item.min_stock_level).toFixed(3)} kg
+                          <strong>Min Level:</strong> {Number(item.min_stock_level).toFixed(3)} {item.unit || 'kg'}
                         </p>
                       )}
                       {item.max_stock_level && item.max_stock_level > 0 && (
                         <p className="text-sm text-gray-600">
-                          <strong>Max Level:</strong> {Number(item.max_stock_level).toFixed(3)} kg
+                          <strong>Max Level:</strong> {Number(item.max_stock_level).toFixed(3)} {item.unit || 'kg'}
                         </p>
                       )}
                     </div>

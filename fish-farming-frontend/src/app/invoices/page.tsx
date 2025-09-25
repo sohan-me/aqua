@@ -14,6 +14,17 @@ import { Plus, Search, Edit, Trash2, FileText, Calendar, DollarSign, User } from
 import { useApi } from '@/hooks/useApi';
 import { toast } from 'sonner';
 
+// UOM options for different item categories
+const UOM_OPTIONS = {
+  feed: ['kg', 'litre', 'piece', 'gram', 'ml', 'ton', 'box', 'bag', 'bottle', 'packet'],
+  medicine: ['kg', 'litre', 'piece', 'gram', 'ml', 'ton', 'box', 'bag', 'bottle', 'packet'],
+  equipment: ['kg', 'litre', 'piece', 'gram', 'ml', 'ton', 'box', 'bag', 'bottle', 'packet'],
+  chemical: ['kg', 'litre', 'piece', 'gram', 'ml', 'ton', 'box', 'bag', 'bottle', 'packet'],
+  supplies: ['kg', 'litre', 'piece', 'gram', 'ml', 'ton', 'box', 'bag', 'bottle', 'packet'],
+  maintenance: ['kg', 'litre', 'piece', 'gram', 'ml', 'ton', 'box', 'bag', 'bottle', 'packet'],
+  other: ['kg', 'litre', 'piece', 'gram', 'ml', 'ton', 'box', 'bag', 'bottle', 'packet'],
+};
+
 interface Invoice {
   invoice_id: number;
   customer_id: number;
@@ -35,6 +46,9 @@ interface InvoiceLine {
   item_name?: string;
   description?: string;
   qty: number;
+  unit?: string; // Unit of measurement
+  packet_size?: number; // Packet size in kg
+  gallon_size?: number; // Gallon size in litres
   rate: number;
   amount: number;
 }
@@ -49,11 +63,14 @@ interface Item {
   item_id: number;
   name: string;
   item_type: string;
+  category?: string | null;
   uom: string;
   current_stock: number;
   total_stock_kg?: number;
+  total_stock_in_unit?: number; // Stock in the item's primary unit
   selling_price?: number;
   income_account?: number;
+  unit?: string;
   stock_entries?: Array<{
     entry_id: number;
     quantity: number;
@@ -85,34 +102,113 @@ export default function InvoicesPage() {
 
   const { get, post, put, delete: del } = useApi();
 
-  // Calculate correct stock in kg from stock entries
-  const calculateCorrectStockKg = (item: Item): number => {
+  // Calculate correct stock from stock entries - returns stock in the item's primary unit
+  const calculateCorrectStock = (item: Item): number => {
     if (!item.stock_entries || item.stock_entries.length === 0) {
-      return item.total_stock_kg || 0;
+      // Use total_stock_in_unit if available, otherwise fall back to total_stock_kg
+      return item.total_stock_in_unit || item.total_stock_kg || 0;
     }
 
-    let totalKg = 0;
+    // Unit mapping for invalid units found in database
+    const unitMapping: { [key: string]: string } = {
+      'pcs': 'piece',
+      'pack': 'packet',
+      'pieces': 'piece',
+      'packets': 'packet',
+      'liters': 'litre',
+      'kilograms': 'kg',
+      'grams': 'gram',
+      'milliliters': 'ml',
+      'tons': 'ton',
+      'boxes': 'box',
+      'bags': 'bag',
+      'bottles': 'bottle'
+    };
+
+    let totalStock = 0;
     for (const entry of item.stock_entries) {
       const quantity = parseFloat(entry.quantity.toString());
+      const unit = unitMapping[entry.unit] || entry.unit;
       
-      if (entry.unit === 'kg') {
-        totalKg += quantity;
-      } else if (entry.unit === 'pcs') {
-        // Convert pieces to kg - assuming 1 piece = 1 kg for feed items
-        totalKg += quantity;
-      } else if (entry.unit === 'packet' || entry.unit === 'pack') {
+      if (unit === 'kg') {
+        totalStock += quantity;
+      } else if (unit === 'litre') {
+        totalStock += quantity;
+      } else if (unit === 'piece') {
+        totalStock += quantity;
+      } else if (unit === 'packet') {
         if (entry.packet_size) {
-          // Convert packets to kg using packet size
-          totalKg += quantity * parseFloat(entry.packet_size.toString());
+          // Convert packets to the base unit using packet size
+          totalStock += quantity * parseFloat(entry.packet_size.toString());
         } else {
-          // If no packet size, assume 1 packet = 1 kg
-          totalKg += quantity;
+          // If no packet size, assume 1 packet = 1 unit
+          totalStock += quantity;
         }
+      } else if (unit === 'gram') {
+        // Convert grams to kg (divide by 1000)
+        totalStock += quantity / 1000;
+      } else if (unit === 'ml') {
+        // Convert ml to litre (divide by 1000)
+        totalStock += quantity / 1000;
+      } else if (unit === 'ton') {
+        // Convert tons to kg (multiply by 1000)
+        totalStock += quantity * 1000;
+      } else {
+        // For other units (box, bag, bottle), treat as 1:1
+        totalStock += quantity;
       }
     }
     
     // Round to avoid floating point precision issues
-    return Math.round(totalKg * 100) / 100;
+    return Math.round(totalStock * 100) / 100;
+  };
+
+  // Get the appropriate unit for display
+  const getDisplayUnit = (item: Item): string => {
+    console.log(item);
+    // Define valid units (matching the items page options)
+    const validUnits = ['kg', 'litre', 'piece', 'gram', 'ml', 'ton', 'box', 'bag', 'bottle', 'packet'];
+    
+    // Unit mapping for invalid units found in database
+    const unitMapping: { [key: string]: string } = {
+      'pcs': 'piece',
+      'pack': 'packet',
+      'pieces': 'piece',
+      'packets': 'packet',
+      'liters': 'litre',
+      'kilograms': 'kg',
+      'grams': 'gram',
+      'milliliters': 'ml',
+      'tons': 'ton',
+      'boxes': 'box',
+      'bags': 'bag',
+      'bottles': 'bottle'
+    };
+    
+    console.log("item.stock_entries", item.stock_entries);
+    
+    // If no stock entries, use the item's default unit
+    if (!item.stock_entries || item.stock_entries.length === 0) {
+      console.log("item.unit");
+      const itemUnit = item.unit || 'kg';
+      console.log("itemUnit", itemUnit);
+      return unitMapping[itemUnit] || (validUnits.includes(itemUnit) ? itemUnit : 'kg');
+    }
+    
+    // Get the most common unit from stock entries
+    const unitCounts: { [key: string]: number } = {};
+    for (const entry of item.stock_entries) {
+      const mappedUnit = unitMapping[entry.unit] || entry.unit;
+      unitCounts[mappedUnit] = (unitCounts[mappedUnit] || 0) + 1;
+    }
+    
+    // Return the most common valid unit, or the item's default unit
+    const mostCommonUnit = Object.keys(unitCounts).reduce((a, b) => 
+      unitCounts[a] > unitCounts[b] ? a : b
+    );
+    
+    const finalUnit = mostCommonUnit || item.unit || 'kg';
+    return unitMapping[finalUnit] || (validUnits.includes(finalUnit) ? finalUnit : 'kg');
   };
 
   useEffect(() => {
@@ -170,11 +266,19 @@ export default function InvoicesPage() {
     return { totalAmount };
   };
 
+  const getUomOptionsForItem = (itemId: number) => {
+    // Return the comprehensive list of UOM options for all items
+    return ['kg', 'litre', 'piece', 'gram', 'ml', 'ton', 'box', 'bag', 'bottle', 'packet'];
+  };
+
   const addLineItem = () => {
     setLineItems([...lineItems, {
       item_id: 0,
       description: '',
       qty: 0,
+      unit: 'kg', // Default unit
+      packet_size: 0,
+      gallon_size: 0,
       rate: 0,
       amount: 0,
     }]);
@@ -184,8 +288,14 @@ export default function InvoicesPage() {
     const updated = [...lineItems];
     updated[index] = { ...updated[index], [field]: value };
     
-    // Auto-fill unit price when item is selected
+    // If item changes, reset unit to first available option for that category
     if (field === 'item_id' && value) {
+      const uomOptions = getUomOptionsForItem(value);
+      updated[index].unit = uomOptions[0] || 'kg';
+      updated[index].packet_size = 0;
+      updated[index].gallon_size = 0;
+      
+      // Auto-fill unit price when item is selected
       const selectedItem = items.find(item => item.item_id === value);
       if (selectedItem && selectedItem.selling_price) {
         updated[index].rate = selectedItem.selling_price;
@@ -193,7 +303,7 @@ export default function InvoicesPage() {
     }
     
     // Calculate total price
-      if (field === 'qty' || field === 'rate') {
+    if (field === 'qty' || field === 'rate') {
       const quantity = updated[index].qty || 0;
       const price = updated[index].rate || 0;
       updated[index].amount = quantity * price;
@@ -202,26 +312,41 @@ export default function InvoicesPage() {
     setLineItems(updated);
   };
 
-  const checkStockAvailability = (itemId: number, quantity: number) => {
+  const checkStockAvailability = (itemId: number, quantity: number, unit: string = 'kg', packetSize: number = 0) => {
     const item = items.find(i => i.item_id === itemId);
     if (!item) return { available: false, message: 'Item not found' };
     
-    const availableStock = calculateCorrectStockKg(item);
+    const availableStock = calculateCorrectStock(item);
+    const displayUnit = getDisplayUnit(item);
+    
+    // Convert required quantity to kg for feed items (same logic as backend)
+    let requiredQtyInKg = quantity;
+    if (item.category === 'feed') {
+      if (unit === 'packet' && packetSize > 0) {
+        requiredQtyInKg = quantity * packetSize;
+      } else if (unit === 'gram') {
+        requiredQtyInKg = quantity / 1000;
+      } else if (unit === 'ton') {
+        requiredQtyInKg = quantity * 1000;
+      }
+      // For kg, litre, piece, ml, box, bag, bottle - use as is
+    }
+    
     if (availableStock <= 0) {
       return { 
         available: false, 
-        message: `Item is out of stock. Current stock: ${availableStock} kg` 
+        message: `Item is out of stock. Current stock: ${availableStock} ${displayUnit}` 
       };
     }
     
-    if (availableStock < quantity) {
+    if (availableStock < requiredQtyInKg) {
       return { 
         available: false, 
-        message: `Insufficient stock. Available: ${availableStock} kg, Required: ${quantity} kg` 
+        message: `Insufficient stock. Available: ${availableStock} ${displayUnit}, Required: ${requiredQtyInKg} kg (${quantity} ${unit})` 
       };
     }
     
-    return { available: true, message: `Stock available: ${availableStock} kg` };
+    return { available: true, message: `Stock available: ${availableStock} ${displayUnit}` };
   };
 
   const removeLineItem = (index: number) => {
@@ -262,7 +387,7 @@ export default function InvoicesPage() {
     // Check stock availability for all line items
     const stockChecks = lineItems.map(line => {
       if (line.item_id && line.qty) {
-        return checkStockAvailability(line.item_id, line.qty);
+        return checkStockAvailability(line.item_id, line.qty, line.unit || 'kg', line.packet_size || 0);
       }
       return { available: true, message: '' };
     });
@@ -302,6 +427,9 @@ export default function InvoicesPage() {
             item: line.item_id || null,
             description: line.description || '',
             qty: line.qty || 0,
+            unit: line.unit || 'kg',
+            packet_size: line.packet_size || null,
+            gallon_size: line.gallon_size || null,
             rate: line.rate || 0,
             amount: line.amount || 0,
           });
@@ -318,6 +446,9 @@ export default function InvoicesPage() {
             item: line.item_id || null,
             description: line.description || '',
             qty: line.qty || 0,
+            unit: line.unit || 'kg',
+            packet_size: line.packet_size || null,
+            gallon_size: line.gallon_size || null,
             rate: line.rate || 0,
             amount: line.amount || 0,
           });
@@ -368,6 +499,9 @@ export default function InvoicesPage() {
         item_name: line.item_name || '',
         description: line.description || '',
         qty: line.qty || 0,
+        unit: line.unit || 'kg',
+        packet_size: line.packet_size || 0,
+        gallon_size: line.gallon_size || 0,
         rate: line.rate || 0,
         amount: Number(line.amount) || 0,
       }));
@@ -558,65 +692,96 @@ export default function InvoicesPage() {
                   {lineItems.map((line, index) => (
                     <Card key={index} className="p-6">
                       <div className="space-y-4">
-                        {/* First Row: Item List */}
-                        <div className="space-y-2">
-                          <Label>Item List</Label>
-                          <Select
-                            value={line.item_id?.toString() || ''}
-                            onValueChange={(value) => updateLineItem(index, 'item_id', parseInt(value))}
-                          >
-                            <SelectTrigger className="h-12 w-full">
-                              <SelectValue placeholder="Select item" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {items.map((item) => {
-                                const correctStock = calculateCorrectStockKg(item);
-                                const stockDisplay = correctStock < 0 ? 'Out of Stock' : `${correctStock} kg`;
-                                return (
-                                  <SelectItem key={item.item_id} value={item.item_id.toString()}>
-                                    {item.name} - Stock: {stockDisplay}
-                                    {item.selling_price && ` - $${item.selling_price}/${item.uom}`}
-                                  </SelectItem>
-                                );
-                              })}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        
-                        {/* Second Row: Description */}
-                        <div className="space-y-2">
-                          <Label>Description</Label>
-                          <Input
-                            value={line.description || ''}
-                            onChange={(e) => updateLineItem(index, 'description', e.target.value)}
-                            placeholder="Description"
-                            className="h-12 w-full"
-                          />
-                        </div>
-                        
-                        {/* Third Row: Quantity, Rate, Amount, and Actions */}
-                        <div className="grid grid-cols-4 gap-4 items-end">
+                        {/* First row - Item and Description */}
+                        <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
-                            <Label>QTY</Label>
+                            <Label>Item List</Label>
+                            <Select
+                              value={line.item_id?.toString() || ''}
+                              onValueChange={(value) => updateLineItem(index, 'item_id', parseInt(value))}
+                            >
+                              <SelectTrigger className="h-12">
+                                <SelectValue placeholder="Select item" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {items.map((item) => {
+                                  console.log(item);
+                                  const correctStock = calculateCorrectStock(item);
+                                  const displayUnit = getDisplayUnit(item);
+                                  const stockDisplay = correctStock <= 0 ? 'Out of Stock' : `${correctStock} ${displayUnit}`;
+                                  return (
+                                    <SelectItem key={item.item_id} value={item.item_id.toString()}>
+                                      {item.name} ({item.category || 'No Category'}) - Stock: {stockDisplay}
+                                      {item.selling_price && ` - $${item.selling_price}/${item.uom}`}
+                                    </SelectItem>
+                                  );
+                                })}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <Label>Description</Label>
+                            <Input
+                              value={line.description || ''}
+                              onChange={(e) => updateLineItem(index, 'description', e.target.value)}
+                              placeholder="Description"
+                              className="h-12"
+                            />
+                          </div>
+                        </div>
+                        
+                        {/* Second row - Quantity, Unit, and Packet Size */}
+                        <div className="grid grid-cols-3 gap-4">
+                          <div className="space-y-2">
+                            <Label>Quantity</Label>
                             <Input
                               type="number"
                               step="0.01"
                               value={line.qty && line.qty > 0 ? line.qty : ''}
                               onChange={(e) => updateLineItem(index, 'qty', parseFloat(e.target.value) || 0)}
                               placeholder="Quantity"
-                              className="h-12 w-full"
+                              className="h-12"
                             />
-                            {/* {line.quantity && line.quantity > 0 && line.item_id && (
-                              <div className={`text-xs p-2 rounded ${
-                                checkStockAvailability(line.item_id, line.quantity).available 
-                                  ? 'bg-green-50 text-green-700' 
-                                  : 'bg-red-50 text-red-700'
-                              }`}>
-                                {checkStockAvailability(line.item_id, line.quantity).message}
-                              </div>
-                            )} */}
                           </div>
                           
+                          <div className="space-y-2">
+                            <Label>Unit of Measure</Label>
+                            <Select
+                              value={line.unit || 'kg'}
+                              onValueChange={(value) => updateLineItem(index, 'unit', value)}
+                            >
+                              <SelectTrigger className="h-12">
+                                <SelectValue placeholder="Select unit" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {getUomOptionsForItem(line.item_id || 0).map((uom) => (
+                                  <SelectItem key={uom} value={uom}>
+                                    {uom}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          
+                          {/* Conditional packet size field */}
+                          {line.unit === 'packet' && (
+                            <div className="space-y-2">
+                              <Label>Packet Size (kg)</Label>
+                              <Input
+                                type="number"
+                                step="0.1"
+                                value={line.packet_size || ''}
+                                onChange={(e) => updateLineItem(index, 'packet_size', parseFloat(e.target.value) || 0)}
+                                placeholder="e.g., 10, 25"
+                                className="h-12"
+                              />
+                            </div>
+                          )}
+                        </div>
+                        
+                        {/* Third row - Rate, Amount, and Actions */}
+                        <div className="grid grid-cols-3 gap-4">
                           <div className="space-y-2">
                             <Label>Rate per Unit</Label>
                             <Input
@@ -625,18 +790,18 @@ export default function InvoicesPage() {
                               value={line.rate && line.rate > 0 ? line.rate : ''}
                               onChange={(e) => updateLineItem(index, 'rate', parseFloat(e.target.value) || 0)}
                               placeholder="Rate per unit"
-                              className="h-12 w-full"
+                              className="h-12"
                             />
                           </div>
                           
                           <div className="space-y-2">
-                            <Label>Amount</Label>
+                            <Label>Total Amount</Label>
                             <Input
                               type="number"
                               step="0.01"
                               value={line.amount || 0}
                               readOnly
-                              className="bg-gray-50 h-12 w-full"
+                              className="bg-gray-50 h-12"
                             />
                           </div>
                           
@@ -649,7 +814,8 @@ export default function InvoicesPage() {
                               onClick={() => removeLineItem(index)}
                               className="text-red-600 hover:text-red-700 h-12 px-3 w-full"
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Remove
                             </Button>
                           </div>
                         </div>
@@ -839,6 +1005,7 @@ export default function InvoicesPage() {
                         <TableHead>Item</TableHead>
                         <TableHead>Description</TableHead>
                         <TableHead>Quantity</TableHead>
+                        <TableHead>Unit</TableHead>
                         <TableHead>Unit Price</TableHead>
                         <TableHead>Amount</TableHead>
                       </TableRow>
@@ -853,6 +1020,7 @@ export default function InvoicesPage() {
                             {line.description || '-'}
                           </TableCell>
                           <TableCell>{line.qty || '-'}</TableCell>
+                          <TableCell>{line.unit || '-'}</TableCell>
                           <TableCell>{line.rate ? `$${Number(line.rate).toFixed(2)}` : '-'}</TableCell>
                           <TableCell className="font-medium text-right">
                             ${Number(line.amount || 0).toFixed(2)}

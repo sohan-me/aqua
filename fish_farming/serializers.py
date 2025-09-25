@@ -140,6 +140,7 @@ class ItemSerializer(serializers.ModelSerializer):
     stock_status = serializers.CharField(source='get_stock_status', read_only=True)
     is_low_stock = serializers.BooleanField(read_only=True)
     total_stock_kg = serializers.SerializerMethodField()
+    total_stock_in_unit = serializers.SerializerMethodField()
     stock_summary = serializers.SerializerMethodField()
     stock_entries = StockEntrySerializer(many=True, read_only=True)
     
@@ -150,6 +151,9 @@ class ItemSerializer(serializers.ModelSerializer):
     
     def get_total_stock_kg(self, obj):
         return obj.get_total_stock_kg()
+    
+    def get_total_stock_in_unit(self, obj):
+        return obj.get_total_stock_in_unit()
     
     def get_stock_summary(self, obj):
         return obj.get_stock_summary()
