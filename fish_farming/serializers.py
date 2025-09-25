@@ -386,6 +386,7 @@ class StockingEventSerializer(serializers.ModelSerializer):
     total_fish = serializers.SerializerMethodField()
     total_weight = serializers.SerializerMethodField()
     total_cost = serializers.SerializerMethodField()
+    lines = serializers.SerializerMethodField()
     
     class Meta:
         model = StockingEvent
@@ -400,6 +401,11 @@ class StockingEventSerializer(serializers.ModelSerializer):
     
     def get_total_cost(self, obj):
         return sum(float(line.unit_cost or 0) * float(line.weight_kg or 0) for line in obj.lines.all())
+    
+    def get_lines(self, obj):
+        from .models import StockingLine
+        lines = StockingLine.objects.filter(stocking_event=obj)
+        return StockingLineSerializer(lines, many=True).data
 
 
 class StockingLineSerializer(serializers.ModelSerializer):
@@ -417,7 +423,9 @@ class FeedingEventSerializer(serializers.ModelSerializer):
     user_username = serializers.CharField(source='user.username', read_only=True)
     pond_name = serializers.CharField(source='pond.name', read_only=True)
     feed_item_name = serializers.CharField(source='feed_item.name', read_only=True)
+    species_name = serializers.CharField(source='species.name', read_only=True)
     total_amount_display = serializers.SerializerMethodField()
+    feed_list = serializers.SerializerMethodField()
     
     class Meta:
         model = FeedingEvent
@@ -432,6 +440,39 @@ class FeedingEventSerializer(serializers.ModelSerializer):
         elif obj.amount_kg:
             return f"{obj.amount_kg} kg"
         return "No amount specified"
+    
+    def get_feed_list(self, obj):
+        """Get available feed items from pond's customer stock"""
+        from .models import CustomerStock, Customer
+        
+        if not obj.pond:
+            return []
+        
+        # Find the customer associated with this pond
+        try:
+            customer = Customer.objects.get(pond=obj.pond, type='internal_pond')
+        except Customer.DoesNotExist:
+            return []
+        
+        # Get customer stock for feed items
+        customer_stocks = CustomerStock.objects.filter(
+            user=obj.user,
+            customer=customer,
+            item__category='feed',
+            current_stock__gt=0
+        ).select_related('item').order_by('item__name')
+        
+        feed_list = []
+        for stock in customer_stocks:
+            feed_list.append({
+                'item_id': stock.item.item_id,
+                'name': stock.item.name,
+                'current_stock': float(stock.current_stock),
+                'unit': stock.unit,
+                'unit_cost': float(stock.unit_cost) if stock.unit_cost else None
+            })
+        
+        return feed_list
 
 
 class FeedingLineSerializer(serializers.ModelSerializer):
@@ -446,19 +487,47 @@ class FeedingLineSerializer(serializers.ModelSerializer):
 class MedicineEventSerializer(serializers.ModelSerializer):
     user_username = serializers.CharField(source='user.username', read_only=True)
     pond_name = serializers.CharField(source='pond.name', read_only=True)
-    total_cost = serializers.SerializerMethodField()
+    medicine_name = serializers.CharField(source='medicine_item.name', read_only=True)
+    medicine_unit = serializers.CharField(source='medicine_item.unit', read_only=True)
+    medicine_list = serializers.SerializerMethodField()
     
     class Meta:
         model = MedicineEvent
         fields = '__all__'
         read_only_fields = ['medicine_id', 'user', 'created_at', 'updated_at']
     
-    def get_total_cost(self, obj):
-        """Calculate total cost from medicine lines"""
-        total = obj.lines.aggregate(
-            total=models.Sum(models.F('qty_used') * models.F('unit_cost'))
-        )['total']
-        return total or 0
+    def get_medicine_list(self, obj):
+        """Get available medicine items from pond's customer stock"""
+        from .models import CustomerStock, Customer
+        
+        if not obj.pond:
+            return []
+        
+        # Find the customer associated with this pond
+        try:
+            customer = Customer.objects.get(pond=obj.pond, type='internal_pond')
+        except Customer.DoesNotExist:
+            return []
+        
+        # Get customer stock for medicine items
+        customer_stocks = CustomerStock.objects.filter(
+            user=obj.user,
+            customer=customer,
+            item__category='medicine',
+            current_stock__gt=0
+        ).select_related('item').order_by('item__name')
+        
+        medicine_list = []
+        for stock in customer_stocks:
+            medicine_list.append({
+                'item': stock.item.item_id,
+                'item_name': stock.item.name,
+                'current_stock': float(stock.current_stock),
+                'unit': stock.unit,
+                'unit_cost': float(stock.unit_cost) if stock.unit_cost else None
+            })
+        
+        return medicine_list
 
 
 class MedicineLineSerializer(serializers.ModelSerializer):
@@ -917,6 +986,7 @@ class CustomerStockSerializer(serializers.ModelSerializer):
     pond_name = serializers.CharField(source='pond.name', read_only=True)
     item_name = serializers.CharField(source='item.name', read_only=True)
     item_type = serializers.CharField(source='item.item_type', read_only=True)
+    category = serializers.CharField(source='item.category', read_only=True)
     packet_size = serializers.DecimalField(source='item.packet_size', read_only=True, max_digits=10, decimal_places=2)
     stock_status = serializers.SerializerMethodField()
     

@@ -20,12 +20,15 @@ interface FeedingEvent {
   pond_name?: string;
   feed_item?: number;
   feed_item_name?: string;
+  species?: number;
+  species_name?: string;
   event_date: string;
   feeding_time?: string;
   packet_qty?: number;
   packet_size?: number;
   amount_kg?: number;
   total_amount_display?: string;
+  feed_list?: FeedItem[];
   memo: string;
   created_at: string;
   total_feed_kg: number;
@@ -35,6 +38,11 @@ interface FeedingEvent {
 
 interface Pond {
   pond_id: number;
+  name: string;
+}
+
+interface Species {
+  species_id: number;
   name: string;
 }
 
@@ -48,11 +56,14 @@ interface FeedItem {
   current_stock: number;
   cost_price?: number;
   selling_price?: number;
+  unit?: string;
+  unit_cost?: number;
 }
 
 export default function FeedingEventsPage() {
   const [feedingEvents, setFeedingEvents] = useState<FeedingEvent[]>([]);
   const [ponds, setPonds] = useState<Pond[]>([]);
+  const [pondSpecies, setPondSpecies] = useState<Species[]>([]);
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
   const [pondFeeds, setPondFeeds] = useState<any[]>([]);
   const [selectedFeed, setSelectedFeed] = useState<any>(null);
@@ -64,11 +75,10 @@ export default function FeedingEventsPage() {
   const [formData, setFormData] = useState({
     pond_id: '',
     feed_item: '',
+    species: '',
     event_date: '',
     feeding_time: '',
-    packet_qty: '',
-    packet_size: '',
-    amount_kg: '',
+    feed_amount: '',
     memo: '',
   });
 
@@ -124,41 +134,101 @@ export default function FeedingEventsPage() {
     try {
       const response = await get(`/customer-stocks/?pond=${pondId}`);
       const feeds = response.results || response;
-      // Filter for feed items only
-      const feedItems = feeds.filter((stock: any) => 
-        stock.item_type === 'inventory_part' && 
-        (stock.item_name.toLowerCase().includes('feed') || 
-         stock.category === 'feed' ||
-         stock.current_stock > 0)
-      );
+      
+      console.log('Raw customer stocks data:', {
+        pondId,
+        response,
+        feeds,
+        firstFeed: feeds[0]
+      });
+      
+      // Filter for feed items only - more flexible filtering
+      const feedItems = feeds.filter((stock: any) => {
+        const isInventoryPart = stock.item_type === 'inventory_part';
+        const isFeedCategory = stock.category === 'feed';
+        const hasStock = stock.current_stock > 0;
+        const isFeedByName = stock.item_name && stock.item_name.toLowerCase().includes('feed');
+        
+        console.log('Filtering stock:', {
+          stock: stock.item_name,
+          isInventoryPart,
+          isFeedCategory,
+          hasStock,
+          isFeedByName,
+          category: stock.category,
+          item_type: stock.item_type,
+          current_stock: stock.current_stock
+        });
+        
+        return isInventoryPart && (isFeedCategory || isFeedByName) && hasStock;
+      });
+      
       setPondFeeds(feedItems);
-      console.log('Pond feeds:', feedItems);
+      console.log('Pond feeds (filtered):', feedItems);
     } catch (error) {
       console.error('Error fetching pond feeds:', error);
       setPondFeeds([]);
     }
   };
 
+  const fetchPondSpecies = async (pondId: number) => {
+    try {
+      // Fetch stocking events for this pond
+      const response = await get(`/stocking-events/?pond=${pondId}`);
+      const stockingEvents = response.results || response;
+      
+      console.log('Stocking Events Debug:', {
+        pondId,
+        response,
+        stockingEvents,
+        firstEvent: stockingEvents[0]
+      });
+      
+      // Extract unique species from stocking events
+      const speciesSet = new Set();
+      const pondSpeciesList: Species[] = [];
+      
+      stockingEvents.forEach((event: any) => {
+        console.log('Processing event:', event);
+        if (event.lines && event.lines.length > 0) {
+          event.lines.forEach((line: any) => {
+            console.log('Processing line:', line);
+            if (line.species_id && !speciesSet.has(line.species_id)) {
+              speciesSet.add(line.species_id);
+              pondSpeciesList.push({
+                species_id: line.species_id,
+                name: line.species_name
+              });
+            }
+          });
+        }
+      });
+      
+      setPondSpecies(pondSpeciesList);
+      console.log('Pond species:', pondSpeciesList);
+    } catch (error) {
+      console.error('Error fetching pond species:', error);
+      setPondSpecies([]);
+    }
+  };
+
 
 
   const handlePondChange = (pondId: string) => {
-    setFormData({ ...formData, pond_id: pondId });
+    setFormData({ ...formData, pond_id: pondId, species: '' }); // Reset species when pond changes
     if (pondId) {
       fetchPondFeeds(parseInt(pondId));
+      fetchPondSpecies(parseInt(pondId));
     } else {
       setPondFeeds([]);
+      setPondSpecies([]);
       setSelectedFeed(null);
     }
   };
 
   const handleFeedSelection = (feed: any) => {
     setSelectedFeed(feed);
-    // Auto-populate packet size if available
-    if (feed.packet_size) {
-      setFormData({ ...formData, packet_size: feed.packet_size.toString(), feed_item: feed.item.toString() });
-    } else {
-      setFormData({ ...formData, feed_item: feed.item.toString() });
-    }
+    setFormData({ ...formData, feed_item: feed.item.toString() });
   };
 
 
@@ -166,23 +236,14 @@ export default function FeedingEventsPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      // Calculate amount_kg if packet information is provided
-      let calculatedAmountKg = null;
-      if (formData.packet_qty && formData.packet_size) {
-        calculatedAmountKg = parseFloat(formData.packet_qty) * parseFloat(formData.packet_size);
-      } else if (formData.amount_kg) {
-        calculatedAmountKg = parseFloat(formData.amount_kg);
-      }
-      
       const feedingData = {
         ...formData,
         pond: parseInt(formData.pond_id),
         feed_item: formData.feed_item ? parseInt(formData.feed_item) : null,
-        packet_qty: formData.packet_qty ? parseFloat(formData.packet_qty) : null,
-        packet_size: formData.packet_size ? parseFloat(formData.packet_size) : null,
-        amount_kg: calculatedAmountKg,
+        species: formData.species ? parseInt(formData.species) : null,
+        amount_kg: formData.feed_amount ? parseFloat(formData.feed_amount) : null,
         feeding_time: formData.feeding_time || null,
-        memo: formData.memo || `${calculatedAmountKg ? calculatedAmountKg.toFixed(2) + ' kg' : '0 kg'} feed consumed`,
+        memo: formData.memo || `${formData.feed_amount ? formData.feed_amount + ' units' : '0 units'} feed consumed`,
       };
 
       if (editingFeeding) {
@@ -208,17 +269,17 @@ export default function FeedingEventsPage() {
     setFormData({
       pond_id: feeding.pond_id.toString(),
       feed_item: feeding.feed_item?.toString() || '',
+      species: feeding.species?.toString() || '',
       event_date: feeding.event_date,
       feeding_time: feeding.feeding_time || '',
-      packet_qty: feeding.packet_qty?.toString() || '',
-      packet_size: feeding.packet_size?.toString() || '',
-      amount_kg: feeding.amount_kg?.toString() || '',
+      feed_amount: feeding.amount_kg?.toString() || '',
       memo: feeding.memo,
     });
     
-    // Fetch pond feeds when editing
+    // Fetch pond feeds and species when editing
     if (feeding.pond_id) {
       fetchPondFeeds(feeding.pond_id);
+      fetchPondSpecies(feeding.pond_id);
     }
     
     setIsDialogOpen(true);
@@ -248,14 +309,14 @@ export default function FeedingEventsPage() {
     setFormData({
       pond_id: '',
       feed_item: '',
+      species: '',
       event_date: '',
       feeding_time: '',
-      packet_qty: '',
-      packet_size: '',
-      amount_kg: '',
+      feed_amount: '',
       memo: '',
     });
     setPondFeeds([]);
+    setPondSpecies([]);
     setSelectedFeed(null);
   };
 
@@ -288,7 +349,7 @@ export default function FeedingEventsPage() {
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit}>
-              <div className="grid grid-cols-2 gap-6 py-4">
+              <div className="grid grid-cols-3 gap-6 py-4">
                 <div className="space-y-2">
                   <Label htmlFor="pond_id">Pond *</Label>
                   <Select
@@ -308,6 +369,26 @@ export default function FeedingEventsPage() {
                   </Select>
                 </div>
                 <div className="space-y-2">
+                  <Label htmlFor="species">Species</Label>
+                  <Select
+                    value={formData.species || undefined}
+                    onValueChange={(value) => setFormData({ ...formData, species: value === "none" ? "" : value })}
+                    disabled={!formData.pond_id}
+                  >
+                    <SelectTrigger className="h-12">
+                      <SelectValue placeholder={formData.pond_id ? "Select species (optional)" : "Select pond first"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No species selected</SelectItem>
+                      {pondSpecies.filter(spec => spec && spec.species_id).map((spec) => (
+                        <SelectItem key={spec.species_id} value={spec.species_id.toString()}>
+                          {spec.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
                   <Label htmlFor="event_date">Event Date *</Label>
                   <Input
                     id="event_date"
@@ -321,24 +402,35 @@ export default function FeedingEventsPage() {
               </div>
               
               {/* Feed Selection */}
-              {formData.pond_id && pondFeeds.length > 0 && (
+              {formData.pond_id && (
                 <div className="space-y-2 py-4">
-                  <Label htmlFor="feed_selection">Select Feed from Pond Stock</Label>
-                  <Select onValueChange={(value) => {
-                    const feed = pondFeeds.find(f => f.customer_stock_id.toString() === value);
-                    if (feed) handleFeedSelection(feed);
-                  }}>
-                    <SelectTrigger className="h-12">
-                      <SelectValue placeholder="Select feed from pond stock" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {pondFeeds.map((feed) => (
-                        <SelectItem key={feed.customer_stock_id} value={feed.customer_stock_id.toString()}>
-                          {feed.item_name} - {feed.current_stock} {feed.unit} {feed.packet_size && `(${feed.packet_size} kg/packet)`}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="feed_selection">Select Feed from Pond Stock *</Label>
+                  {pondFeeds.length > 0 ? (
+                    <Select 
+                      value={formData.feed_item}
+                      onValueChange={(value) => {
+                        const feed = pondFeeds.find(f => f.item.toString() === value);
+                        if (feed) handleFeedSelection(feed);
+                      }}
+                    >
+                      <SelectTrigger className="h-12">
+                        <SelectValue placeholder="Select feed from pond stock" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {pondFeeds.map((feed) => (
+                          <SelectItem key={feed.item} value={feed.item.toString()}>
+                            {feed.item_name} - {feed.current_stock} {feed.unit}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                      <p className="text-yellow-800 text-sm">
+                        No feed items available in this pond's stock. Please add feed items to the pond first.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
               
@@ -355,55 +447,24 @@ export default function FeedingEventsPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="amount_kg">Amount (kg)</Label>
+                  <Label htmlFor="feed_amount">Feed Amount *</Label>
                   <Input
-                    id="amount_kg"
+                    id="feed_amount"
                     type="number"
                     step="0.1"
-                    value={formData.amount_kg}
-                    onChange={(e) => setFormData({ ...formData, amount_kg: e.target.value })}
-                    placeholder="Enter amount in kg"
+                    value={formData.feed_amount}
+                    onChange={(e) => setFormData({ ...formData, feed_amount: e.target.value })}
+                    placeholder="Enter feed amount"
                     className="h-12"
+                    required
                   />
+                  {selectedFeed && (
+                    <p className="text-sm text-gray-500">
+                      Available: {selectedFeed.current_stock} {selectedFeed.unit}
+                    </p>
+                  )}
                 </div>
               </div>
-              
-              {/* Packet Information */}
-              <div className="grid grid-cols-2 gap-6 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="packet_qty">Number of Packets</Label>
-                  <Input
-                    id="packet_qty"
-                    type="number"
-                    step="0.1"
-                    value={formData.packet_qty}
-                    onChange={(e) => setFormData({ ...formData, packet_qty: e.target.value })}
-                    placeholder="Enter number of packets"
-                    className="h-12"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="packet_size">Packet Size (kg)</Label>
-                  <Input
-                    id="packet_size"
-                    type="number"
-                    step="0.1"
-                    value={formData.packet_size}
-                    onChange={(e) => setFormData({ ...formData, packet_size: e.target.value })}
-                    placeholder="Enter packet size in kg"
-                    className="h-12"
-                  />
-                </div>
-              </div>
-              
-              {/* Calculated Amount Display */}
-              {formData.packet_qty && formData.packet_size && (
-                <div className="bg-blue-50 p-4 rounded-lg mb-4">
-                  <p className="text-blue-800 font-medium">
-                    Total Amount: {formData.packet_qty} packets × {formData.packet_size} kg = {(parseFloat(formData.packet_qty) * parseFloat(formData.packet_size)).toFixed(2)} kg
-                  </p>
-                </div>
-              )}
               
               <div className="space-y-2">
                 <Label htmlFor="memo">Memo</Label>
@@ -459,6 +520,7 @@ export default function FeedingEventsPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Pond</TableHead>
+                <TableHead>Species</TableHead>
                 <TableHead>Feed Item</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead>Time</TableHead>
@@ -471,16 +533,12 @@ export default function FeedingEventsPage() {
               {filteredFeedingEvents.map((event) => (
                 <TableRow key={event.feeding_id}>
                   <TableCell className="font-medium">{event.pond_name}</TableCell>
+                  <TableCell>{event.species_name || '-'}</TableCell>
                   <TableCell>{event.feed_item_name || '-'}</TableCell>
                   <TableCell>{new Date(event.event_date).toLocaleDateString()}</TableCell>
                   <TableCell>{event.feeding_time || '-'}</TableCell>
                   <TableCell>
-                    {event.total_amount_display || 
-                     (event.packet_qty && event.packet_size ? 
-                       `${event.packet_qty} packets (${(event.packet_qty * event.packet_size).toFixed(2)} kg)` :
-                       event.amount_kg ? `${event.amount_kg} kg` :
-                       event.total_feed_kg ? `${Number(event.total_feed_kg).toFixed(2)} units` : '0.00 units'
-                     )}
+                    {event.amount_kg ? `${event.amount_kg} units` : '0.00 units'}
                   </TableCell>
                   <TableCell>৳{event.total_cost ? Number(event.total_cost).toFixed(2) : '0.00'}</TableCell>
                   <TableCell>
@@ -530,3 +588,4 @@ export default function FeedingEventsPage() {
     </div>
   );
 }
+

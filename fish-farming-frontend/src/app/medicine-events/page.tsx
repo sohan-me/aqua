@@ -42,29 +42,16 @@ interface MedicineEvent {
   medicine_id: number;
   pond_id: number;
   pond_name?: string;
+  medicine_item?: number;
+  medicine_name?: string;
+  medicine_unit?: string;
+  dosage_amount: number;
   event_date: string;
   memo: string;
-  create_invoice: boolean;
-  invoice_status: string;
   created_at: string;
-  total_cost: number;
+  medicine_list?: MedicineItem[];
 }
 
-interface MedicineLine {
-  medicine_line_id: number;
-  medicine_id: number;
-  item_id: number;
-  medicine_name?: string;
-  medicine_type: string;
-  treatment_type: string;
-  state_type: string;
-  dosage: string;
-  prescribed_dosage?: number;
-  dosage_unit?: string;
-  qty_used: number;
-  unit_of_measure: string;
-  unit_cost: number;
-}
 
 interface Pond {
   pond_id: number;
@@ -78,43 +65,32 @@ interface Medicine {
   is_medicine: boolean;
 }
 
+interface MedicineItem {
+  item: number;
+  item_name: string;
+  current_stock: number;
+  unit: string;
+  unit_cost: number;
+}
+
 export default function MedicineEventsPage() {
   const [medicineEvents, setMedicineEvents] = useState<MedicineEvent[]>([]);
-  const [medicineLines, setMedicineLines] = useState<MedicineLine[]>([]);
   const [ponds, setPonds] = useState<Pond[]>([]);
-  const [medicines, setMedicines] = useState<Medicine[]>([]);
+  const [pondMedicines, setPondMedicines] = useState<MedicineItem[]>([]);
+  const [selectedMedicine, setSelectedMedicine] = useState<MedicineItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingMedicine, setEditingMedicine] = useState<MedicineEvent | null>(null);
-  const [showMedicineLines, setShowMedicineLines] = useState<number | null>(null);
   const [formData, setFormData] = useState({
     pond_id: '',
+    medicine_item: '',
+    dosage_amount: '',
     event_date: '',
     memo: '',
-    create_invoice: false,
-    invoice_status: 'draft',
   });
-  const [lineItems, setLineItems] = useState<Partial<MedicineLine>[]>([]);
 
   const { get, post, put, delete: del } = useApi();
-
-  // Dosage unit choices
-  const dosageUnitChoices = [
-    { value: 'mg', label: 'Milligrams (mg)' },
-    { value: 'g', label: 'Grams (g)' },
-    { value: 'kg', label: 'Kilograms (kg)' },
-    { value: 'ml', label: 'Milliliters (ml)' },
-    { value: 'l', label: 'Liters (L)' },
-    { value: 'pieces', label: 'Pieces' },
-    { value: 'tablets', label: 'Tablets' },
-    { value: 'capsules', label: 'Capsules' },
-    { value: 'drops', label: 'Drops' },
-    { value: 'units', label: 'Units' },
-    { value: 'iu', label: 'International Units (IU)' },
-    { value: 'ppm', label: 'Parts Per Million (ppm)' },
-    { value: 'other', label: 'Other' },
-  ];
 
   useEffect(() => {
     fetchData();
@@ -123,10 +99,9 @@ export default function MedicineEventsPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [medicineResponse, pondsResponse, itemsResponse] = await Promise.all([
+      const [medicineResponse, pondsResponse] = await Promise.all([
         get('/medicine-events/'),
         get('/ponds/'),
-        get('/items/'),
       ]);
       
       setMedicineEvents(medicineResponse.results || medicineResponse);
@@ -136,16 +111,6 @@ export default function MedicineEventsPage() {
         medicineEvents: medicineResponse.results || medicineResponse,
         count: (medicineResponse.results || medicineResponse).length
       });
-      
-      // Filter for medicine items only
-      const allItems = itemsResponse.results || itemsResponse;
-      const medicineItems = allItems.filter((item: any) => item.is_medicine === true);
-      console.log('Medicine Items Debug:', {
-        allItems: allItems.length,
-        medicineItems: medicineItems.length,
-        medicineItemsData: medicineItems
-      });
-      setMedicines(medicineItems);
     } catch (error) {
       console.error('Error fetching data:', error);
       toast.error('Failed to fetch data');
@@ -154,63 +119,70 @@ export default function MedicineEventsPage() {
     }
   };
 
-  const fetchMedicineLines = async (medicineId: number) => {
+  const fetchPondMedicines = async (pondId: number) => {
     try {
-      const response = await get(`/medicine-lines/?medicine_event=${medicineId}`);
-      setMedicineLines(response.results || response);
+      const response = await get(`/customer-stocks/?pond=${pondId}`);
+      const medicines = response.results || response;
+      
+      console.log('Raw customer stocks data for medicines:', {
+        pondId,
+        response,
+        medicines,
+        firstMedicine: medicines[0]
+      });
+      
+      // Filter for medicine items only - more flexible filtering
+      const medicineItems = medicines.filter((stock: any) => {
+        const isInventoryPart = stock.item_type === 'inventory_part';
+        const isMedicineCategory = stock.category === 'medicine';
+        const hasStock = stock.current_stock > 0;
+        const isMedicineByName = stock.item_name && stock.item_name.toLowerCase().includes('medicine');
+        
+        console.log('Filtering medicine stock:', {
+          stock: stock.item_name,
+          isInventoryPart,
+          isMedicineCategory,
+          hasStock,
+          isMedicineByName,
+          category: stock.category,
+          item_type: stock.item_type,
+          current_stock: stock.current_stock
+        });
+        
+        return isInventoryPart && (isMedicineCategory || isMedicineByName) && hasStock;
+      });
+      
+      setPondMedicines(medicineItems);
+      console.log('Pond medicines (filtered):', medicineItems);
+      console.log('First medicine item structure:', medicineItems[0]);
     } catch (error) {
-      console.error('Error fetching medicine lines:', error);
+      console.error('Error fetching pond medicines:', error);
+      setPondMedicines([]);
     }
   };
 
-  const calculateTotals = () => {
-    const totalCost = lineItems.reduce((sum, line) => sum + (line.total_cost || 0), 0);
-    return { totalCost };
-  };
-
-  const addLineItem = () => {
-    setLineItems([...lineItems, {
-      medicine_id: 0,
-      medicine_type: 'other',
-      treatment_type: 'therapeutic',
-      state_type: 'liquid',
-      dosage: '',
-      prescribed_dosage: 0,
-      dosage_unit: '',
-      qty_used: 0,
-      unit_of_measure: 'ml',
-      unit_cost: 0,
-    }]);
-  };
-
-  const updateLineItem = (index: number, field: keyof MedicineLine, value: any) => {
-    const updated = [...lineItems];
-    updated[index] = { ...updated[index], [field]: value };
-    
-    // Calculate total cost
-    if (field === 'qty_used' || field === 'unit_cost') {
-      const qty = updated[index].qty_used || 0;
-      const cost = updated[index].unit_cost || 0;
-      updated[index].total_cost = qty * cost;
+  const handlePondChange = (pondId: string) => {
+    setFormData({ ...formData, pond_id: pondId, medicine_item: '' });
+    if (pondId) {
+      fetchPondMedicines(parseInt(pondId));
+    } else {
+      setPondMedicines([]);
+      setSelectedMedicine(null);
     }
-    
-    setLineItems(updated);
   };
 
-  const removeLineItem = (index: number) => {
-    setLineItems(lineItems.filter((_, i) => i !== index));
+  const handleMedicineSelection = (medicine: MedicineItem) => {
+    setSelectedMedicine(medicine);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const totals = calculateTotals();
       const medicineData = {
         ...formData,
         pond: parseInt(formData.pond_id),
-        memo: `৳${totals.totalCost.toFixed(2)} total cost`,
-        create_invoice: formData.create_invoice,
-        invoice_status: formData.invoice_status,
+        medicine_item: parseInt(formData.medicine_item),
+        dosage_amount: parseFloat(formData.dosage_amount),
       };
       
       console.log('Medicine event data being sent:', medicineData);
@@ -219,25 +191,7 @@ export default function MedicineEventsPage() {
         await put(`/medicine-events/${editingMedicine.medicine_id}/`, medicineData);
         toast.success('Medicine event updated successfully');
       } else {
-        const response = await post('/medicine-events/', medicineData);
-        
-        // Create medicine lines
-        for (const line of lineItems) {
-          await post('/medicine-lines/', {
-            medicine_event: response.medicine_id,
-            item: line.medicine_id,
-            medicine_type: line.medicine_type || 'other',
-            treatment_type: line.treatment_type || 'therapeutic',
-            state_type: line.state_type || 'liquid',
-            dosage: line.dosage || '',
-            prescribed_dosage: line.prescribed_dosage || null,
-            dosage_unit: line.dosage_unit || '',
-            qty_used: line.qty_used || 0,
-            unit_of_measure: line.unit_of_measure || 'ml',
-            unit_cost: line.unit_cost || 0,
-          });
-        }
-        
+        await post('/medicine-events/', medicineData);
         toast.success('Medicine event created successfully');
       }
       
@@ -255,11 +209,16 @@ export default function MedicineEventsPage() {
     setEditingMedicine(medicine);
     setFormData({
       pond_id: medicine.pond_id.toString(),
+      medicine_item: medicine.medicine_item?.toString() || '',
+      dosage_amount: medicine.dosage_amount.toString(),
       event_date: medicine.event_date,
       memo: medicine.memo,
     });
-    setLineItems([]);
     setIsDialogOpen(true);
+    // Fetch medicines for the pond
+    if (medicine.pond_id) {
+      fetchPondMedicines(medicine.pond_id);
+    }
   };
 
   const handleDelete = async (medicineId: number) => {
@@ -278,12 +237,13 @@ export default function MedicineEventsPage() {
   const resetForm = () => {
     setFormData({
       pond_id: '',
+      medicine_item: '',
+      dosage_amount: '',
       event_date: '',
       memo: '',
-      create_invoice: false,
-      invoice_status: 'draft',
     });
-    setLineItems([]);
+    setPondMedicines([]);
+    setSelectedMedicine(null);
   };
 
   const filteredMedicineEvents = medicineEvents.filter(event =>
@@ -378,7 +338,7 @@ export default function MedicineEventsPage() {
                     </Label>
                   <Select
                     value={formData.pond_id}
-                    onValueChange={(value) => setFormData({ ...formData, pond_id: value })}
+                    onValueChange={handlePondChange}
                   >
                       <SelectTrigger className="h-12 border-gray-300 focus:border-blue-500 focus:ring-blue-500">
                       <SelectValue placeholder="Select pond" />
@@ -423,363 +383,90 @@ export default function MedicineEventsPage() {
                 </div>
               </div>
 
-              {/* Invoice Options Section */}
-              <div className="bg-green-50 rounded-lg p-6 mb-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                  <DollarSign className="h-5 w-5 text-green-600" />
-                  Invoice & Billing Options
-                </h3>
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4" />
-                      Generate Invoice
-                    </Label>
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        id="create_invoice"
-                        checked={formData.create_invoice}
-                        onChange={(e) => setFormData({ ...formData, create_invoice: e.target.checked })}
-                        className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
-                      />
-                      <Label htmlFor="create_invoice" className="text-sm text-gray-600">
-                        Create invoice for this medicine event
-                      </Label>
+              {/* Medicine Selection Section */}
+              {formData.pond_id && (
+                <div className="bg-blue-50 rounded-lg p-6 mb-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                    <Pill className="h-5 w-5 text-blue-600" />
+                    Medicine Application
+                  </h3>
+                  {pondMedicines.length > 0 ? (
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="medicine_selection" className="text-sm font-medium text-gray-700">
+                          Select Medicine *
+                        </Label>
+                        <Select 
+                          value={formData.medicine_item}
+                          onValueChange={(value) => {
+                            setFormData({ ...formData, medicine_item: value });
+                            const medicine = pondMedicines.find(m => m.item.toString() === value);
+                            if (medicine) handleMedicineSelection(medicine);
+                          }}
+                        >
+                          <SelectTrigger className="h-12">
+                            <SelectValue placeholder="Select medicine from pond stock" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {pondMedicines.filter(medicine => medicine && medicine.item).map((medicine) => (
+                              <SelectItem key={medicine.item} value={medicine.item.toString()}>
+                                {medicine.item_name} - {medicine.current_stock} {medicine.unit}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="dosage_amount" className="text-sm font-medium text-gray-700">
+                          Medicine Dosage Amount *
+                        </Label>
+                        <div className="flex items-center space-x-2">
+                          <Input
+                            id="dosage_amount"
+                            type="number"
+                            step="0.001"
+                            value={formData.dosage_amount}
+                            onChange={(e) => setFormData({ ...formData, dosage_amount: e.target.value })}
+                            placeholder="Enter dosage amount"
+                            className="h-12 border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                            required
+                          />
+                          {selectedMedicine && (
+                            <span className="text-sm text-gray-600 font-medium">
+                              {selectedMedicine.unit}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {selectedMedicine && (
+                        <div className="bg-white p-4 rounded-lg border border-blue-200 shadow-sm">
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className="font-medium text-gray-900">{selectedMedicine.item_name}</h4>
+                            <Badge variant="secondary" className="bg-blue-100 text-blue-700">
+                              {selectedMedicine.current_stock} {selectedMedicine.unit} available
+                            </Badge>
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            <div className="flex items-center justify-between">
+                              <span>Unit Cost:</span>
+                              <span className="font-medium">৳{(Number(selectedMedicine.unit_cost) || 0).toFixed(2)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                  
-                  {formData.create_invoice && (
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                        <Activity className="h-4 w-4" />
-                        Invoice Status
-                      </Label>
-                      <Select
-                        value={formData.invoice_status}
-                        onValueChange={(value) => setFormData({ ...formData, invoice_status: value })}
-                      >
-                        <SelectTrigger className="h-12 border-gray-300 focus:border-green-500 focus:ring-green-500">
-                          <SelectValue placeholder="Select invoice status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="draft">Draft</SelectItem>
-                          <SelectItem value="sent">Sent</SelectItem>
-                          <SelectItem value="paid">Paid</SelectItem>
-                          <SelectItem value="cancelled">Cancelled</SelectItem>
-                        </SelectContent>
-                      </Select>
+                  ) : (
+                    <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                      <p className="text-yellow-800 text-sm">
+                        No medicine items available in this pond's stock. Please add medicine items to the pond first.
+                      </p>
                     </div>
                   )}
                 </div>
-                {formData.create_invoice && (
-                  <div className="mt-4 p-3 bg-green-100 rounded-lg">
-                    <p className="text-sm text-green-800 flex items-center gap-2">
-                      <Info className="h-4 w-4" />
-                      Invoice will be automatically generated for the pond's customer when medicine is used.
-                    </p>
-                  </div>
-                )}
-              </div>
+              )}
 
-              {/* Medicine Lines Section */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between bg-blue-50 p-4 rounded-lg border border-blue-200">
-                  <div className="flex items-center gap-2">
-                    <Pill className="h-5 w-5 text-blue-600" />
-                    <Label className="text-lg font-semibold text-gray-900">Medicine Lines</Label>
-                    <Badge variant="secondary" className="bg-blue-100 text-blue-700">
-                      {lineItems.length} medicines
-                    </Badge>
-                  </div>
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    onClick={addLineItem}
-                    className="bg-blue-600 hover:bg-blue-700 text-white border-blue-600 hover:border-blue-700"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Medicine
-                  </Button>
-                </div>
-
-                <div className="space-y-4 max-h-96 overflow-y-auto">
-                  {lineItems.map((line, index) => (
-                    <Card key={index} className="p-6 border-2 border-blue-100 hover:border-blue-200 transition-colors duration-200">
-                      <div className="space-y-6">
-                        {/* Header with medicine number and delete button */}
-                        <div className="flex items-center justify-between pb-4 border-b border-gray-200">
-                          <div className="flex items-center gap-2">
-                            <div className="bg-blue-100 p-2 rounded-lg">
-                              <Pill className="h-4 w-4 text-blue-600" />
-                            </div>
-                            <span className="font-semibold text-gray-900">Medicine #{index + 1}</span>
-                          </div>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => removeLineItem(index)}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-
-                        {/* First Row - Medicine Selection */}
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                              <Package className="h-4 w-4" />
-                              Medicine *
-                            </Label>
-                            <Select
-                              value={line.medicine_id?.toString() || ''}
-                              onValueChange={(value) => updateLineItem(index, 'medicine_id', parseInt(value))}
-                            >
-                              <SelectTrigger className="h-12 border-gray-300 focus:border-blue-500 focus:ring-blue-500">
-                                <SelectValue placeholder="Select medicine" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {medicines.length === 0 ? (
-                                  <div className="p-4 text-center text-gray-500">
-                                    <Package className="h-8 w-8 mx-auto mb-2 text-gray-400" />
-                                    <p className="text-sm">No medicines available</p>
-                                    <p className="text-xs text-gray-400 mt-1">
-                                      Go to Master Data → Items & Services to add medicines
-                                    </p>
-                                  </div>
-                                ) : (
-                                  medicines.map((medicine) => (
-                                    <SelectItem key={medicine.item_id} value={medicine.item_id.toString()}>
-                                      {medicine.name}
-                                    </SelectItem>
-                                  ))
-                                )}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          
-                          <div className="space-y-2">
-                            <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                              <Shield className="h-4 w-4" />
-                              Medicine Type *
-                            </Label>
-                            <Select
-                              value={line.medicine_type || 'other'}
-                              onValueChange={(value) => updateLineItem(index, 'medicine_type', value)}
-                            >
-                              <SelectTrigger className="h-12 border-gray-300 focus:border-blue-500 focus:ring-blue-500">
-                                <SelectValue placeholder="Select medicine type" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="antibiotic">Antibiotic</SelectItem>
-                                <SelectItem value="antifungal">Antifungal</SelectItem>
-                                <SelectItem value="antiparasitic">Antiparasitic</SelectItem>
-                                <SelectItem value="vitamin">Vitamin</SelectItem>
-                                <SelectItem value="mineral">Mineral</SelectItem>
-                                <SelectItem value="probiotic">Probiotic</SelectItem>
-                                <SelectItem value="disinfectant">Disinfectant</SelectItem>
-                                <SelectItem value="hormone">Hormone</SelectItem>
-                                <SelectItem value="other">Other</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-
-                        {/* Second Row - Treatment and State Type */}
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                              <Zap className="h-4 w-4" />
-                              Treatment Type *
-                            </Label>
-                            <Select
-                              value={line.treatment_type || 'therapeutic'}
-                              onValueChange={(value) => updateLineItem(index, 'treatment_type', value)}
-                            >
-                              <SelectTrigger className="h-12 border-gray-300 focus:border-blue-500 focus:ring-blue-500">
-                                <SelectValue placeholder="Select treatment type" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="preventive">Preventive</SelectItem>
-                                <SelectItem value="therapeutic">Therapeutic</SelectItem>
-                                <SelectItem value="curative">Curative</SelectItem>
-                                <SelectItem value="prophylactic">Prophylactic</SelectItem>
-                                <SelectItem value="emergency">Emergency</SelectItem>
-                                <SelectItem value="routine">Routine</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          
-                          <div className="space-y-2">
-                            <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                              <Droplets className="h-4 w-4" />
-                              State Type *
-                            </Label>
-                            <Select
-                              value={line.state_type || 'liquid'}
-                              onValueChange={(value) => updateLineItem(index, 'state_type', value)}
-                            >
-                              <SelectTrigger className="h-12 border-gray-300 focus:border-blue-500 focus:ring-blue-500">
-                                <SelectValue placeholder="Select state type" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="liquid">Liquid</SelectItem>
-                                <SelectItem value="powder">Powder</SelectItem>
-                                <SelectItem value="tablet">Tablet</SelectItem>
-                                <SelectItem value="capsule">Capsule</SelectItem>
-                                <SelectItem value="injection">Injection</SelectItem>
-                                <SelectItem value="topical">Topical</SelectItem>
-                                <SelectItem value="granule">Granule</SelectItem>
-                                <SelectItem value="other">Other</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-
-                        {/* Third Row - Dosage Information */}
-                        <div className="bg-gray-50 p-4 rounded-lg">
-                          <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                            <Syringe className="h-4 w-4" />
-                            Dosage Information
-                          </h4>
-                          <div className="grid grid-cols-3 gap-4">
-                            <div className="space-y-2">
-                              <Label className="text-sm font-medium text-gray-600">Dosage Description</Label>
-                              <Input
-                                type="text"
-                                value={line.dosage || ''}
-                                onChange={(e) => updateLineItem(index, 'dosage', e.target.value)}
-                                placeholder="e.g., 2ml per 100L water"
-                                className="h-12 border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                              />
-                            </div>
-                            
-                            <div className="space-y-2">
-                              <Label className="text-sm font-medium text-gray-600">Prescribed Amount</Label>
-                              <Input
-                                type="number"
-                                step="0.001"
-                                value={line.prescribed_dosage || ''}
-                                onChange={(e) => updateLineItem(index, 'prescribed_dosage', parseFloat(e.target.value) || 0)}
-                                placeholder="0.000"
-                                className="h-12 border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                              />
-                            </div>
-                            
-                            <div className="space-y-2">
-                              <Label className="text-sm font-medium text-gray-600">Dosage Unit</Label>
-                              <Select
-                                value={line.dosage_unit || 'ml'}
-                                onValueChange={(value) => updateLineItem(index, 'dosage_unit', value)}
-                              >
-                                <SelectTrigger className="h-12 border-gray-300 focus:border-blue-500 focus:ring-blue-500">
-                                  <SelectValue placeholder="Select dosage unit" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {dosageUnitChoices.map((unit) => (
-                                    <SelectItem key={unit.value} value={unit.value}>
-                                      {unit.label}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Fourth Row - Quantity and Cost */}
-                        <div className="bg-green-50 p-4 rounded-lg">
-                          <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                            <Scale className="h-4 w-4" />
-                            Quantity & Cost Information
-                          </h4>
-                          <div className="grid grid-cols-4 gap-4">
-                            <div className="space-y-2">
-                              <Label className="text-sm font-medium text-gray-600">Quantity Used *</Label>
-                              <Input
-                                type="number"
-                                step="0.01"
-                                value={line.qty_used || ''}
-                                onChange={(e) => updateLineItem(index, 'qty_used', parseFloat(e.target.value) || 0)}
-                                placeholder="0.00"
-                                className="h-12 border-gray-300 focus:border-green-500 focus:ring-green-500"
-                              />
-                            </div>
-                            
-                            <div className="space-y-2">
-                              <Label className="text-sm font-medium text-gray-600">Unit of Measure *</Label>
-                              <Select
-                                value={line.unit_of_measure || 'ml'}
-                                onValueChange={(value) => updateLineItem(index, 'unit_of_measure', value)}
-                              >
-                                <SelectTrigger className="h-12 border-gray-300 focus:border-green-500 focus:ring-green-500">
-                                  <SelectValue placeholder="Select unit of measure" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {dosageUnitChoices.map((unit) => (
-                                    <SelectItem key={unit.value} value={unit.value}>
-                                      {unit.label}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            
-                            <div className="space-y-2">
-                              <Label className="text-sm font-medium text-gray-600">Unit Cost</Label>
-                              <Input
-                                type="number"
-                                step="0.01"
-                                value={line.unit_cost || ''}
-                                onChange={(e) => updateLineItem(index, 'unit_cost', parseFloat(e.target.value) || 0)}
-                                placeholder="0.00"
-                                className="h-12 border-gray-300 focus:border-green-500 focus:ring-green-500"
-                              />
-                            </div>
-                            
-                            <div className="space-y-2">
-                              <Label className="text-sm font-medium text-gray-600">Total Cost</Label>
-                              <div className="flex items-center space-x-2">
-                                <Input
-                                  type="number"
-                                  step="0.01"
-                                  value={line.total_cost || 0}
-                                  readOnly
-                                  className="bg-gray-100 h-12 border-gray-300 font-semibold text-green-700"
-                                />
-                                <div className="text-xs text-gray-500 text-center">
-                                  <DollarSign className="h-3 w-3 mx-auto mb-1" />
-                                  Auto
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-
-                {/* Total Cost Summary */}
-                <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-6 border border-green-200">
-                  <div className="flex items-center justify-center space-x-4">
-                    <div className="bg-green-100 p-3 rounded-lg">
-                      <DollarSign className="h-6 w-6 text-green-600" />
-                    </div>
-                    <div className="text-center">
-                      <div className="text-3xl font-bold text-green-700">
-                        ৳{calculateTotals().totalCost.toFixed(2)}
-                      </div>
-                      <div className="text-sm text-green-600 font-medium">Total Medicine Cost</div>
-                      <div className="text-xs text-gray-500 mt-1">
-                        {lineItems.length} medicine{lineItems.length !== 1 ? 's' : ''} • Auto-calculated
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
 
               <DialogFooter className="bg-gray-50 p-6 -m-6 mt-6 border-t border-gray-200">
                 <div className="flex items-center justify-between w-full">
@@ -836,10 +523,9 @@ export default function MedicineEventsPage() {
             <TableHeader className="bg-gray-50">
               <TableRow>
                 <TableHead className="font-semibold text-gray-700">Pond</TableHead>
+                <TableHead className="font-semibold text-gray-700">Medicine</TableHead>
+                <TableHead className="font-semibold text-gray-700">Dosage</TableHead>
                 <TableHead className="font-semibold text-gray-700">Date</TableHead>
-                <TableHead className="font-semibold text-gray-700">Medicine Count</TableHead>
-                <TableHead className="font-semibold text-gray-700">Total Cost</TableHead>
-                <TableHead className="font-semibold text-gray-700">Invoice</TableHead>
                 <TableHead className="font-semibold text-gray-700">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -855,43 +541,23 @@ export default function MedicineEventsPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-gray-500" />
-                        {new Date(event.event_date).toLocaleDateString()}
+                        <Pill className="h-4 w-4 text-blue-600" />
+                        <span className="font-medium">{event.medicine_name || 'Not specified'}</span>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="secondary" className="bg-blue-100 text-blue-700">
-                        <Pill className="h-3 w-3 mr-1" />
-                        {medicineLines.filter(line => line.medicine_id === event.medicine_id).length} medicines
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
                       <div className="flex items-center gap-2">
-                        <DollarSign className="h-4 w-4 text-green-600" />
-                        <span className="font-semibold text-green-700">
-                          ৳{event.total_cost ? Number(event.total_cost).toFixed(2) : '0.00'}
+                        <Scale className="h-4 w-4 text-gray-500" />
+                        <span className="font-medium">
+                          {event.dosage_amount} {event.medicine_unit || 'units'}
                         </span>
                       </div>
                     </TableCell>
                     <TableCell>
-                      {event.create_invoice ? (
-                        <Badge 
-                          variant="secondary" 
-                          className={`${
-                            event.invoice_status === 'paid' ? 'bg-green-100 text-green-700' :
-                            event.invoice_status === 'sent' ? 'bg-blue-100 text-blue-700' :
-                            event.invoice_status === 'cancelled' ? 'bg-red-100 text-red-700' :
-                            'bg-yellow-100 text-yellow-700'
-                          }`}
-                        >
-                          <DollarSign className="h-3 w-3 mr-1" />
-                          {event.invoice_status}
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-gray-500">
-                          No Invoice
-                        </Badge>
-                      )}
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-gray-500" />
+                        {new Date(event.event_date).toLocaleDateString()}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex space-x-2">
@@ -906,25 +572,6 @@ export default function MedicineEventsPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => {
-                            if (showMedicineLines === event.medicine_id) {
-                              setShowMedicineLines(null);
-                            } else {
-                              setShowMedicineLines(event.medicine_id);
-                              fetchMedicineLines(event.medicine_id);
-                            }
-                          }}
-                          className="hover:bg-green-50 hover:border-green-300"
-                        >
-                          {showMedicineLines === event.medicine_id ? (
-                            <ChevronUp className="h-4 w-4" />
-                          ) : (
-                            <Eye className="h-4 w-4" />
-                          )}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
                           onClick={() => handleDelete(event.medicine_id)}
                           className="text-red-600 hover:text-red-700 hover:bg-red-50 hover:border-red-300"
                         >
@@ -933,102 +580,6 @@ export default function MedicineEventsPage() {
                       </div>
                     </TableCell>
                   </TableRow>
-                  
-                  {/* Medicine Lines Detail View */}
-                  {showMedicineLines === event.medicine_id && (
-                    <TableRow>
-                      <TableCell colSpan={6} className="p-0">
-                        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 border-t border-blue-200">
-                          <div className="flex items-center gap-2 mb-4">
-                            <Pill className="h-5 w-5 text-blue-600" />
-                            <h4 className="font-semibold text-gray-800">Medicine Details</h4>
-                            <Badge variant="secondary" className="bg-blue-100 text-blue-700">
-                              {medicineLines.filter(line => line.medicine_id === event.medicine_id).length} items
-                            </Badge>
-                          </div>
-                          <div className="space-y-4">
-                            {medicineLines
-                              .filter(line => line.medicine_id === event.medicine_id)
-                              .map((line, index) => (
-                                <div key={index} className="bg-white p-6 rounded-lg border border-blue-200 shadow-sm">
-                                  <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-200">
-                                    <div className="bg-blue-100 p-2 rounded-lg">
-                                      <Pill className="h-4 w-4 text-blue-600" />
-                                    </div>
-                                    <span className="font-semibold text-gray-900">Medicine #{index + 1}</span>
-                                    <Badge variant="outline" className="text-xs">
-                                      {line.medicine_type}
-                                    </Badge>
-                                  </div>
-                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-sm">
-                                    <div className="space-y-1">
-                                      <span className="font-medium text-gray-600 flex items-center gap-1">
-                                        <Package className="h-3 w-3" />
-                                        Medicine:
-                                      </span>
-                                      <p className="text-gray-900 font-medium">{line.medicine_name}</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                      <span className="font-medium text-gray-600 flex items-center gap-1">
-                                        <Shield className="h-3 w-3" />
-                                        Type:
-                                      </span>
-                                      <p className="text-gray-900">{line.medicine_type}</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                      <span className="font-medium text-gray-600 flex items-center gap-1">
-                                        <Zap className="h-3 w-3" />
-                                        Treatment:
-                                      </span>
-                                      <p className="text-gray-900">{line.treatment_type}</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                      <span className="font-medium text-gray-600 flex items-center gap-1">
-                                        <Droplets className="h-3 w-3" />
-                                        State:
-                                      </span>
-                                      <p className="text-gray-900">{line.state_type}</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                      <span className="font-medium text-gray-600 flex items-center gap-1">
-                                        <Syringe className="h-3 w-3" />
-                                        Dosage:
-                                      </span>
-                                      <p className="text-gray-900">{line.dosage}</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                      <span className="font-medium text-gray-600 flex items-center gap-1">
-                                        <Scale className="h-3 w-3" />
-                                        Prescribed:
-                                      </span>
-                                      <p className="text-gray-900">
-                                        {line.prescribed_dosage} {line.dosage_unit}
-                                      </p>
-                                    </div>
-                                    <div className="space-y-1">
-                                      <span className="font-medium text-gray-600 flex items-center gap-1">
-                                        <Activity className="h-3 w-3" />
-                                        Quantity:
-                                      </span>
-                                      <p className="text-gray-900">{line.qty_used} {line.unit_of_measure}</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                      <span className="font-medium text-gray-600 flex items-center gap-1">
-                                        <DollarSign className="h-3 w-3" />
-                                        Cost:
-                                      </span>
-                                      <p className="font-semibold text-green-700">
-                                        ৳{Number(line.unit_cost || 0).toFixed(2)}
-                                      </p>
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                          </div>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )}
                 </React.Fragment>
               ))}
             </TableBody>

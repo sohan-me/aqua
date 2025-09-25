@@ -3629,7 +3629,14 @@ class StockingEventViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
-        return StockingEvent.objects.filter(user=self.request.user)
+        queryset = StockingEvent.objects.filter(user=self.request.user)
+        
+        # Filter by pond if provided
+        pond_id = self.request.query_params.get('pond')
+        if pond_id:
+            queryset = queryset.filter(pond_id=pond_id)
+        
+        return queryset
     
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
@@ -3678,15 +3685,10 @@ class FeedingEventViewSet(viewsets.ModelViewSet):
     def _deduct_stock_from_feeding(self, feeding_event):
         """Deduct stock from customer stock based on feeding event"""
         try:
-            # Calculate total amount to deduct
-            total_amount_kg = None
+            # Use the feed amount directly
+            feed_amount = feeding_event.amount_kg
             
-            if feeding_event.packet_qty and feeding_event.packet_size:
-                total_amount_kg = feeding_event.packet_qty * feeding_event.packet_size
-            elif feeding_event.amount_kg:
-                total_amount_kg = feeding_event.amount_kg
-            
-            if not total_amount_kg or not feeding_event.pond or not feeding_event.feed_item:
+            if not feed_amount or not feeding_event.pond or not feeding_event.feed_item:
                 return
             
             # Find customer stock for this pond and feed item
@@ -3704,12 +3706,8 @@ class FeedingEventViewSet(viewsets.ModelViewSet):
             ).first()
             
             if customer_stock:
-                # Convert amount to the stock's unit if needed
-                amount_to_deduct = total_amount_kg
-                
-                # If the stock is in packets, convert kg to packets
-                if customer_stock.unit in ['packet', 'pack'] and feeding_event.feed_item.packet_size:
-                    amount_to_deduct = total_amount_kg / feeding_event.feed_item.packet_size
+                # Use the feed amount directly (it's already in the correct unit)
+                amount_to_deduct = feed_amount
                 
                 # Check if sufficient stock is available
                 if customer_stock.current_stock >= amount_to_deduct:

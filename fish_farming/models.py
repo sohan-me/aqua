@@ -931,6 +931,7 @@ class FeedingEvent(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='feeding_events')
     pond = models.ForeignKey('Pond', on_delete=models.CASCADE, related_name='feeding_events')
     feed_item = models.ForeignKey('Item', on_delete=models.CASCADE, null=True, blank=True, related_name='feeding_events', help_text="Feed item used")
+    species = models.ForeignKey('Species', on_delete=models.SET_NULL, null=True, blank=True, related_name='feeding_events', help_text="Fish species being fed")
     event_date = models.DateField()
     feeding_time = models.TimeField(null=True, blank=True, help_text="Time of feeding")
     
@@ -1012,18 +1013,11 @@ class MedicineEvent(models.Model):
     medicine_id = models.AutoField(primary_key=True)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='medicine_events')
     pond = models.ForeignKey('Pond', on_delete=models.CASCADE, related_name='medicine_events')
+    medicine_item = models.ForeignKey('Item', on_delete=models.CASCADE, related_name='medicine_events', null=True, blank=True, help_text="Medicine item applied")
+    dosage_amount = models.DecimalField(max_digits=10, decimal_places=3, default=0, help_text="Amount of medicine applied")
     event_date = models.DateField()
     diagnosis_note = models.TextField(blank=True)
     memo = models.TextField(blank=True)
-    
-    # Invoice and billing options
-    create_invoice = models.BooleanField(default=False, help_text="Generate invoice for this medicine event")
-    invoice_status = models.CharField(max_length=20, choices=[
-        ('draft', 'Draft'),
-        ('sent', 'Sent'),
-        ('paid', 'Paid'),
-        ('cancelled', 'Cancelled'),
-    ], default='draft', blank=True, help_text="Invoice status")
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -1032,7 +1026,72 @@ class MedicineEvent(models.Model):
         ordering = ['-event_date', '-created_at']
     
     def __str__(self):
-        return f"Medicine-{self.medicine_id} - {self.pond.customer.name} ({self.event_date})"
+        return f"Medicine Event {self.medicine_id} - {self.pond.name} ({self.event_date})"
+    
+    def save(self, *args, **kwargs):
+        # Handle stock deduction
+        if self.pk:  # If this is an update
+            old_instance = MedicineEvent.objects.get(pk=self.pk)
+            if old_instance.dosage_amount != self.dosage_amount or old_instance.medicine_item != self.medicine_item:
+                # Revert old deduction
+                self._deduct_stock(old_instance.dosage_amount, old_instance.medicine_item, add=True)
+                # Apply new deduction
+                self._deduct_stock(self.dosage_amount, self.medicine_item, add=False)
+        else:  # If this is a new instance
+            self._deduct_stock(self.dosage_amount, self.medicine_item, add=False)
+        
+        super().save(*args, **kwargs)
+    
+    def _deduct_stock(self, amount, medicine_item, add=False):
+        """Deduct medicine from pond's customer stock"""
+        try:
+            from .models import CustomerStock, Customer
+            
+            # Find the customer associated with this pond
+            customer = Customer.objects.get(pond=self.pond, type='internal_pond')
+            
+            # Get customer stock for this medicine
+            customer_stock = CustomerStock.objects.filter(
+                user=self.user,
+                customer=customer,
+                pond=self.pond,
+                item=medicine_item
+            ).first()
+            
+            if customer_stock:
+                if add:
+                    customer_stock.current_stock += amount
+                else:
+                    if customer_stock.current_stock >= amount:
+                        customer_stock.current_stock -= amount
+                    else:
+                        raise ValueError(f"Insufficient stock. Available: {customer_stock.current_stock}, Required: {amount}")
+                
+                customer_stock.save()
+                
+                # Create inventory transaction
+                from .models import InventoryTransaction, InventoryTransactionLine
+                transaction_type = 'MEDICINE_RETURN' if add else 'MEDICINE_CONSUMPTION'
+                memo_prefix = 'Returned' if add else 'Applied'
+                
+                transaction = InventoryTransaction.objects.create(
+                    user=self.user,
+                    txn_type=transaction_type,
+                    txn_date=self.event_date,
+                    memo=f"{memo_prefix} {amount} {customer_stock.unit} of {medicine_item.name} in {self.pond.name}",
+                )
+                
+                InventoryTransactionLine.objects.create(
+                    inventory_transaction=transaction,
+                    item=medicine_item,
+                    qty=-amount if not add else amount,
+                    unit_cost=customer_stock.unit_cost,
+                    memo=f"{memo_prefix} {amount} {customer_stock.unit} of {medicine_item.name} in {self.pond.name}",
+                )
+                
+        except Exception as e:
+            print(f"Error handling stock deduction for medicine event {self.medicine_id}: {e}")
+            raise
 
 
 class MedicineLine(models.Model):
