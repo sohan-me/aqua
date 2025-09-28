@@ -611,7 +611,6 @@ class CustomerPayment(models.Model):
     payment_date = models.DateField()
     amount_total = models.DecimalField(max_digits=12, decimal_places=2)
     memo = models.TextField(blank=True)
-    deposit_account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name='customer_payments', help_text="Set to Undeposited Funds at receipt time")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -645,7 +644,7 @@ class Deposit(models.Model):
     deposit_date = models.DateField()
     bank_account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name='deposits')
     memo = models.TextField(blank=True)
-    total_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

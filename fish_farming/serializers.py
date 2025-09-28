@@ -256,7 +256,6 @@ class InvoiceLineSerializer(serializers.ModelSerializer):
 class CustomerPaymentSerializer(serializers.ModelSerializer):
     user_username = serializers.CharField(source='user.username', read_only=True)
     customer_name = serializers.CharField(source='customer.name', read_only=True)
-    deposit_account_name = serializers.CharField(source='deposit_account.name', read_only=True)
     
     class Meta:
         model = CustomerPayment
