@@ -98,7 +98,7 @@ export default function FishSamplingPage() {
               >
                 <option value="all">All Ponds</option>
                 {ponds.map((pond) => (
-                  <option key={pond.id} value={pond.id}>
+                  <option key={pond.pond_id} value={pond.pond_id}>
                     {pond.name}
                   </option>
                 ))}
@@ -143,7 +143,7 @@ export default function FishSamplingPage() {
               <span className="text-sm font-medium text-blue-800">Active Filters:</span>
               {filterPond !== 'all' && (
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                  Pond: {ponds.find(p => p.id.toString() === filterPond)?.name}
+                  Pond: {ponds.find(p => p.pond_id.toString() === filterPond)?.name}
                 </span>
               )}
               {filterSpecies !== 'all' && (

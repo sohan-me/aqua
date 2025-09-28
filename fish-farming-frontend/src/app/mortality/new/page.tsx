@@ -112,7 +112,7 @@ export default function NewMortalityPage() {
                 >
                   <option value="">Select a pond</option>
                   {ponds.map((pond) => (
-                    <option key={pond.id} value={pond.id}>
+                    <option key={pond.pond_id} value={pond.pond_id}>
                       {pond.name}
                     </option>
                   ))}

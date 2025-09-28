@@ -45,12 +45,10 @@ interface ChartAccount {
 interface CustomerPayment {
   cust_payment_id: number;
   customer_name: string;
-  deposit_account_name: string;
   payment_date: string;
   amount_total: string;
   memo: string;
   created_at: string;
-  deposit_account: number;
 }
 
 export default function DepositsPage() {
@@ -120,20 +118,23 @@ export default function DepositsPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      // If customer payments are selected but no amount specified, don't send total_amount
+      // Determine deposit type: full deposit (no amount) vs partial deposit (with amount)
       const hasSelectedPayments = selectedPayments.length > 0;
       const specifiedAmount = parseFloat(formData.amount) || 0;
       
-      const depositData = {
+      const depositData: any = {
         ...formData,
         bank_account: parseInt(formData.bank_account_id),
         reference: formData.reference || `DEP-${Date.now()}`,
         customer_payments: selectedPayments, // Include selected customer payments
       };
       
-      // Only include total_amount if it's specified or no customer payments are selected
-      if (specifiedAmount > 0 || !hasSelectedPayments) {
-        depositData.amount = specifiedAmount.toString();
+      // Include total_amount when:
+      // 1. Amount is specified and no customer payments selected (manual deposit)
+      // 2. Amount is specified and customer payments selected (partial deposit)
+      // If customer payments are selected but no amount specified, backend calculates total_amount automatically
+      if (specifiedAmount > 0) {
+        depositData.total_amount = specifiedAmount.toString();
       }
 
       if (editingDeposit) {
@@ -280,9 +281,10 @@ export default function DepositsPage() {
                     required={selectedPayments.length === 0}
                   />
                   {selectedPayments.length > 0 && (
-                    <p className="text-sm text-gray-600">
-                      Leave empty to deposit the full amount of selected payments ({calculateSelectedAmount().toFixed(2)})
-                    </p>
+                    <div className="text-sm text-gray-600 space-y-1">
+                      <p>• Leave empty to deposit the full amount of selected payments ({calculateSelectedAmount().toFixed(2)})</p>
+                      <p>• Enter an amount to make a partial deposit (that amount will be deducted from selected payments)</p>
+                    </div>
                   )}
                 </div>
                 <div className="space-y-2">
@@ -326,7 +328,6 @@ export default function DepositsPage() {
                           <TableHead>Customer</TableHead>
                           <TableHead>Payment Date</TableHead>
                           <TableHead>Amount</TableHead>
-                          <TableHead>Account</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -343,7 +344,6 @@ export default function DepositsPage() {
                             <TableCell className="font-medium">{payment.customer_name}</TableCell>
                             <TableCell>{new Date(payment.payment_date).toLocaleDateString()}</TableCell>
                             <TableCell className="font-medium">${parseFloat(payment.amount_total).toFixed(2)}</TableCell>
-                            <TableCell>{payment.deposit_account_name}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>

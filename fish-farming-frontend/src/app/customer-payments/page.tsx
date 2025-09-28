@@ -21,7 +21,6 @@ interface CustomerPayment {
   payment_date: string;
   amount_total: number;
   memo: string;
-  deposit_account: number;
   created_at: string;
   updated_at: string;
 }
@@ -57,7 +56,6 @@ export default function CustomerPaymentsPage() {
     payment_date: '',
     amount_total: '',
     memo: '',
-    deposit_account: '',
   });
 
   const { get, post, put, delete: del } = useApi();
@@ -119,7 +117,6 @@ export default function CustomerPaymentsPage() {
         ...formData,
         customer: parseInt(formData.customer_id),
         amount_total: parseFloat(formData.amount_total) || 0,
-        deposit_account: parseInt(formData.deposit_account) || 1, // Default to first account
       };
 
       if (editingPayment) {
@@ -147,7 +144,6 @@ export default function CustomerPaymentsPage() {
       payment_date: payment.payment_date,
       amount_total: payment.amount_total.toString(),
       memo: payment.memo,
-      deposit_account: payment.deposit_account.toString(),
     });
     setIsDialogOpen(true);
   };
@@ -171,7 +167,6 @@ export default function CustomerPaymentsPage() {
       payment_date: new Date().toISOString().split('T')[0], // Default to today
       amount_total: '',
       memo: '',
-      deposit_account: '1', // Default to account ID 1
     });
     setCustomerInvoices([]);
   };
@@ -226,18 +221,6 @@ export default function CustomerPaymentsPage() {
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="deposit_account">Deposit Account</Label>
-                  <Input
-                    id="deposit_account"
-                    type="number"
-                    value={formData.deposit_account}
-                    onChange={(e) => setFormData({ ...formData, deposit_account: e.target.value })}
-                    placeholder="Account ID"
-                    className="h-12"
-                    required
-                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="payment_date">Payment Date *</Label>

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useCustomerStocks, usePonds } from '@/hooks/useApi';
-import { CustomerStock } from '@/lib/api';
+import { CustomerStock, Pond } from '@/lib/api';
 import { extractApiData } from '@/lib/utils';
 import { 
   Package, 
@@ -28,7 +28,7 @@ export default function InventoryPage() {
   const { data: pondsData, isLoading: pondsLoading } = usePonds();
   
   const customerStocks = extractApiData<CustomerStock>(customerStocksData?.data);
-  const ponds = extractApiData(pondsData?.data);
+  const ponds = extractApiData<Pond>(pondsData?.data);
 
 
   // Filter stocks based on search and filters
@@ -83,7 +83,7 @@ export default function InventoryPage() {
 
   // Get pond name by ID
   const getPondName = (pondId: number) => {
-    const pond = ponds?.find(p => p.pond_id === pondId);
+    const pond = ponds?.find((p: Pond) => p.pond_id === pondId);
     return pond?.name || `Pond ${pondId}`;
   };
 
@@ -186,7 +186,7 @@ export default function InventoryPage() {
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
               <option value="">All Ponds</option>
-              {ponds?.map(pond => (
+              {ponds?.map((pond: Pond) => (
                 <option key={pond.pond_id} value={pond.pond_id}>
                   {pond.name}
                 </option>

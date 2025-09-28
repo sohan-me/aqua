@@ -24,7 +24,6 @@ import {
   ChevronDown,
   ChevronRight,
   Target,
-  CreditCard,
   Stethoscope,
   Building2,
   Truck,
@@ -40,6 +39,8 @@ import {
   TrendingUp as TrendingUpIcon,
   AlertCircle,
   Tag,
+  Wrench,
+  Calculator,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -90,8 +91,6 @@ const navigation = [
       { name: 'Invoices (AR)', href: '/invoices', icon: FileText },
       { name: 'Customer Payments', href: '/customer-payments', icon: Wallet },
       { name: 'Deposits', href: '/deposits', icon: Wallet },
-      { name: 'Checks', href: '/checks', icon: CreditCard },
-      { name: 'Journal Entries', href: '/journal-entries', icon: BookOpen },
     ]
   },
 
@@ -138,13 +137,23 @@ const navigation = [
     href: '/reports',
     icon: PieChart,
     submenu: [
-      { name: 'Feeding Advice', href: '/feeding-advice', icon: Lightbulb },
       { name: 'Financial Reports', href: '/reports', icon: DollarSign },
       { name: 'FCR Analysis', href: '/reports/fcr', icon: Scale },
       { name: 'Biomass Analysis', href: '/reports/biomass', icon: BarChart3 },
-      { name: 'Target Biomass', href: '/reports/target-biomass', icon: Target },
       { name: 'Profit & Loss', href: '/reports/pnl', icon: TrendingUpIcon },
       { name: 'Balance Sheet', href: '/reports/balance-sheet', icon: FileText },
+    ]
+  },
+
+  // Tools
+  {
+    name: 'Tools',
+    href: '/tools',
+    icon: Wrench,
+    submenu: [
+      { name: 'Feeding Advice', href: '/feeding-advice', icon: Lightbulb },
+      { name: 'Target Biomass', href: '/reports/target-biomass', icon: Target },
+      { name: 'Asset Calculator', href: '/asset-calculator', icon: Calculator },
     ]
   },
 

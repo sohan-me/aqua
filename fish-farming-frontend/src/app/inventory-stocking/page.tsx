@@ -152,9 +152,9 @@ export default function InventoryStockingPage() {
       } else {
         const response = await post('/inventory-transactions/', transactionData);
         
-        // Create transaction lines
+        // Create transaction lines 
         for (const line of lineItems) {
-          if (line.item_id && line.qty > 0) {
+          if (line.item_id && line.qty && line.qty > 0) {
             await post('/inventory-transaction-lines/', {
               inventory_transaction: response.inv_txn_id,
               item: line.item_id,

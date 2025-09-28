@@ -164,8 +164,8 @@ export default function IncomePage() {
               >
                 <option value="">All Ponds</option>
                 {ponds.map((pond) => (
-                  <option key={pond.id} value={pond.id}>
-                    {pond.name} ({pond.area_decimal} decimal)
+                  <option key={pond.pond_id} value={pond.pond_id}>
+                    {pond.name} ({pond.water_area_decimal} decimal)
                   </option>
                 ))}
               </select>
@@ -218,7 +218,7 @@ export default function IncomePage() {
                   </>
                 ) : null}
                 {(dateRange.startDate || dateRange.endDate) && (filterPond || filterIncomeType) ? ' and ' : ''}
-                {filterPond && `for Pond: ${ponds.find(p => p.id === parseInt(filterPond))?.name || 'Unknown'}`}
+                {filterPond && `for Pond: ${ponds.find(p => p.pond_id === parseInt(filterPond))?.name || 'Unknown'}`}
                 {filterPond && filterIncomeType ? ' and ' : ''}
                 {filterIncomeType && `for Income Type: ${incomeTypes.find(it => it.id === parseInt(filterIncomeType))?.name || 'Unknown'}`}
                 {' '}({filteredIncomes.length} records)

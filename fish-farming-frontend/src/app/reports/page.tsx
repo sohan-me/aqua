@@ -337,7 +337,7 @@ export default function ReportsPage() {
               >
                 <option value="all">All Ponds</option>
                 {ponds.map((pond) => (
-                  <option key={pond.id} value={pond.id}>
+                  <option key={pond.pond_id} value={pond.pond_id}>
                     {pond.name}
                   </option>
                 ))}

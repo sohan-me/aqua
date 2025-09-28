@@ -427,7 +427,7 @@ export default function ItemsPage() {
                         type="number"
                         step="0.001"
                         value={editingItem?.total_stock_in_unit || editingItem?.total_stock_kg || 0}
-                        readOnly
+                        // readOnly
                         className="bg-gray-50"
                         placeholder="0.000"
                       />

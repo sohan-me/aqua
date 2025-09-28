@@ -12,15 +12,8 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Edit, Trash2, Package, Save, X } from 'lucide-react';
 import { useFeedTypes, useCreateFeedType, useUpdateFeedType, useDeleteFeedType } from '@/hooks/useApi';
+import { FeedType } from '@/lib/api';
 import { toast } from 'sonner';
-
-interface FeedType {
-  id: number;
-  name: string;
-  description: string;
-  protein_content?: number;
-  created_at: string;
-}
 
 export default function FeedTypesPage() {
   const { data: feedTypesData, isLoading } = useFeedTypes();
@@ -44,7 +37,7 @@ export default function FeedTypesPage() {
     try {
       const submitData = {
         ...formData,
-        protein_content: formData.protein_content ? parseFloat(formData.protein_content) : null,
+        protein_content: formData.protein_content || null,
       };
 
       if (editingFeedType) {
@@ -67,7 +60,7 @@ export default function FeedTypesPage() {
     setFormData({
       name: feedType.name,
       description: feedType.description || '',
-      protein_content: feedType.protein_content?.toString() || '',
+      protein_content: feedType.protein_content || '',
     });
     setIsDialogOpen(true);
   };
@@ -131,14 +124,14 @@ export default function FeedTypesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {feedTypes.length === 0 ? (
+              {feedTypes?.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={4} className="text-center py-8 text-gray-500">
                     No feed types found. Click "Add Feed Type" to create your first feed type.
                   </TableCell>
                 </TableRow>
               ) : (
-                feedTypes.map((feedType) => (
+                feedTypes?.map((feedType) => (
                   <TableRow key={feedType.id}>
                     <TableCell className="font-medium">{feedType.name}</TableCell>
                     <TableCell>{feedType.description || '-'}</TableCell>

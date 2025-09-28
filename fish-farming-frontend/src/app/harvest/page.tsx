@@ -107,8 +107,8 @@ export default function HarvestPage() {
               >
                 <option value="">All Ponds</option>
                 {ponds.map((pond) => (
-                  <option key={pond.id} value={pond.id}>
-                    {pond.name} ({pond.area_decimal} decimal)
+                  <option key={pond.pond_id} value={pond.pond_id}>
+                    {pond.name} ({pond.water_area_decimal} decimal)
                   </option>
                 ))}
               </select>
@@ -152,7 +152,7 @@ export default function HarvestPage() {
               <Filter className="h-4 w-4 text-blue-400 mr-2" />
               <span className="text-sm text-blue-700">
                 Showing harvest records for{' '}
-                {filterPond && `Pond: ${ponds.find(p => p.id === parseInt(filterPond))?.name || 'Unknown'}`}
+                {filterPond && `Pond: ${ponds.find(p => p.pond_id === parseInt(filterPond))?.name || 'Unknown'}`}
                 {filterPond && filterSpecies && ' and '}
                 {filterSpecies && `Species: ${species.find(s => s.id === parseInt(filterSpecies))?.name || 'Unknown'}`}
                 {' '}({filteredHarvests.length} records)

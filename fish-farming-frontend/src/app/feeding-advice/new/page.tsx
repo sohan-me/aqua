@@ -97,8 +97,8 @@ export default function NewFeedingAdvicePage() {
               >
                 <option value="">Choose a pond to generate advice for</option>
                 {ponds.map((pond) => (
-                  <option key={pond.id} value={pond.id}>
-                    {pond.name} ({pond.area_decimal} decimal)
+                  <option key={pond.pond_id} value={pond.pond_id}>
+                    {pond.name} ({pond.water_area_decimal} decimal)
                   </option>
                 ))}
               </select>
