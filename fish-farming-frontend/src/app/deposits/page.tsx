@@ -193,11 +193,70 @@ export default function DepositsPage() {
   };
 
   const handlePaymentSelection = (paymentId: number, checked: boolean) => {
+    let newSelectedPayments;
     if (checked) {
-      setSelectedPayments([...selectedPayments, paymentId]);
+      newSelectedPayments = [...selectedPayments, paymentId];
     } else {
-      setSelectedPayments(selectedPayments.filter(id => id !== paymentId));
+      newSelectedPayments = selectedPayments.filter(id => id !== paymentId);
     }
+    
+    setSelectedPayments(newSelectedPayments);
+    
+    // Auto-fill amount field when payments are manually selected
+    const selectedAmount = newSelectedPayments.reduce((total, id) => {
+      const payment = undepositedPayments.find(p => p.cust_payment_id === id);
+      return total + (payment ? parseFloat(payment.amount_total) : 0);
+    }, 0);
+    
+    if (selectedAmount > 0) {
+      setFormData({ ...formData, amount: selectedAmount.toFixed(2) });
+    } else {
+      setFormData({ ...formData, amount: '' });
+    }
+  };
+
+  // Auto-select payments based on deposit amount
+  const autoSelectPayments = (amount: number) => {
+    console.log('autoSelectPayments called with amount:', amount);
+    console.log('undepositedPayments:', undepositedPayments);
+    
+    if (amount <= 0 || undepositedPayments.length === 0) {
+      setSelectedPayments([]);
+      return;
+    }
+
+    // Sort payments by amount (smallest first) to select the most efficient combination
+    const sortedPayments = [...undepositedPayments].sort((a, b) => 
+      parseFloat(a.amount_total) - parseFloat(b.amount_total)
+    );
+
+    console.log('sortedPayments:', sortedPayments);
+
+    const selected: number[] = [];
+    let totalSelected = 0;
+
+    // Select payments until we have enough to cover the amount
+    for (const payment of sortedPayments) {
+      const paymentAmount = parseFloat(payment.amount_total);
+      console.log('Processing payment:', payment.cust_payment_id, 'amount:', paymentAmount);
+      
+      if (paymentAmount > 0) {
+        selected.push(payment.cust_payment_id);
+        totalSelected += paymentAmount;
+        console.log('Added payment, totalSelected now:', totalSelected);
+        
+        // Continue selecting until we have enough to cover the amount
+        // This ensures we select all available payments if needed
+        if (totalSelected >= amount) {
+          console.log('Reached target amount, stopping selection');
+          break;
+        }
+      }
+    }
+
+    console.log('Final selected payments:', selected);
+    console.log('Final total:', totalSelected);
+    setSelectedPayments(selected);
   };
 
   const calculateSelectedAmount = () => {
@@ -275,14 +334,30 @@ export default function DepositsPage() {
                     type="number"
                     step="0.01"
                     value={formData.amount}
-                    onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                    onChange={(e) => {
+                      const amount = e.target.value;
+                      console.log('Amount changed to:', amount);
+                      console.log('selectedPayments.length:', selectedPayments.length);
+                      console.log('undepositedPayments.length:', undepositedPayments.length);
+                      
+                      setFormData({ ...formData, amount: amount });
+                      // Auto-select payments when amount is entered
+                      if (amount && undepositedPayments.length > 0) {
+                        console.log('Calling autoSelectPayments with amount:', parseFloat(amount));
+                        autoSelectPayments(parseFloat(amount) || 0);
+                      } else {
+                        console.log('Not calling autoSelectPayments - conditions not met');
+                      }
+                    }}
                     placeholder={selectedPayments.length > 0 ? "Leave empty to deposit full amount" : "Deposit amount"}
                     className="h-12"
                     required={selectedPayments.length === 0}
                   />
                   {selectedPayments.length > 0 && (
                     <div className="text-sm text-gray-600 space-y-1">
-                      <p>• Leave empty to deposit the full amount of selected payments ({calculateSelectedAmount().toFixed(2)})</p>
+                      <p>• Selected payments total: ${calculateSelectedAmount().toFixed(2)}</p>
+                      <p>• Amount field is auto-filled based on selected payments</p>
+                      <p>• Leave empty to deposit the full amount of selected payments</p>
                       <p>• Enter an amount to make a partial deposit (that amount will be deducted from selected payments)</p>
                     </div>
                   )}

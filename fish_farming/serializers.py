@@ -233,24 +233,28 @@ class BillPaymentApplySerializer(serializers.ModelSerializer):
         read_only_fields = ['bill_payment_apply_id', 'created_at']
 
 
-class InvoiceSerializer(serializers.ModelSerializer):
-    user_username = serializers.CharField(source='user.username', read_only=True)
-    customer_name = serializers.CharField(source='customer.name', read_only=True)
-    terms_name = serializers.CharField(source='terms.name', read_only=True)
-    
-    class Meta:
-        model = Invoice
-        fields = '__all__'
-        read_only_fields = ['invoice_id', 'user', 'invoice_no', 'created_at', 'updated_at']
-
-
 class InvoiceLineSerializer(serializers.ModelSerializer):
     item_name = serializers.CharField(source='item.name', read_only=True)
+    item_category = serializers.CharField(source='item.category', read_only=True)
+    pond_name = serializers.CharField(source='pond.name', read_only=True)
+    species_name = serializers.CharField(source='species.name', read_only=True)
     
     class Meta:
         model = InvoiceLine
         fields = '__all__'
         read_only_fields = ['invoice_line_id', 'created_at']
+
+
+class InvoiceSerializer(serializers.ModelSerializer):
+    user_username = serializers.CharField(source='user.username', read_only=True)
+    customer_name = serializers.CharField(source='customer.name', read_only=True)
+    terms_name = serializers.CharField(source='terms.name', read_only=True)
+    lines = InvoiceLineSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = Invoice
+        fields = '__all__'
+        read_only_fields = ['invoice_id', 'user', 'invoice_no', 'created_at', 'updated_at']
 
 
 class CustomerPaymentSerializer(serializers.ModelSerializer):

@@ -46,6 +46,7 @@ export default function CustomerPaymentsPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [customerInvoices, setCustomerInvoices] = useState<Invoice[]>([]);
+  const [selectedInvoices, setSelectedInvoices] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -87,6 +88,7 @@ export default function CustomerPaymentsPage() {
   const fetchCustomerInvoices = async (customerId: string) => {
     if (!customerId) {
       setCustomerInvoices([]);
+      setSelectedInvoices([]);
       return;
     }
 
@@ -101,13 +103,89 @@ export default function CustomerPaymentsPage() {
       );
       
       setCustomerInvoices(outstandingInvoices);
+      setSelectedInvoices([]); // Reset selection when customer changes
     } catch (error) {
       console.error('Error fetching customer invoices:', error);
       toast.error('Failed to fetch customer invoices');
       setCustomerInvoices([]);
+      setSelectedInvoices([]);
     } finally {
       setLoadingInvoices(false);
     }
+  };
+
+  // Auto-select invoices based on payment amount
+  const autoSelectInvoices = (amount: number) => {
+    console.log('autoSelectInvoices called with amount:', amount);
+    console.log('customerInvoices:', customerInvoices);
+    
+    if (amount <= 0 || customerInvoices.length === 0) {
+      setSelectedInvoices([]);
+      return;
+    }
+
+    // Sort invoices by amount (smallest first) to select the most efficient combination
+    const sortedInvoices = [...customerInvoices].sort((a, b) => 
+      Number(a.open_balance) - Number(b.open_balance)
+    );
+
+    console.log('sortedInvoices:', sortedInvoices);
+
+    const selected: number[] = [];
+    let totalSelected = 0;
+
+    // Select invoices until we have enough to cover the amount
+    for (const invoice of sortedInvoices) {
+      const invoiceBalance = Number(invoice.open_balance);
+      console.log('Processing invoice:', invoice.invoice_id, 'balance:', invoiceBalance);
+      
+      if (invoiceBalance > 0) {
+        selected.push(invoice.invoice_id);
+        totalSelected += invoiceBalance;
+        console.log('Added invoice, totalSelected now:', totalSelected);
+        
+        // Continue selecting until we have enough to cover the amount
+        // This ensures we select all available invoices if needed
+        if (totalSelected >= amount) {
+          console.log('Reached target amount, stopping selection');
+          break;
+        }
+      }
+    }
+
+    console.log('Final selected invoices:', selected);
+    console.log('Final total:', totalSelected);
+    setSelectedInvoices(selected);
+  };
+
+  const handleInvoiceSelection = (invoiceId: number, checked: boolean) => {
+    let newSelectedInvoices;
+    if (checked) {
+      newSelectedInvoices = [...selectedInvoices, invoiceId];
+    } else {
+      newSelectedInvoices = selectedInvoices.filter(id => id !== invoiceId);
+    }
+    
+    setSelectedInvoices(newSelectedInvoices);
+    
+    // Auto-fill amount field when invoices are manually selected
+    const selectedAmount = newSelectedInvoices.reduce((total, id) => {
+      const invoice = customerInvoices.find(inv => inv.invoice_id === id);
+      return total + (invoice ? Number(invoice.open_balance) : 0);
+    }, 0);
+    
+    if (selectedAmount > 0) {
+      setFormData({ ...formData, amount_total: selectedAmount.toFixed(2) });
+    } else {
+      setFormData({ ...formData, amount_total: '' });
+    }
+  };
+
+  const calculateSelectedAmount = () => {
+    return selectedInvoices.reduce((total, invoiceId) => {
+      const invoice = customerInvoices.find(inv => inv.invoice_id === invoiceId);
+      return total + (invoice ? Number(invoice.open_balance) : 0);
+    }, 0);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -117,6 +195,7 @@ export default function CustomerPaymentsPage() {
         ...formData,
         customer: parseInt(formData.customer_id),
         amount_total: parseFloat(formData.amount_total) || 0,
+        invoices: selectedInvoices, // Include selected invoices
       };
 
       if (editingPayment) {
@@ -169,6 +248,7 @@ export default function CustomerPaymentsPage() {
       memo: '',
     });
     setCustomerInvoices([]);
+    setSelectedInvoices([]);
   };
 
 
@@ -240,11 +320,32 @@ export default function CustomerPaymentsPage() {
                     type="number"
                     step="0.01"
                     value={formData.amount_total}
-                    onChange={(e) => setFormData({ ...formData, amount_total: e.target.value })}
+                    onChange={(e) => {
+                      const amount = e.target.value;
+                      console.log('Amount changed to:', amount);
+                      console.log('selectedInvoices.length:', selectedInvoices.length);
+                      console.log('customerInvoices.length:', customerInvoices.length);
+                      
+                      setFormData({ ...formData, amount_total: amount });
+                      // Auto-select invoices when amount is entered
+                      if (amount && customerInvoices.length > 0) {
+                        console.log('Calling autoSelectInvoices with amount:', parseFloat(amount));
+                        autoSelectInvoices(parseFloat(amount) || 0);
+                      } else {
+                        console.log('Not calling autoSelectInvoices - conditions not met');
+                      }
+                    }}
                     placeholder="Payment amount"
                     className="h-12"
                     required
                   />
+                  {selectedInvoices.length > 0 && (
+                    <div className="text-sm text-gray-600">
+                      <p>• Selected invoices total: ${calculateSelectedAmount().toFixed(2)}</p>
+                      <p>• Amount field is auto-filled based on selected invoices</p>
+                      <p>• You can manually adjust invoice selection below</p>
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="space-y-2">
@@ -264,14 +365,22 @@ export default function CustomerPaymentsPage() {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="text-lg font-semibold">Outstanding Invoices</h3>
-                    {loadingInvoices && <div className="text-sm text-gray-500">Loading...</div>}
+                    <div className="flex items-center space-x-4">
+                      {selectedInvoices.length > 0 && (
+                        <div className="text-sm text-gray-600">
+                          Selected: ${calculateSelectedAmount().toFixed(2)}
+                        </div>
+                      )}
+                      {loadingInvoices && <div className="text-sm text-gray-500">Loading...</div>}
+                    </div>
                   </div>
                   
                   {customerInvoices.length > 0 ? (
-                    <div className="border rounded-lg">
+                    <div className="border rounded-lg max-h-60 overflow-y-auto">
                       <Table>
                         <TableHeader>
                           <TableRow>
+                            <TableHead className="w-12">Select</TableHead>
                             <TableHead>Invoice #</TableHead>
                             <TableHead>Date</TableHead>
                             <TableHead>Total Amount</TableHead>
@@ -281,6 +390,14 @@ export default function CustomerPaymentsPage() {
                         <TableBody>
                           {customerInvoices.map((invoice) => (
                             <TableRow key={invoice.invoice_id}>
+                              <TableCell>
+                                <input
+                                  type="checkbox"
+                                  checked={selectedInvoices.includes(invoice.invoice_id)}
+                                  onChange={(e) => handleInvoiceSelection(invoice.invoice_id, e.target.checked)}
+                                  className="rounded"
+                                />
+                              </TableCell>
                               <TableCell className="font-medium">{invoice.invoice_no}</TableCell>
                               <TableCell>{new Date(invoice.invoice_date).toLocaleDateString()}</TableCell>
                               <TableCell>${Number(invoice.total_amount).toFixed(2)}</TableCell>

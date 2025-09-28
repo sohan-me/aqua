@@ -230,6 +230,16 @@ export default function ItemsPage() {
   };
 
   const getStockStatusBadge = (item: Item) => {
+    // For fish category, show availability message instead of stock status
+    if (item.category === 'fish') {
+      return (
+        <Badge variant="secondary" className="bg-blue-100 text-blue-800 text-xs">
+          <Fish className="h-3 w-3 mr-1" />
+          Stock based on Availability in pond
+        </Badge>
+      );
+    }
+    
     const stockInUnit = item.total_stock_in_unit !== undefined ? item.total_stock_in_unit : item.total_stock_kg;
     if (stockInUnit === undefined || stockInUnit === null) return null;
     
@@ -361,6 +371,7 @@ export default function ItemsPage() {
                           <SelectItem value="medicine">Medicine</SelectItem>
                           <SelectItem value="equipment">Equipment</SelectItem>
                           <SelectItem value="chemical">Chemical</SelectItem>
+                          <SelectItem value="fish">Fish</SelectItem>
                           <SelectItem value="supplies">Supplies</SelectItem>
                           <SelectItem value="maintenance">Maintenance</SelectItem>
                           <SelectItem value="other">Other</SelectItem>
@@ -714,7 +725,16 @@ export default function ItemsPage() {
                       <strong>Current Price:</strong> ${Number(item.current_price).toFixed(2)}
                     </p>
                   )}
-                  {(item.total_stock_in_unit !== undefined || item.total_stock_kg !== undefined) && (
+                  {item.category === 'fish' ? (
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-blue-600">
+                        <strong>Availability:</strong> Based on fish availability in pond
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        Stock levels are determined by fish population in the pond
+                      </p>
+                    </div>
+                  ) : (item.total_stock_in_unit !== undefined || item.total_stock_kg !== undefined) && (
                     <div className="space-y-1">
                       <p className="text-sm font-semibold text-blue-600">
                         <strong>Total Stock:</strong> {

@@ -4004,10 +4004,14 @@ class InvoiceLineViewSet(viewsets.ModelViewSet):
         # Calculate amount before saving
         data = serializer.validated_data
         
-        # If packet_size is provided, multiply quantity by packet_size, otherwise use quantity as is
-        effective_qty = data['qty']
-        if data.get('packet_size') and data['packet_size'] > 0:
-            effective_qty = data['qty'] * data['packet_size']
+        # For fish items, use total_weight if available, otherwise use qty
+        if data.get('item') and data['item'].category == 'fish' and data.get('total_weight'):
+            effective_qty = data['total_weight']
+        else:
+            # If packet_size is provided, multiply quantity by packet_size, otherwise use quantity as is
+            effective_qty = data['qty']
+            if data.get('packet_size') and data['packet_size'] > 0:
+                effective_qty = data['qty'] * data['packet_size']
         
         data['amount'] = effective_qty * data['rate']
         

@@ -168,6 +168,7 @@ class Item(models.Model):
         ('medicine', 'Medicine'),
         ('equipment', 'Equipment'),
         ('chemical', 'Chemical'),
+        ('fish', 'Fish'),
         ('supplies', 'Supplies'),
         ('maintenance', 'Maintenance'),
         ('other', 'Other'),
@@ -584,6 +585,13 @@ class InvoiceLine(models.Model):
     gallon_size = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Gallon size in litres")
     rate = models.DecimalField(max_digits=12, decimal_places=2)
     amount = models.DecimalField(max_digits=12, decimal_places=2)
+    
+    # Fish-specific fields
+    pond = models.ForeignKey('Pond', on_delete=models.SET_NULL, null=True, blank=True, related_name='invoice_lines', help_text="Pond for fish items")
+    species = models.ForeignKey('Species', on_delete=models.SET_NULL, null=True, blank=True, related_name='invoice_lines', help_text="Species for fish items")
+    total_weight = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total weight in kg for fish items")
+    line_number = models.PositiveIntegerField(null=True, blank=True, help_text="Line number for fish items")
+    
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
@@ -594,10 +602,14 @@ class InvoiceLine(models.Model):
     
     def save(self, *args, **kwargs):
         # Auto-calculate amount
-        # If packet_size is provided, multiply quantity by packet_size, otherwise use quantity as is
-        effective_qty = self.qty
-        if self.packet_size and self.packet_size > 0:
-            effective_qty = self.qty * self.packet_size
+        # For fish items, use total_weight if available, otherwise use qty
+        if self.item and self.item.category == 'fish' and self.total_weight:
+            effective_qty = self.total_weight
+        else:
+            # If packet_size is provided, multiply quantity by packet_size, otherwise use quantity as is
+            effective_qty = self.qty
+            if self.packet_size and self.packet_size > 0:
+                effective_qty = self.qty * self.packet_size
         
         self.amount = effective_qty * self.rate
         super().save(*args, **kwargs)

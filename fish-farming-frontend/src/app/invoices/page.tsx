@@ -37,6 +37,7 @@ interface Invoice {
   memo: string;
   created_at: string;
   updated_at: string;
+  lines?: InvoiceLine[];
 }
 
 interface InvoiceLine {
@@ -44,6 +45,7 @@ interface InvoiceLine {
   invoice_id: number;
   item_id: number;
   item_name?: string;
+  item_category?: string;
   description?: string;
   qty: number;
   unit?: string; // Unit of measurement
@@ -51,6 +53,13 @@ interface InvoiceLine {
   gallon_size?: number; // Gallon size in litres
   rate: number;
   amount: number;
+  // Fish-specific fields
+  pond_id?: number;
+  species_id?: number;
+  total_weight?: number;
+  line_number?: number;
+  pond_name?: string;
+  species_name?: string;
 }
 
 
@@ -80,11 +89,32 @@ interface Item {
   }>;
 }
 
+interface Pond {
+  pond_id?: number;
+  id?: number;
+  name: string;
+  water_area_decimal: number;
+  depth_ft: number;
+  volume_m3: number;
+  location?: string;
+  is_active: boolean;
+}
+
+interface Species {
+  species_id?: number;
+  id?: number;
+  name: string;
+  scientific_name?: string;
+  description?: string;
+}
+
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [invoiceLines, setInvoiceLines] = useState<InvoiceLine[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [items, setItems] = useState<Item[]>([]);
+  const [ponds, setPonds] = useState<Pond[]>([]);
+  const [species, setSpecies] = useState<Species[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -229,15 +259,22 @@ export default function InvoicesPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [invoicesResponse, customersResponse, itemsResponse] = await Promise.all([
+      const [invoicesResponse, customersResponse, itemsResponse, pondsResponse, speciesResponse] = await Promise.all([
         get('/invoices/'),
         get('/customers/'),
         get('/items/'),
+        get('/ponds/'),
+        get('/species/'),
       ]);
+      
+      console.log('Items data from API:', itemsResponse.results || itemsResponse);
+      console.log('Sample item with category:', (itemsResponse.results || itemsResponse)?.[0]);
       
       setInvoices(invoicesResponse.results || invoicesResponse);
       setCustomers(customersResponse.results || customersResponse);
       setItems(itemsResponse.results || itemsResponse);
+      setPonds(pondsResponse.results || pondsResponse);
+      setSpecies(speciesResponse.results || speciesResponse);
     } catch (error) {
       console.error('Error fetching data:', error);
       toast.error('Failed to fetch data');
@@ -245,7 +282,7 @@ export default function InvoicesPage() {
       setLoading(false);
     }
   };
-
+console.log("ponds", ponds);
   const fetchInvoiceLines = async (invoiceId: number) => {
     try {
       console.log('Fetching invoice lines for invoice ID:', invoiceId);
@@ -281,6 +318,11 @@ export default function InvoicesPage() {
       gallon_size: 0,
       rate: 0,
       amount: 0,
+      // Fish-specific fields
+      pond_id: 0,
+      species_id: 0,
+      total_weight: 0,
+      line_number: 0,
     }]);
   };
 
@@ -303,8 +345,18 @@ export default function InvoicesPage() {
     }
     
     // Calculate total price
-    if (field === 'qty' || field === 'rate') {
-      const quantity = updated[index].qty || 0;
+    if (field === 'qty' || field === 'rate' || field === 'total_weight') {
+      const selectedItem = items.find(item => item.item_id === updated[index].item_id);
+      const isFishItem = selectedItem?.category === 'fish'
+      let quantity = 0;
+      if (isFishItem) {
+        // For fish items, use total weight
+        quantity = updated[index].total_weight || 0;
+      } else {
+        // For non-fish items, use qty
+        quantity = updated[index].qty || 0;
+      }
+      
       const price = updated[index].rate || 0;
       updated[index].amount = quantity * price;
     }
@@ -374,20 +426,54 @@ export default function InvoicesPage() {
         toast.error(`Please select an item for line ${i + 1}`);
         return;
       }
-      if (!line.qty || line.qty <= 0) {
-        toast.error(`Please enter a valid quantity for line ${i + 1}`);
-        return;
+      
+      // Check if it's a fish item
+      const selectedItem = items.find(item => item.item_id === line.item_id);
+      const isFishItem = selectedItem?.category === 'fish' || 
+                        (selectedItem?.name && selectedItem.name.toLowerCase().includes('fish')) ||
+                        (selectedItem?.name && selectedItem.name.toLowerCase().includes('tilapia')) ||
+                        (selectedItem?.name && selectedItem.name.toLowerCase().includes('carp')) ||
+                        (selectedItem?.name && selectedItem.name.toLowerCase().includes('catfish'));
+      
+      if (isFishItem) {
+        // For fish items, validate total weight instead of quantity
+        if (!line.total_weight || line.total_weight <= 0) {
+          toast.error(`Please enter a valid total weight for line ${i + 1}`);
+          return;
+        }
+      } else {
+        // For non-fish items, validate quantity
+        if (!line.qty || line.qty <= 0) {
+          toast.error(`Please enter a valid quantity for line ${i + 1}`);
+          return;
+        }
       }
+      
       if (!line.rate || line.rate <= 0) {
         toast.error(`Please enter a valid unit price for line ${i + 1}`);
         return;
       }
     }
     
-    // Check stock availability for all line items
+    // Check stock availability for all line items (skip for fish items)
     const stockChecks = lineItems.map(line => {
-      if (line.item_id && line.qty) {
-        return checkStockAvailability(line.item_id, line.qty, line.unit || 'kg', line.packet_size || 0);
+      if (line.item_id) {
+        const selectedItem = items.find(item => item.item_id === line.item_id);
+        const isFishItem = selectedItem?.category === 'fish' || 
+                          (selectedItem?.name && selectedItem.name.toLowerCase().includes('fish')) ||
+                          (selectedItem?.name && selectedItem.name.toLowerCase().includes('tilapia')) ||
+                          (selectedItem?.name && selectedItem.name.toLowerCase().includes('carp')) ||
+                          (selectedItem?.name && selectedItem.name.toLowerCase().includes('catfish'));
+        
+        if (isFishItem) {
+          // Skip stock check for fish items - they don't have traditional inventory
+          return { available: true, message: 'Fish items - no stock check required' };
+        } else {
+          // For non-fish items, use quantity
+          if (line.qty) {
+            return checkStockAvailability(line.item_id, line.qty, line.unit || 'kg', line.packet_size || 0);
+          }
+        }
       }
       return { available: true, message: '' };
     });
@@ -432,6 +518,11 @@ export default function InvoicesPage() {
             gallon_size: line.gallon_size || null,
             rate: line.rate || 0,
             amount: line.amount || 0,
+            // Fish-specific fields
+            pond: line.pond_id || null,
+            species: line.species_id || null,
+            total_weight: line.total_weight || null,
+            line_number: line.line_number || null,
           });
         }
         
@@ -451,6 +542,11 @@ export default function InvoicesPage() {
             gallon_size: line.gallon_size || null,
             rate: line.rate || 0,
             amount: line.amount || 0,
+            // Fish-specific fields
+            pond: line.pond_id || null,
+            species: line.species_id || null,
+            total_weight: line.total_weight || null,
+            line_number: line.line_number || null,
           });
         }
         
@@ -488,23 +584,46 @@ export default function InvoicesPage() {
     
     // Load existing invoice lines for this specific invoice only
     try {
-      const response = await get(`/invoice-lines/?invoice=${invoice.invoice_id}`);
-      const existingLines = response.results || response;
+      // First try to use lines data from the invoice if available
+      let existingLines = invoice.lines || [];
+      
+      // If no lines data in invoice, fetch separately
+      if (!existingLines || existingLines.length === 0) {
+        const response = await get(`/invoice-lines/?invoice=${invoice.invoice_id}`);
+        existingLines = response.results || response;
+      }
       
       // Convert existing lines to our format
-      const formattedLines = existingLines.map((line: any) => ({
-        invoice_line_id: line.invoice_line_id,
-        invoice_id: line.invoice_id,
-        item_id: line.item_id || null,
-        item_name: line.item_name || '',
-        description: line.description || '',
-        qty: line.qty || 0,
-        unit: line.unit || 'kg',
-        packet_size: line.packet_size || 0,
-        gallon_size: line.gallon_size || 0,
-        rate: line.rate || 0,
-        amount: Number(line.amount) || 0,
-      }));
+      console.log('Raw invoice line data:', existingLines);
+      const formattedLines = existingLines.map((line: any) => {
+        console.log('Processing line:', line);
+        console.log('total_weight:', line.total_weight);
+        console.log('pond:', line.pond);
+        console.log('species:', line.species);
+        console.log('line_number:', line.line_number);
+        
+        return {
+          invoice_line_id: line.invoice_line_id,
+          invoice_id: line.invoice_id,
+          item_id: line.item_id || null,
+          item_name: line.item_name || '',
+          item_category: line.item_category || '',
+          description: line.description || '',
+          qty: line.qty || 0,
+          unit: line.unit || 'kg',
+          packet_size: line.packet_size || 0,
+          gallon_size: line.gallon_size || 0,
+          rate: line.rate || 0,
+          amount: Number(line.amount) || 0,
+          // Fish-specific fields
+          pond_id: line.pond || null,
+          species_id: line.species || null,
+          total_weight: line.total_weight || null,
+          line_number: line.line_number || null,
+          pond_name: line.pond_name || '',
+          species_name: line.species_name || '',
+        };
+      });
       
       setLineItems(formattedLines);
     } catch (error) {
@@ -706,15 +825,28 @@ export default function InvoicesPage() {
                               <SelectContent>
                                 {items.map((item) => {
                                   console.log(item);
-                                  const correctStock = calculateCorrectStock(item);
-                                  const displayUnit = getDisplayUnit(item);
-                                  const stockDisplay = correctStock <= 0 ? 'Out of Stock' : `${correctStock} ${displayUnit}`;
-                                  return (
-                                    <SelectItem key={item.item_id} value={item.item_id.toString()}>
-                                      {item.name} ({item.category || 'No Category'}) - Stock: {stockDisplay}
-                                      {item.selling_price && ` - $${item.selling_price}/${item.uom}`}
-                                    </SelectItem>
-                                  );
+                                  const isFishItem = item.category === 'fish';
+                                  
+                                  if (isFishItem) {
+                                    // For fish items, don't show stock information
+                                    return (
+                                      <SelectItem key={item.item_id} value={item.item_id.toString()}>
+                                        {item.name} ({item.category || 'No Category'})
+                                        {item.selling_price && ` - $${item.selling_price}/${item.uom}`}
+                                      </SelectItem>
+                                    );
+                                  } else {
+                                    // For non-fish items, show stock information
+                                    const correctStock = calculateCorrectStock(item);
+                                    const displayUnit = getDisplayUnit(item);
+                                    const stockDisplay = correctStock <= 0 ? 'Out of Stock' : `${correctStock} ${displayUnit}`;
+                                    return (
+                                      <SelectItem key={item.item_id} value={item.item_id.toString()}>
+                                        {item.name} ({item.category || 'No Category'}) - Stock: {stockDisplay}
+                                        {item.selling_price && ` - $${item.selling_price}/${item.uom}`}
+                                      </SelectItem>
+                                    );
+                                  }
                                 })}
                               </SelectContent>
                             </Select>
@@ -731,54 +863,153 @@ export default function InvoicesPage() {
                           </div>
                         </div>
                         
-                        {/* Second row - Quantity, Unit, and Packet Size */}
-                        <div className="grid grid-cols-3 gap-4">
-                          <div className="space-y-2">
-                            <Label>Quantity</Label>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              value={line.qty && line.qty > 0 ? line.qty : ''}
-                              onChange={(e) => updateLineItem(index, 'qty', parseFloat(e.target.value) || 0)}
-                              placeholder="Quantity"
-                              className="h-12"
-                            />
-                          </div>
+                        {/* Second row - Quantity, Unit, and Packet Size - Hide for fish items */}
+                        {(() => {
+                          const selectedItem = items.find(item => item.item_id === line.item_id);
+                          const isFishItem = selectedItem?.category === 'fish' || 
+                                            (selectedItem?.name && selectedItem.name.toLowerCase().includes('fish')) ||
+                                            (selectedItem?.name && selectedItem.name.toLowerCase().includes('tilapia')) ||
+                                            (selectedItem?.name && selectedItem.name.toLowerCase().includes('carp')) ||
+                                            (selectedItem?.name && selectedItem.name.toLowerCase().includes('catfish'));
                           
-                          <div className="space-y-2">
-                            <Label>Unit of Measure</Label>
-                            <Select
-                              value={line.unit || 'kg'}
-                              onValueChange={(value) => updateLineItem(index, 'unit', value)}
-                            >
-                              <SelectTrigger className="h-12">
-                                <SelectValue placeholder="Select unit" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {getUomOptionsForItem(line.item_id || 0).map((uom) => (
-                                  <SelectItem key={uom} value={uom}>
-                                    {uom}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
+                          if (!isFishItem) {
+                            return (
+                              <div className="grid grid-cols-3 gap-4">
+                                <div className="space-y-2">
+                                  <Label>Quantity</Label>
+                                  <Input
+                                    type="number"
+                                    step="0.01"
+                                    value={line.qty && line.qty > 0 ? line.qty : ''}
+                                    onChange={(e) => updateLineItem(index, 'qty', parseFloat(e.target.value) || 0)}
+                                    placeholder="Quantity"
+                                    className="h-12"
+                                  />
+                                </div>
+                                
+                                <div className="space-y-2">
+                                  <Label>Unit of Measure</Label>
+                                  <Select
+                                    value={line.unit || 'kg'}
+                                    onValueChange={(value) => updateLineItem(index, 'unit', value)}
+                                  >
+                                    <SelectTrigger className="h-12">
+                                      <SelectValue placeholder="Select unit" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {getUomOptionsForItem(line.item_id || 0).map((uom) => (
+                                        <SelectItem key={uom} value={uom}>
+                                          {uom}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                
+                                {/* Conditional packet size field */}
+                                {line.unit === 'packet' && (
+                                  <div className="space-y-2">
+                                    <Label>Packet Size (kg)</Label>
+                                    <Input
+                                      type="number"
+                                      step="0.1"
+                                      value={line.packet_size || ''}
+                                      onChange={(e) => updateLineItem(index, 'packet_size', parseFloat(e.target.value) || 0)}
+                                      placeholder="e.g., 10, 25"
+                                      className="h-12"
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
+                        
+                        {/* Fish-specific fields - Show when item category is fish */}
+                        {(() => {
+                          const selectedItem = items.find(item => item.item_id === line.item_id);
+                          const isFishItem = selectedItem?.category === 'fish' 
                           
-                          {/* Conditional packet size field */}
-                          {line.unit === 'packet' && (
-                            <div className="space-y-2">
-                              <Label>Packet Size (kg)</Label>
-                              <Input
-                                type="number"
-                                step="0.1"
-                                value={line.packet_size || ''}
-                                onChange={(e) => updateLineItem(index, 'packet_size', parseFloat(e.target.value) || 0)}
-                                placeholder="e.g., 10, 25"
-                                className="h-12"
-                              />
-                            </div>
-                          )}
-                        </div>
+                          if (isFishItem) {
+                            return (
+                              <div className="space-y-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                                <div className="flex items-center gap-2 text-blue-800 font-medium">
+                                  <span>🐟</span>
+                                  <span>Fish-Specific Details</span>
+                                </div>
+                                
+                                {/* Fish fields row 1 - Pond and Species */}
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div className="space-y-2">
+                                    <Label>Select Pond</Label>
+                                    <Select
+                                      value={line.pond_id?.toString() || ''}
+                                      onValueChange={(value) => updateLineItem(index, 'pond_id', parseInt(value))}
+                                    >
+                                      <SelectTrigger className="h-12">
+                                        <SelectValue placeholder="Select pond" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {ponds.filter(pond => pond.is_active).map((pond) => (
+                                          <SelectItem key={pond.pond_id || pond.id} value={(pond.pond_id || pond.id)?.toString() || ''}>
+                                            {pond.name} - {pond.water_area_decimal} decimal
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  
+                                  <div className="space-y-2">
+                                    <Label>Select Species</Label>
+                                    <Select
+                                      value={line.species_id?.toString() || ''}
+                                      onValueChange={(value) => updateLineItem(index, 'species_id', parseInt(value))}
+                                    >
+                                      <SelectTrigger className="h-12">
+                                        <SelectValue placeholder="Select species" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {species.map((spec) => (
+                                          <SelectItem key={spec.species_id || spec.id} value={(spec.species_id || spec.id)?.toString() || ''}>
+                                            {spec.name} {spec.scientific_name && `(${spec.scientific_name})`}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                </div>
+                                
+                                {/* Fish fields row 2 - Total Weight and Line Number */}
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div className="space-y-2">
+                                    <Label>Total Weight (kg)</Label>
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      value={line.total_weight && line.total_weight > 0 ? line.total_weight : ''}
+                                      onChange={(e) => updateLineItem(index, 'total_weight', parseFloat(e.target.value) || 0)}
+                                      placeholder="Total weight in kg"
+                                      className="h-12"
+                                    />
+                                  </div>
+                                  
+                                  <div className="space-y-2">
+                                    <Label>Line Number</Label>
+                                    <Input
+                                      type="number"
+                                      value={line.line_number && line.line_number > 0 ? line.line_number : ''}
+                                      onChange={(e) => updateLineItem(index, 'line_number', parseInt(e.target.value) || 0)}
+                                      placeholder="Line number"
+                                      className="h-12"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
                         
                         {/* Third row - Rate, Amount, and Actions */}
                         <div className="grid grid-cols-3 gap-4">
@@ -1004,29 +1235,98 @@ export default function InvoicesPage() {
                       <TableRow>
                         <TableHead>Item</TableHead>
                         <TableHead>Description</TableHead>
-                        <TableHead>Quantity</TableHead>
+                        <TableHead>Quantity/Weight</TableHead>
                         <TableHead>Unit</TableHead>
+                        <TableHead>Fish Details</TableHead>
                         <TableHead>Unit Price</TableHead>
                         <TableHead>Amount</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {currentInvoiceLines.map((line) => (
-                        <TableRow key={line.invoice_line_id}>
-                          <TableCell className="font-medium">
-                            {line.item_name || '-'}
-                          </TableCell>
-                          <TableCell>
-                            {line.description || '-'}
-                          </TableCell>
-                          <TableCell>{line.qty || '-'}</TableCell>
-                          <TableCell>{line.unit || '-'}</TableCell>
-                          <TableCell>{line.rate ? `$${Number(line.rate).toFixed(2)}` : '-'}</TableCell>
-                          <TableCell className="font-medium text-right">
-                            ${Number(line.amount || 0).toFixed(2)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {currentInvoiceLines.map((line) => {
+                        // Use item_category from the line data if available, otherwise fallback to items lookup
+                        const isFishItem = line.item_category === 'fish'
+                        // No need to lookup ponds and species - use data directly from line
+                        
+                        return (
+                          <TableRow key={line.invoice_line_id}>
+                            <TableCell className="font-medium">
+                              <div>
+                                {line.item_name || '-'}
+                                {isFishItem && (
+                                  <div className="text-xs text-blue-600 mt-1">
+                                    🐟 Fish Item
+                                  </div>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {line.description || '-'}
+                            </TableCell>
+                            <TableCell>
+                              {(() => {
+                                // Use item_category directly from the line data
+                                const isFishItem = line.item_category === 'fish';
+                                
+                                console.log('Line data:', line);
+                                console.log('Item category:', line.item_category);
+                                console.log('Is fish item:', isFishItem);
+                                
+                                console.log('Quantity/Weight display:', { 
+                                  isFishItem, 
+                                  total_weight: line.total_weight, 
+                                  qty: line.qty,
+                                  item_name: line.item_name,
+                                  item_category: line.item_category 
+                                });
+                                
+                                if (isFishItem) {
+                                  return line.total_weight ? `${line.total_weight} kg` : '-';
+                                }
+                                return line.qty || '-';
+                              })()}
+                            </TableCell>
+                            <TableCell>{line.unit || '-'}</TableCell>
+                            <TableCell>
+                              {(() => {
+                                if (isFishItem) {
+                                  console.log('Displaying fish item:', { isFishItem, total_weight: line.total_weight, line });
+                                  return (
+                                    <div className="text-sm space-y-1">
+                                      {line.total_weight && (
+                                        <div className="text-orange-600 font-semibold">
+                                          <span className="font-medium">Weight:</span> {line.total_weight} kg
+                                        </div>
+                                      )}
+                                      {line.pond_name && (
+                                        <div className="text-blue-600">
+                                          <span className="font-medium">Pond:</span> {line.pond_name}
+                                        </div>
+                                      )}
+                                      {line.species_name && (
+                                        <div className="text-green-600">
+                                          <span className="font-medium">Species:</span> {line.species_name}
+                                        </div>
+                                      )}
+                                      {line.line_number && (
+                                        <div className="text-gray-600">
+                                          <span className="font-medium">Line:</span> {line.line_number}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                } else {
+                                  return <span className="text-gray-400">-</span>;
+                                }
+                              })()}
+                            </TableCell>
+                            <TableCell>{line.rate ? `$${Number(line.rate).toFixed(2)}` : '-'}</TableCell>
+                            <TableCell className="font-medium text-right">
+                              ${Number(line.amount || 0).toFixed(2)}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                   
