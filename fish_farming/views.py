@@ -3341,6 +3341,71 @@ class AccountViewSet(viewsets.ModelViewSet):
             return Response(serializer.data)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=False, methods=['get'])
+    def balances(self, request):
+        """Get account balances for all accounts"""
+        try:
+            from django.db.models import Sum, Q
+            from decimal import Decimal
+            
+            accounts = self.get_queryset()
+            account_balances = []
+            
+            for account in accounts:
+                balance = Decimal('0.00')
+                
+                # Calculate balance based on account type and transactions
+                if account.account_type == 'Bank':
+                    # For bank accounts, deposits increase balance, bill payments decrease balance
+                    deposits = Deposit.objects.filter(
+                        bank_account=account,
+                        user=request.user
+                    ).aggregate(total=Sum('total_amount'))['total'] or Decimal('0.00')
+                    from .models import BillPayment
+                    bill_payments = BillPayment.objects.filter(
+                        payment_account=account,
+                        user=request.user
+                    ).aggregate(total=Sum('total_amount'))['total'] or Decimal('0.00')
+                    balance = (deposits or Decimal('0.00')) - (bill_payments or Decimal('0.00'))
+                    
+                elif account.account_type == 'Accounts Receivable':
+                    # For AR, sum all outstanding invoice balances
+                    from .models import Invoice
+                    ar_balance = Invoice.objects.filter(
+                        customer__user=request.user
+                    ).aggregate(total=Sum('open_balance'))['total'] or Decimal('0.00')
+                    balance = ar_balance
+                    
+                elif account.account_type == 'Accounts Payable':
+                    # For AP, sum all outstanding bill balances
+                    from .models import Bill
+                    ap_balance = Bill.objects.filter(
+                        user=request.user
+                    ).aggregate(total=Sum('open_balance'))['total'] or Decimal('0.00')
+                    balance = ap_balance
+
+                elif account.account_type == 'Income':
+                    # For income accounts, sum all invoice amounts
+                    from .models import Invoice
+                    income_balance = Invoice.objects.filter(
+                        user=request.user
+                    ).aggregate(total=Sum('total_amount'))['total'] or Decimal('0.00')
+                    balance = income_balance
+                
+                account_balances.append({
+                    'account_id': account.account_id,
+                    'name': account.name,
+                    'code': account.code,
+                    'account_type': account.account_type,
+                    'balance': float(balance),
+                    'formatted_balance': f"${balance:,.2f}"
+                })
+            
+            return Response(account_balances)
+            
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class VendorViewSet(viewsets.ModelViewSet):
@@ -4223,7 +4288,37 @@ class BillPaymentViewSet(viewsets.ModelViewSet):
         return BillPayment.objects.filter(user=self.request.user)
     
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        bill_payment = serializer.save(user=self.request.user)
+        # If a specific bill is provided in request, create an apply record and update open_balance
+        try:
+            bill_id = self.request.data.get('bill_id') or self.request.data.get('bill')
+            amount = self.request.data.get('total_amount') or self.request.data.get('amount_total')
+            if bill_id and amount:
+                from .models import Bill, BillPaymentApply
+                bill = Bill.objects.filter(bill_id=bill_id, user=self.request.user).first()
+                if bill:
+                    amount_decimal = Decimal(str(amount))
+                    apply_amount = min(amount_decimal, bill.open_balance)
+                    BillPaymentApply.objects.create(
+                        bill_payment=bill_payment,
+                        bill=bill,
+                        amount_applied=apply_amount
+                    )
+                    bill.open_balance = bill.open_balance - apply_amount
+                    bill.save(update_fields=['open_balance'])
+        except Exception:
+            # Do not block payment creation on apply errors; they can be managed separately
+            pass
+
+    def perform_destroy(self, instance):
+        # Reverse bill apply effects on deletion
+        from .models import BillPaymentApply
+        applies = BillPaymentApply.objects.filter(bill_payment=instance).select_related('bill')
+        for ap in applies:
+            bill = ap.bill
+            bill.open_balance = bill.open_balance + ap.amount_applied
+            bill.save(update_fields=['open_balance'])
+        instance.delete()
 
 
 class CustomerStockViewSet(viewsets.ModelViewSet):

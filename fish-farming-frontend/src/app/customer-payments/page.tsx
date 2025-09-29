@@ -30,6 +30,17 @@ interface Customer {
   name: string;
 }
 
+interface InvoiceLine {
+  invoice_line_id: number;
+  item_name: string;
+  item_category: string;
+  description: string;
+  qty: number;
+  rate: number;
+  amount: number;
+  total_weight?: number;
+}
+
 interface Invoice {
   invoice_id: number;
   invoice_no: string;
@@ -38,6 +49,7 @@ interface Invoice {
   invoice_date: string;
   total_amount: number;
   customer_name?: string;
+  lines?: InvoiceLine[];
 }
 
 
@@ -101,8 +113,22 @@ export default function CustomerPaymentsPage() {
       const outstandingInvoices = allInvoices.filter((invoice: Invoice) => 
         invoice.open_balance > 0
       );
+
+      // Fetch invoice lines for each outstanding invoice
+      const invoicesWithLines = await Promise.all(
+        outstandingInvoices.map(async (invoice: Invoice) => {
+          try {
+            const linesResponse = await get(`/invoice-lines/?invoice=${invoice.invoice_id}`);
+            const lines = linesResponse.results || linesResponse;
+            return { ...invoice, lines };
+          } catch (error) {
+            console.error(`Error fetching lines for invoice ${invoice.invoice_id}:`, error);
+            return { ...invoice, lines: [] };
+          }
+        })
+      );
       
-      setCustomerInvoices(outstandingInvoices);
+      setCustomerInvoices(invoicesWithLines);
       setSelectedInvoices([]); // Reset selection when customer changes
     } catch (error) {
       console.error('Error fetching customer invoices:', error);
@@ -383,6 +409,7 @@ export default function CustomerPaymentsPage() {
                             <TableHead className="w-12">Select</TableHead>
                             <TableHead>Invoice #</TableHead>
                             <TableHead>Date</TableHead>
+                            <TableHead>Items</TableHead>
                             <TableHead>Total Amount</TableHead>
                             <TableHead>Outstanding Balance</TableHead>
                           </TableRow>
@@ -400,6 +427,26 @@ export default function CustomerPaymentsPage() {
                               </TableCell>
                               <TableCell className="font-medium">{invoice.invoice_no}</TableCell>
                               <TableCell>{new Date(invoice.invoice_date).toLocaleDateString()}</TableCell>
+                              <TableCell>
+                                {invoice.lines && invoice.lines.length > 0 ? (
+                                  <div className="space-y-1">
+                                    {invoice.lines.map((line, index) => (
+                                      <div key={line.invoice_line_id} className="text-sm">
+                                        <div className="font-medium">{line.item_name}</div>
+                                        <div className="text-gray-500 text-xs">
+                                          {line.item_category} • {
+                                            line.item_category === 'fish' 
+                                              ? `Weight: ${line.total_weight || 0} kg` 
+                                              : `Qty: ${line.qty}`
+                                          } • ${Number(line.rate).toFixed(2)}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <span className="text-gray-400 text-sm">No items</span>
+                                )}
+                              </TableCell>
                               <TableCell>${Number(invoice.total_amount).toFixed(2)}</TableCell>
                               <TableCell className="text-red-600 font-medium">
                                 ${Number(invoice.open_balance).toFixed(2)}

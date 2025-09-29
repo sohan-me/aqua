@@ -42,13 +42,37 @@ interface ChartAccount {
   level: number;
 }
 
+interface InvoiceLine {
+  invoice_line_id: number;
+  item_name: string;
+  item_category: string;
+  description: string;
+  qty: number;
+  rate: number;
+  amount: number;
+  total_weight?: number;
+}
+
+interface Invoice {
+  invoice_id: number;
+  invoice_no: string;
+  customer_id: number;
+  open_balance: number;
+  invoice_date: string;
+  total_amount: number;
+  customer_name?: string;
+  lines?: InvoiceLine[];
+}
+
 interface CustomerPayment {
   cust_payment_id: number;
+  customer_id: number;
   customer_name: string;
   payment_date: string;
   amount_total: string;
   memo: string;
   created_at: string;
+  invoices?: Invoice[];
 }
 
 export default function DepositsPage() {
@@ -402,6 +426,7 @@ export default function DepositsPage() {
                           <TableHead className="w-12">Select</TableHead>
                           <TableHead>Customer</TableHead>
                           <TableHead>Payment Date</TableHead>
+                          <TableHead>Items</TableHead>
                           <TableHead>Amount</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -418,6 +443,28 @@ export default function DepositsPage() {
                             </TableCell>
                             <TableCell className="font-medium">{payment.customer_name}</TableCell>
                             <TableCell>{new Date(payment.payment_date).toLocaleDateString()}</TableCell>
+                            <TableCell>
+                              {payment.invoices && payment.invoices.length > 0 ? (
+                                <div className="space-y-1">
+                                  {payment.invoices.flatMap(invoice => 
+                                    invoice.lines?.map((line, index) => (
+                                      <div key={`${invoice.invoice_id}-${line.invoice_line_id}`} className="text-sm">
+                                        <div className="font-medium">{line.item_name}</div>
+                                        <div className="text-gray-500 text-xs">
+                                          {line.item_category} • {
+                                            line.item_category === 'fish' 
+                                              ? `Weight: ${line.total_weight || 0} kg` 
+                                              : `Qty: ${line.qty}`
+                                          } • ${Number(line.rate).toFixed(2)}
+                                        </div>
+                                      </div>
+                                    )) || []
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-gray-400 text-sm">No items</span>
+                              )}
+                            </TableCell>
                             <TableCell className="font-medium">${parseFloat(payment.amount_total).toFixed(2)}</TableCell>
                           </TableRow>
                         ))}
@@ -468,6 +515,7 @@ export default function DepositsPage() {
               <TableRow>
                 <TableHead>Deposit Account</TableHead>
                 <TableHead>Deposit Date</TableHead>
+                <TableHead>Items</TableHead>
                 <TableHead>Amount</TableHead>
                 <TableHead>Reference</TableHead>
                 <TableHead>Actions</TableHead>
@@ -478,6 +526,35 @@ export default function DepositsPage() {
                 <TableRow key={deposit.deposit_id}>
                   <TableCell className="font-medium">{deposit.bank_account_name}</TableCell>
                   <TableCell>{new Date(deposit.deposit_date).toLocaleDateString()}</TableCell>
+                  <TableCell>
+                    {deposit.lines && deposit.lines.length > 0 ? (
+                      <div className="space-y-1 max-w-xs">
+                        {deposit.lines.map((line) => {
+                          // Get the customer payment data to access invoice items
+                          const customerPayment = customerPayments.find(cp => cp.cust_payment_id === line.customer_payment);
+                          if (customerPayment && customerPayment.invoices) {
+                            return customerPayment.invoices.map((invoice) => 
+                              invoice.lines?.map((invoiceLine, index) => (
+                                <div key={`${invoice.invoice_id}-${invoiceLine.invoice_line_id}`} className="text-sm">
+                                  <div className="font-medium">{invoiceLine.item_name}</div>
+                                  <div className="text-gray-500 text-xs">
+                                    {invoiceLine.item_category} • {
+                                      invoiceLine.item_category === 'fish' 
+                                        ? `Weight: ${invoiceLine.total_weight || 0} kg` 
+                                        : `Qty: ${invoiceLine.qty}`
+                                    } • ${Number(invoiceLine.rate).toFixed(2)}
+                                  </div>
+                                </div>
+                              )) || []
+                            ).flat();
+                          }
+                          return null;
+                        }).filter(Boolean).flat()}
+                      </div>
+                    ) : (
+                      <span className="text-gray-400 text-sm">No items</span>
+                    )}
+                  </TableCell>
                   <TableCell className="font-medium">${parseFloat(deposit.total_amount || '0').toFixed(2)}</TableCell>
                   <TableCell>{deposit.reference}</TableCell>
                   <TableCell>

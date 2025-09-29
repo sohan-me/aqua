@@ -16,16 +16,18 @@ import { extractApiData } from '@/lib/utils';
 import { toast } from 'sonner';
 
 interface BillPayment {
-  payment_id: number;
-  vendor_id: number;
+  bill_payment_id: number;
+  vendor_id?: number;
   vendor_name?: string;
-  bill_id: number | null;
+  bill_id?: number | null;
   bill_number?: string;
   payment_date: string;
-  amount: number;
-  payment_method: string;
-  reference: string;
+  total_amount: string;  // API returns as string
+  reference?: string;
   memo: string;
+  payment_account?: number;
+  payment_account_name?: string;
+  account_id?: number;
   created_at: string;
 }
 
@@ -36,23 +38,35 @@ interface Vendor {
 
 interface Bill {
   bill_id: number;
+  bill_no: string;
   bill_number: string;
-  vendor_id: number;
-  balance_amount: number;
+  vendor: number;  // This is the actual field name from API
+  vendor_id?: number;  // Keep for backward compatibility
+  vendor_name?: string;
+  bill_date: string;
+  due_date: string;
+  total_amount: string;  // API returns as string
+  paid_amount: string;   // API returns as string
+  open_balance: string;  // API returns as string
+  balance_amount: string; // API returns as string
+  status: string;
+  memo: string;
 }
 
-const PAYMENT_METHODS = [
-  'Cash',
-  'Check',
-  'Bank Transfer',
-  'Credit Card',
-  'Debit Card',
-  'Other'
-];
+interface Account {
+  account_id: number;
+  name: string;
+  code: string;
+  account_type: string;
+  parent?: number;
+  children?: Account[];
+}
+
 
 export default function BillPaymentsPage() {
   const [payments, setPayments] = useState<BillPayment[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -62,9 +76,9 @@ export default function BillPaymentsPage() {
     bill_id: 'none',
     payment_date: new Date().toISOString().split('T')[0],
     amount: '',
-    payment_method: 'Cash',
     reference: '',
     memo: '',
+    account_id: '',  // New field for account selection
   });
 
   const { get, post, put, delete: del } = useApi();
@@ -85,13 +99,15 @@ export default function BillPaymentsPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [paymentsResponse, billsResponse] = await Promise.all([
+      const [paymentsResponse, billsResponse, accountsResponse] = await Promise.all([
         get('/bill-payments/'),
         get('/bills/'),
+        get('/accounts/tree/'),
       ]);
       
       setPayments(paymentsResponse.results || paymentsResponse);
       setBills(billsResponse.results || billsResponse);
+      setAccounts(accountsResponse);
     } catch (error) {
       console.error('Error fetching data:', error);
       toast.error('Failed to fetch payment data');
@@ -106,12 +122,13 @@ export default function BillPaymentsPage() {
       const paymentData = {
         ...formData,
         bill_id: formData.bill_id && formData.bill_id !== 'none' ? parseInt(formData.bill_id) : null,
-        amount: parseFloat(formData.amount) || 0,
+        total_amount: parseFloat(formData.amount) || 0,
         reference: formData.reference || `PAY-${Date.now()}`,
+        payment_account: formData.account_id ? parseInt(formData.account_id) : null,
       };
 
       if (editingPayment) {
-        await put(`/bill-payments/${editingPayment.payment_id}/`, paymentData);
+        await put(`/bill-payments/${editingPayment.bill_payment_id}/`, paymentData);
         toast.success('Bill payment updated successfully');
       } else {
         await post('/bill-payments/', paymentData);
@@ -131,13 +148,13 @@ export default function BillPaymentsPage() {
   const handleEdit = (payment: BillPayment) => {
     setEditingPayment(payment);
     setFormData({
-      vendor_id: payment.vendor_id.toString(),
-      bill_id: payment.bill_id?.toString() || '',
+      vendor_id: payment.vendor_id?.toString() || '',
+      bill_id: payment.bill_id?.toString() || 'none',
       payment_date: payment.payment_date,
-      amount: payment.amount.toString(),
-      payment_method: payment.payment_method,
-      reference: payment.reference,
+      amount: payment.total_amount,
+      reference: payment.reference || '',
       memo: payment.memo,
+      account_id: payment.payment_account?.toString() || '',
     });
     setIsDialogOpen(true);
   };
@@ -158,24 +175,51 @@ export default function BillPaymentsPage() {
   const resetForm = () => {
     setFormData({
       vendor_id: '',
-      bill_id: '',
-      payment_date: '',
+      bill_id: 'none',
+      payment_date: new Date().toISOString().split('T')[0],
       amount: '',
-      payment_method: '',
       reference: '',
       memo: '',
+      account_id: '',
     });
   };
 
+  // Helper function to flatten accounts tree
+  const flattenAccounts = (accounts: Account[]): Account[] => {
+    const flattened: Account[] = [];
+    
+    const flatten = (account: Account) => {
+      flattened.push(account);
+      if (account.children && account.children.length > 0) {
+        account.children.forEach((child: Account) => flatten(child));
+      }
+    };
+    
+    accounts.forEach(account => flatten(account));
+    return flattened;
+  };
+
   const getFilteredBills = () => {
-    if (!formData.vendor_id) return bills;
-    return bills.filter(bill => bill.vendor_id === parseInt(formData.vendor_id));
+    console.log('getFilteredBills called with vendor_id:', formData.vendor_id);
+    console.log('All bills:', bills);
+    
+    if (!formData.vendor_id) {
+      console.log('No vendor selected, returning empty array');
+      return [];
+    }
+    
+    const filtered = bills.filter(bill => 
+      bill.vendor === Number(formData.vendor_id) && 
+      parseFloat(bill.open_balance) > 0
+    );
+    
+    console.log('Filtered bills for vendor', formData.vendor_id, ':', filtered);
+    return filtered;
   };
 
   const filteredPayments = payments.filter(payment =>
     payment.vendor_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    payment.reference.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    payment.payment_method.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    payment.reference?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     payment.memo.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -243,11 +287,19 @@ export default function BillPaymentsPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">No bill</SelectItem>
-                      {getFilteredBills().map((bill) => (
-                        <SelectItem key={bill.bill_id} value={bill.bill_id.toString()}>
-                          {bill.bill_number} (${(bill.balance_amount || 0).toFixed(2)})
-                        </SelectItem>
-                      ))}
+                      {getFilteredBills().length > 0 ? (
+                        getFilteredBills().map((bill) => (
+                          <SelectItem key={bill.bill_id} value={String(bill.bill_id)}>
+                            {bill.bill_no} - ${(parseFloat(bill.open_balance) || 0).toFixed(2)} (Due: {new Date(bill.due_date).toLocaleDateString()})
+                          </SelectItem>
+                        ))
+                      ) : (
+                        formData.vendor_id && (
+                          <SelectItem value="no-bills" disabled>
+                            No outstanding bills for this vendor
+                          </SelectItem>
+                        )
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -276,20 +328,30 @@ export default function BillPaymentsPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="payment_method">Payment Method *</Label>
+                  <Label htmlFor="account_id">Account *</Label>
                   <Select
-                    value={formData.payment_method}
-                    onValueChange={(value) => setFormData({ ...formData, payment_method: value })}
+                    value={formData.account_id}
+                    onValueChange={(value) => setFormData({ ...formData, account_id: value })}
                   >
                     <SelectTrigger className="h-12">
-                      <SelectValue placeholder="Select payment method" />
+                      <SelectValue placeholder="Select account" />
                     </SelectTrigger>
                     <SelectContent>
-                      {PAYMENT_METHODS.map((method) => (
-                        <SelectItem key={method} value={method}>
-                          {method}
+                      {loading ? (
+                        <SelectItem value="loading" disabled>
+                          Loading accounts...
                         </SelectItem>
-                      ))}
+                      ) : flattenAccounts(accounts).length > 0 ? (
+                        flattenAccounts(accounts).map((account) => (
+                          <SelectItem key={account.account_id} value={account.account_id.toString()}>
+                            {account.code} - {account.name} ({account.account_type})
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="no-accounts" disabled>
+                          No accounts available
+                        </SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -359,21 +421,17 @@ export default function BillPaymentsPage() {
                 <TableHead>Bill</TableHead>
                 <TableHead>Payment Date</TableHead>
                 <TableHead>Amount</TableHead>
-                <TableHead>Method</TableHead>
                 <TableHead>Reference</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredPayments.map((payment) => (
-                <TableRow key={payment.payment_id}>
+                <TableRow key={payment.bill_payment_id}>
                   <TableCell className="font-medium">{payment.vendor_name}</TableCell>
                   <TableCell>{payment.bill_number || '-'}</TableCell>
                   <TableCell>{new Date(payment.payment_date).toLocaleDateString()}</TableCell>
-                  <TableCell className="font-medium">${payment.amount.toFixed(2)}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{payment.payment_method}</Badge>
-                  </TableCell>
+                  <TableCell className="font-medium">${(parseFloat(payment.total_amount) || 0).toFixed(2)}</TableCell>
                   <TableCell>{payment.reference}</TableCell>
                   <TableCell>
                     <div className="flex space-x-2">
@@ -387,7 +445,7 @@ export default function BillPaymentsPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleDelete(payment.payment_id)}
+                        onClick={() => handleDelete(payment.bill_payment_id)}
                         className="text-red-600 hover:text-red-700"
                       >
                         <Trash2 className="h-4 w-4" />

@@ -192,15 +192,33 @@ class JournalLineSerializer(serializers.ModelSerializer):
         read_only_fields = ['jl_id', 'created_at']
 
 
+class BillLineMiniSerializer(serializers.ModelSerializer):
+    expense_account_name = serializers.CharField(source='expense_account.name', read_only=True)
+    item_name = serializers.CharField(source='item.name', read_only=True)
+
+    class Meta:
+        model = BillLine
+        fields = ['bill_line_id', 'is_item', 'item_name', 'expense_account_name', 'description', 'qty', 'unit', 'cost', 'line_amount', 'amount']
+        read_only_fields = ['bill_line_id']
+
+
 class BillSerializer(serializers.ModelSerializer):
     user_username = serializers.CharField(source='user.username', read_only=True)
     vendor_name = serializers.CharField(source='vendor.name', read_only=True)
     terms_name = serializers.CharField(source='terms.name', read_only=True)
+    paid_amount = serializers.SerializerMethodField()
+    lines = BillLineMiniSerializer(many=True, read_only=True)
     
     class Meta:
         model = Bill
         fields = '__all__'
         read_only_fields = ['bill_id', 'user', 'created_at', 'updated_at']
+
+    def get_paid_amount(self, obj):
+        try:
+            return float(obj.total_amount) - float(obj.open_balance)
+        except Exception:
+            return 0.0
 
 
 class BillLineSerializer(serializers.ModelSerializer):
@@ -217,11 +235,23 @@ class BillLineSerializer(serializers.ModelSerializer):
 class BillPaymentSerializer(serializers.ModelSerializer):
     user_username = serializers.CharField(source='user.username', read_only=True)
     payment_account_name = serializers.CharField(source='payment_account.name', read_only=True)
+    account_id = serializers.IntegerField(source='payment_account.account_id', read_only=True)
+    vendor_name = serializers.SerializerMethodField()
+    bill_number = serializers.SerializerMethodField()
     
     class Meta:
         model = BillPayment
         fields = '__all__'
         read_only_fields = ['bill_payment_id', 'user', 'created_at', 'updated_at']
+
+    def get_vendor_name(self, obj):
+        # Use the first applied bill's vendor for display
+        apply = obj.applies.select_related('bill__vendor').first()
+        return apply.bill.vendor.name if apply and apply.bill and apply.bill.vendor else None
+
+    def get_bill_number(self, obj):
+        apply = obj.applies.select_related('bill').first()
+        return apply.bill.bill_no if apply and apply.bill else None
 
 
 class BillPaymentApplySerializer(serializers.ModelSerializer):
@@ -260,11 +290,61 @@ class InvoiceSerializer(serializers.ModelSerializer):
 class CustomerPaymentSerializer(serializers.ModelSerializer):
     user_username = serializers.CharField(source='user.username', read_only=True)
     customer_name = serializers.CharField(source='customer.name', read_only=True)
+    invoices = serializers.SerializerMethodField()
     
     class Meta:
         model = CustomerPayment
         fields = '__all__'
         read_only_fields = ['cust_payment_id', 'user', 'created_at', 'updated_at']
+    
+    def get_invoices(self, obj):
+        """Get only invoices that are applied to this specific customer payment"""
+        from .models import Invoice, InvoiceLine, CustomerPaymentApply
+        
+        # Get only invoices that are linked to this specific customer payment
+        applied_invoices = Invoice.objects.filter(
+            payment_applies__customer_payment=obj
+        ).distinct()
+        
+        # Serialize invoices with their lines
+        invoice_data = []
+        for invoice in applied_invoices:
+            invoice_lines = InvoiceLine.objects.filter(invoice=invoice)
+            lines_data = []
+            
+            for line in invoice_lines:
+                line_data = {
+                    'invoice_line_id': line.invoice_line_id,
+                    'item_name': line.item.name if line.item else '',
+                    'item_category': line.item.category if line.item else '',
+                    'description': line.description,
+                    'qty': float(line.qty),
+                    'rate': float(line.rate),
+                    'amount': float(line.amount),
+                    'total_weight': float(line.total_weight) if line.total_weight else None,
+                }
+                lines_data.append(line_data)
+            
+            # Get the amount applied for this specific payment
+            payment_apply = CustomerPaymentApply.objects.filter(
+                customer_payment=obj,
+                invoice=invoice
+            ).first()
+            amount_applied = float(payment_apply.amount_applied) if payment_apply else 0.0
+            
+            invoice_data.append({
+                'invoice_id': invoice.invoice_id,
+                'invoice_no': invoice.invoice_no,
+                'customer_id': invoice.customer.customer_id,
+                'open_balance': float(invoice.open_balance),
+                'invoice_date': invoice.invoice_date,
+                'total_amount': float(invoice.total_amount),
+                'customer_name': invoice.customer.name,
+                'amount_applied': amount_applied,
+                'lines': lines_data
+            })
+        
+        return invoice_data
 
 
 class CustomerPaymentApplySerializer(serializers.ModelSerializer):

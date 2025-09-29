@@ -894,13 +894,12 @@ export default function BillsPage() {
               <TableRow>
                 <TableHead>Bill Number</TableHead>
                 <TableHead>Vendor</TableHead>
-                <TableHead>User</TableHead>
+                <TableHead>Items</TableHead>
                 <TableHead>Bill Date</TableHead>
                 <TableHead>Due Date</TableHead>
                 <TableHead>Total Amount</TableHead>
                 <TableHead>Paid Amount</TableHead>
                 <TableHead>Balance</TableHead>
-                <TableHead>Status</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -909,17 +908,33 @@ export default function BillsPage() {
                 <TableRow key={bill.bill_id}>
                   <TableCell className="font-medium">{bill.bill_no}</TableCell>
                   <TableCell>{bill.vendor_name || '-'}</TableCell>
-                  <TableCell>{bill.user_username || '-'}</TableCell>
+                  <TableCell>
+                    {bill.lines && bill.lines.length > 0 ? (
+                      <div className="space-y-1 max-w-xs">
+                        {bill.lines.map((line: any) => (
+                          <div key={line.bill_line_id} className="text-xs">
+                            <div className="font-medium">
+                              {line.is_item ? (line.item_name || 'Item') : (line.expense_account_name || 'Expense')}
+                            </div>
+                            <div className="text-gray-500">
+                              {line.is_item ? (
+                                `${line.description || ''} ${line.qty ? `• Qty: ${line.qty}` : ''} ${line.unit ? ` ${line.unit}` : ''} ${line.cost ? `• ৳${Number(line.cost).toFixed(2)}` : ''}`
+                              ) : (
+                                `${line.description || line.line_memo || ''} ${line.amount ? `• ৳${Number(line.amount).toFixed(2)}` : ''}`
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-gray-400 text-sm">No items</span>
+                    )}
+                  </TableCell>
                   <TableCell>{bill.bill_date ? new Date(bill.bill_date).toLocaleDateString() : '-'}</TableCell>
                   <TableCell>{bill.due_date ? new Date(bill.due_date).toLocaleDateString() : '-'}</TableCell>
                   <TableCell>৳{bill.total_amount ? Number(bill.total_amount).toFixed(2) : '0.00'}</TableCell>
                   <TableCell>৳{bill.paid_amount ? Number(bill.paid_amount).toFixed(2) : '0.00'}</TableCell>
                   <TableCell className="font-medium">৳{bill.open_balance ? Number(bill.open_balance).toFixed(2) : '0.00'}</TableCell>
-                  <TableCell>
-                    <Badge className={getStatusColor(bill.status)}>
-                      {bill.status ? bill.status.toUpperCase() : 'UNKNOWN'}
-                    </Badge>
-                  </TableCell>
                   <TableCell>
                     <div className="flex space-x-2">
                       <Button
