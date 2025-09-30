@@ -269,7 +269,7 @@ export default function QuickDiagnosisPage() {
     setIsSaving(true);
     try {
       const diagnosticData = {
-        pond: selectedPond.id,
+        pond: selectedPond.pond_id,
         disease_name: editableDiagnosis.disease,
         confidence_percentage: editableDiagnosis.confidence,
         recommended_treatment: editableDiagnosis.treatment,
@@ -301,7 +301,7 @@ export default function QuickDiagnosisPage() {
     setIsSaving(true);
     try {
       const diagnosticData = {
-        pond: selectedPond.id,
+        pond: selectedPond.pond_id,
         disease_name: diagnosis.disease,
         confidence_percentage: diagnosis.confidence,
         recommended_treatment: diagnosis.treatment,
@@ -426,7 +426,7 @@ export default function QuickDiagnosisPage() {
               {selectedPond && (
                 <div className="mt-4 p-3 bg-blue-50 rounded-lg">
                   <p className="text-sm text-blue-800">
-                    <strong>Selected Pond:</strong> {selectedPond.name} ({parseFloat(selectedPond.area_decimal).toFixed(3)} decimel) - {selectedPond.location || 'Location not specified'}
+                    <strong>Selected Pond:</strong> {selectedPond.name} ({parseFloat(selectedPond.water_area_decimal).toFixed(3)} decimel) - {selectedPond.location || 'Location not specified'}
                   </p>
                 </div>
               )}
@@ -582,7 +582,7 @@ export default function QuickDiagnosisPage() {
             {selectedPond && (
               <div className="bg-blue-50 p-3 rounded-lg mb-4">
                 <p className="text-sm text-blue-800">
-                  <strong>Pond:</strong> {selectedPond.name} ({parseFloat(selectedPond.area_decimal).toFixed(3)} decimel) - {selectedPond.location || 'Location not specified'}
+                  <strong>Pond:</strong> {selectedPond.name} ({parseFloat(selectedPond.water_area_decimal).toFixed(3)} decimel) - {selectedPond.location || 'Location not specified'}
                 </p>
               </div>
             )}

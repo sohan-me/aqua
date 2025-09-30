@@ -55,6 +55,7 @@ interface Item {
   feed_stage?: string;
   selling_price?: number;
   uom: string;
+  is_species?: boolean;
 }
 
 export default function ItemSalesPage() {
@@ -169,7 +170,7 @@ export default function ItemSalesPage() {
         
         // Create sales lines
         for (const line of lineItems) {
-          if (line.item_id && line.qty > 0) {
+          if (line.item_id && line.qty && line.qty > 0) {
             await post('/item-sales-lines/', {
               item_sale: response.sale_id,
               item: line.item_id,

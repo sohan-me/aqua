@@ -59,6 +59,17 @@ interface BiomassData {
     growth_biomass: number;
     current_biomass: number;
   }>;
+  load_analysis: {
+    total_area_sqm: number;
+    overall_load_kg_per_sqm: number;
+    pond_loads: Array<{
+      pond_name: string;
+      area_sqm: number;
+      area_decimal: number;
+      total_biomass_kg: number;
+      load_kg_per_sqm: number;
+    }>;
+  };
   filters_applied: {
     pond_id: string | null;
     species_id: string | null;

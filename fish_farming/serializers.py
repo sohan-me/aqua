@@ -856,11 +856,17 @@ class SamplingSerializer(serializers.ModelSerializer):
 class MortalitySerializer(serializers.ModelSerializer):
     pond_name = serializers.CharField(source='pond.name', read_only=True)
     species_name = serializers.CharField(source='species.name', read_only=True)
+    customer_stock_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     
     class Meta:
         model = Mortality
         fields = '__all__'
         read_only_fields = ['total_weight_kg', 'created_at']
+
+    def create(self, validated_data):
+        # Remove non-model write-only helper field
+        validated_data.pop('customer_stock_id', None)
+        return super().create(validated_data)
 
 
 class HarvestSerializer(serializers.ModelSerializer):
@@ -1195,32 +1201,50 @@ class CustomerStockSerializer(serializers.ModelSerializer):
         try:
             if obj.item.category != 'fish':
                 return None
-            # Important: Keep count constant based on historical movements (Bills/Invoices),
-            # not derived from current stock or latest sampling line number.
-            from .models import BillLine, InvoiceLine
-            from django.db.models import Q
+            # Derive from movements: IN (invoices to internal pond customer)
+            # minus OUT (invoices to external customers for this pond)
+            # minus mortalities and harvests for inferred species
+            from .models import InvoiceLine, BillLine, Mortality, Harvest
+            from django.db.models import Sum
             def infer_pcs(line):
-                # Prefer explicit fish_count stored on the line
                 if getattr(line, 'fish_count', None):
                     return int(line.fish_count or 0)
-                # Otherwise infer from the line's own line_number and weight/qty
                 tw = line.total_weight if line.total_weight is not None else line.qty
                 if line.line_number and tw:
                     return int(round(float(line.line_number) * float(tw)))
                 return 0
-            # IN to pond stock: invoice lines whose invoice customer is THIS internal pond customer
             inv_in_qs = InvoiceLine.objects.filter(item=obj.item, invoice__customer=obj.customer)
             total_in = sum(infer_pcs(il) for il in inv_in_qs)
-
-            # OUT from pond stock: invoice lines that specify this pond but belong to a DIFFERENT (external) customer
             inv_out_qs = InvoiceLine.objects.filter(item=obj.item)
             try:
                 inv_out_qs = inv_out_qs.filter(pond=obj.pond).exclude(invoice__customer=obj.customer)
             except Exception:
-                # If pond field is missing, we can't resolve pond-specific outflows; default to none
                 inv_out_qs = inv_out_qs.none()
             total_out = sum(infer_pcs(il) for il in inv_out_qs)
-            result = total_in - total_out
+
+            # Infer species linked to this stock via recent lines
+            species_ids = set()
+            try:
+                species_ids.update(
+                    InvoiceLine.objects.filter(item=obj.item, pond=obj.pond, species__isnull=False)
+                    .values_list('species_id', flat=True)[:5]
+                )
+                species_ids.update(
+                    BillLine.objects.filter(item=obj.item, pond=obj.pond, species__isnull=False)
+                    .values_list('species_id', flat=True)[:5]
+                )
+            except Exception:
+                pass
+            m_count = 0
+            h_count = 0
+            if obj.pond:
+                if species_ids:
+                    m_count = int(Mortality.objects.filter(pond=obj.pond, species_id__in=list(species_ids)).aggregate(Sum('count'))['count__sum'] or 0)
+                    h_count = int(Harvest.objects.filter(pond=obj.pond, species_id__in=list(species_ids)).aggregate(Sum('total_count'))['total_count__sum'] or 0)
+                else:
+                    # If we cannot infer species linkage, at least subtract pond-level mortalities explicitly recorded without species
+                    m_count = int(Mortality.objects.filter(pond=obj.pond, species__isnull=True).aggregate(Sum('count'))['count__sum'] or 0)
+            result = total_in - total_out - m_count - h_count
             return int(result if result > 0 else 0)
         except Exception:
             return None

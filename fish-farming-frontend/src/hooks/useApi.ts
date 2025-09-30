@@ -1007,15 +1007,24 @@ export function useCustomer(id: number) {
 }
 
 export function useCreateCustomer() {
-  return useApiMutation(['customers'], apiService.createCustomer);
+  return useApiMutation(
+    (data: any) => apiService.createCustomer(data),
+    { invalidateQueries: [['customers']] }
+  );
 }
 
 export function useUpdateCustomer() {
-  return useApiMutation(['customers'], apiService.updateCustomer);
+  return useApiMutation(
+    ({ id, data }: { id: number; data: any }) => apiService.updateCustomer(id, data),
+    { invalidateQueries: [['customers']] }
+  );
 }
 
 export function useDeleteCustomer() {
-  return useApiMutation(['customers'], apiService.deleteCustomer);
+  return useApiMutation(
+    (id: number) => apiService.deleteCustomer(id),
+    { invalidateQueries: [['customers']] }
+  );
 }
 
 export function usePaymentTerms() {
@@ -1043,27 +1052,45 @@ export function useCustomerStock(id: number) {
 }
 
 export function useCreateVendor() {
-  return useApiMutation(['vendors'], apiService.createVendor);
+  return useApiMutation(
+    (data: any) => apiService.createVendor(data),
+    { invalidateQueries: [['vendors']] }
+  );
 }
 
 export function useUpdateVendor() {
-  return useApiMutation(['vendors'], apiService.updateVendor);
+  return useApiMutation(
+    ({ id, data }: { id: number; data: any }) => apiService.updateVendor(id, data),
+    { invalidateQueries: [['vendors']] }
+  );
 }
 
 export function useDeleteVendor() {
-  return useApiMutation(['vendors'], apiService.deleteVendor);
+  return useApiMutation(
+    (id: number) => apiService.deleteVendor(id),
+    { invalidateQueries: [['vendors']] }
+  );
 }
 
 export function useCreateCustomerStock() {
-  return useApiMutation(['customer-stocks'], apiService.createCustomerStock);
+  return useApiMutation(
+    (data: any) => apiService.createCustomerStock(data),
+    { invalidateQueries: [['customer-stocks']] }
+  );
 }
 
 export function useUpdateCustomerStock() {
-  return useApiMutation(['customer-stocks'], apiService.updateCustomerStock);
+  return useApiMutation(
+    ({ id, data }: { id: number; data: any }) => apiService.updateCustomerStock(id, data),
+    { invalidateQueries: [['customer-stocks']] }
+  );
 }
 
 export function useDeleteCustomerStock() {
-  return useApiMutation(['customer-stocks'], apiService.deleteCustomerStock);
+  return useApiMutation(
+    (id: number) => apiService.deleteCustomerStock(id),
+    { invalidateQueries: [['customer-stocks']] }
+  );
 }
 
 export function useVendorCategories() {
@@ -1081,15 +1108,24 @@ export function useItem(id: number) {
 }
 
 export function useCreateItem() {
-  return useApiMutation(['items'], apiService.createItem);
+  return useApiMutation(
+    (data: any) => apiService.createItem(data),
+    { invalidateQueries: [['items']] }
+  );
 }
 
 export function useUpdateItem() {
-  return useApiMutation(['items'], apiService.updateItem);
+  return useApiMutation(
+    ({ id, data }: { id: number; data: any }) => apiService.updateItem(id, data),
+    { invalidateQueries: [['items']] }
+  );
 }
 
 export function useDeleteItem() {
-  return useApiMutation(['items'], apiService.deleteItem);
+  return useApiMutation(
+    (id: number) => apiService.deleteItem(id),
+    { invalidateQueries: [['items']] }
+  );
 }
 
 export function useBills(params?: PaginationParams) {
@@ -1103,15 +1139,24 @@ export function useBill(id: number) {
 }
 
 export function useCreateBill() {
-  return useApiMutation(['bills'], apiService.createBill);
+  return useApiMutation(
+    (data: any) => apiService.createBill(data),
+    { invalidateQueries: [['bills']] }
+  );
 }
 
 export function useUpdateBill() {
-  return useApiMutation(['bills'], apiService.updateBill);
+  return useApiMutation(
+    ({ id, data }: { id: number; data: any }) => apiService.updateBill(id, data),
+    { invalidateQueries: [['bills']] }
+  );
 }
 
 export function useDeleteBill() {
-  return useApiMutation(['bills'], apiService.deleteBill);
+  return useApiMutation(
+    (id: number) => apiService.deleteBill(id),
+    { invalidateQueries: [['bills']] }
+  );
 }
 
 export function useInvoices(params?: PaginationParams) {
@@ -1125,15 +1170,24 @@ export function useInvoice(id: number) {
 }
 
 export function useCreateInvoice() {
-  return useApiMutation(['invoices'], apiService.createInvoice);
+  return useApiMutation(
+    (data: any) => apiService.createInvoice(data),
+    { invalidateQueries: [['invoices']] }
+  );
 }
 
 export function useUpdateInvoice() {
-  return useApiMutation(['invoices'], apiService.updateInvoice);
+  return useApiMutation(
+    ({ id, data }: { id: number; data: any }) => apiService.updateInvoice(id, data),
+    { invalidateQueries: [['invoices']] }
+  );
 }
 
 export function useDeleteInvoice() {
-  return useApiMutation(['invoices'], apiService.deleteInvoice);
+  return useApiMutation(
+    (id: number) => apiService.deleteInvoice(id),
+    { invalidateQueries: [['invoices']] }
+  );
 }
 
 export function useInventoryTransactions(params?: PaginationParams) {
@@ -1147,15 +1201,24 @@ export function useInventoryTransaction(id: number) {
 }
 
 export function useCreateInventoryTransaction() {
-  return useApiMutation(['inventory-transactions'], apiService.createInventoryTransaction);
+  return useApiMutation(
+    (data: any) => apiService.createInventoryTransaction(data),
+    { invalidateQueries: [['inventory-transactions']] }
+  );
 }
 
 export function useUpdateInventoryTransaction() {
-  return useApiMutation(['inventory-transactions'], apiService.updateInventoryTransaction);
+  return useApiMutation(
+    ({ id, data }: { id: number; data: any }) => apiService.updateInventoryTransaction(id, data),
+    { invalidateQueries: [['inventory-transactions']] }
+  );
 }
 
 export function useDeleteInventoryTransaction() {
-  return useApiMutation(['inventory-transactions'], apiService.deleteInventoryTransaction);
+  return useApiMutation(
+    (id: number) => apiService.deleteInventoryTransaction(id),
+    { invalidateQueries: [['inventory-transactions']] }
+  );
 }
 
 export function useStockingEvents(params?: PaginationParams) {
@@ -1169,15 +1232,24 @@ export function useStockingEvent(id: number) {
 }
 
 export function useCreateStockingEvent() {
-  return useApiMutation(['stocking-events'], apiService.createStockingEvent);
+  return useApiMutation(
+    (data: any) => apiService.createStockingEvent(data),
+    { invalidateQueries: [['stocking-events']] }
+  );
 }
 
 export function useUpdateStockingEvent() {
-  return useApiMutation(['stocking-events'], apiService.updateStockingEvent);
+  return useApiMutation(
+    ({ id, data }: { id: number; data: any }) => apiService.updateStockingEvent(id, data),
+    { invalidateQueries: [['stocking-events']] }
+  );
 }
 
 export function useDeleteStockingEvent() {
-  return useApiMutation(['stocking-events'], apiService.deleteStockingEvent);
+  return useApiMutation(
+    (id: number) => apiService.deleteStockingEvent(id),
+    { invalidateQueries: [['stocking-events']] }
+  );
 }
 
 export function useStockingEventLines(id: number) {
@@ -1187,7 +1259,10 @@ export function useStockingEventLines(id: number) {
 }
 
 export function useAddStockingEventLine() {
-  return useApiMutation(['stocking-events'], apiService.addStockingEventLine);
+  return useApiMutation(
+    ({ id, data }: { id: number; data: any }) => apiService.addStockingEventLine(id, data),
+    { invalidateQueries: [['stocking-events']] }
+  );
 }
 
 export function useFeedingEvents(params?: PaginationParams) {
@@ -1201,15 +1276,24 @@ export function useFeedingEvent(id: number) {
 }
 
 export function useCreateFeedingEvent() {
-  return useApiMutation(['feeding-events'], apiService.createFeedingEvent);
+  return useApiMutation(
+    (data: any) => apiService.createFeedingEvent(data),
+    { invalidateQueries: [['feeding-events']] }
+  );
 }
 
 export function useUpdateFeedingEvent() {
-  return useApiMutation(['feeding-events'], apiService.updateFeedingEvent);
+  return useApiMutation(
+    ({ id, data }: { id: number; data: any }) => apiService.updateFeedingEvent(id, data),
+    { invalidateQueries: [['feeding-events']] }
+  );
 }
 
 export function useDeleteFeedingEvent() {
-  return useApiMutation(['feeding-events'], apiService.deleteFeedingEvent);
+  return useApiMutation(
+    (id: number) => apiService.deleteFeedingEvent(id),
+    { invalidateQueries: [['feeding-events']] }
+  );
 }
 
 export function useMedicineEvents(params?: PaginationParams) {
@@ -1223,15 +1307,24 @@ export function useMedicineEvent(id: number) {
 }
 
 export function useCreateMedicineEvent() {
-  return useApiMutation(['medicine-events'], apiService.createMedicineEvent);
+  return useApiMutation(
+    (data: any) => apiService.createMedicineEvent(data),
+    { invalidateQueries: [['medicine-events']] }
+  );
 }
 
 export function useUpdateMedicineEvent() {
-  return useApiMutation(['medicine-events'], apiService.updateMedicineEvent);
+  return useApiMutation(
+    ({ id, data }: { id: number; data: any }) => apiService.updateMedicineEvent(id, data),
+    { invalidateQueries: [['medicine-events']] }
+  );
 }
 
 export function useDeleteMedicineEvent() {
-  return useApiMutation(['medicine-events'], apiService.deleteMedicineEvent);
+  return useApiMutation(
+    (id: number) => apiService.deleteMedicineEvent(id),
+    { invalidateQueries: [['medicine-events']] }
+  );
 }
 
 export function useOtherPondEvents(params?: PaginationParams) {
@@ -1245,15 +1338,24 @@ export function useOtherPondEvent(id: number) {
 }
 
 export function useCreateOtherPondEvent() {
-  return useApiMutation(['other-pond-events'], apiService.createOtherPondEvent);
+  return useApiMutation(
+    (data: any) => apiService.createOtherPondEvent(data),
+    { invalidateQueries: [['other-pond-events']] }
+  );
 }
 
 export function useUpdateOtherPondEvent() {
-  return useApiMutation(['other-pond-events'], apiService.updateOtherPondEvent);
+  return useApiMutation(
+    ({ id, data }: { id: number; data: any }) => apiService.updateOtherPondEvent(id, data),
+    { invalidateQueries: [['other-pond-events']] }
+  );
 }
 
 export function useDeleteOtherPondEvent() {
-  return useApiMutation(['other-pond-events'], apiService.deleteOtherPondEvent);
+  return useApiMutation(
+    (id: number) => apiService.deleteOtherPondEvent(id),
+    { invalidateQueries: [['other-pond-events']] }
+  );
 }
 
 export function useEmployees(params?: PaginationParams) {
@@ -1267,15 +1369,24 @@ export function useEmployee(id: number) {
 }
 
 export function useCreateEmployee() {
-  return useApiMutation(['employees'], apiService.createEmployee);
+  return useApiMutation(
+    (data: any) => apiService.createEmployee(data),
+    { invalidateQueries: [['employees']] }
+  );
 }
 
 export function useUpdateEmployee() {
-  return useApiMutation(['employees'], apiService.updateEmployee);
+  return useApiMutation(
+    ({ id, data }: { id: number; data: any }) => apiService.updateEmployee(id, data),
+    { invalidateQueries: [['employees']] }
+  );
 }
 
 export function useDeleteEmployee() {
-  return useApiMutation(['employees'], apiService.deleteEmployee);
+  return useApiMutation(
+    (id: number) => apiService.deleteEmployee(id),
+    { invalidateQueries: [['employees']] }
+  );
 }
 
 export function usePayrollRuns(params?: PaginationParams) {
@@ -1289,13 +1400,22 @@ export function usePayrollRun(id: number) {
 }
 
 export function useCreatePayrollRun() {
-  return useApiMutation(['payroll-runs'], apiService.createPayrollRun);
+  return useApiMutation(
+    (data: any) => apiService.createPayrollRun(data),
+    { invalidateQueries: [['payroll-runs']] }
+  );
 }
 
 export function useUpdatePayrollRun() {
-  return useApiMutation(['payroll-runs'], apiService.updatePayrollRun);
+  return useApiMutation(
+    ({ id, data }: { id: number; data: any }) => apiService.updatePayrollRun(id, data),
+    { invalidateQueries: [['payroll-runs']] }
+  );
 }
 
 export function useDeletePayrollRun() {
-  return useApiMutation(['payroll-runs'], apiService.deletePayrollRun);
+  return useApiMutation(
+    (id: number) => apiService.deletePayrollRun(id),
+    { invalidateQueries: [['payroll-runs']] }
+  );
 }

@@ -44,6 +44,7 @@ interface Bill {
   user: number; // User foreign key
   user_username: string; // Username for display
   terms?: number | null; // Payment terms
+  lines?: BillLine[]; // Bill lines
 }
 
 interface BillLine {
@@ -898,7 +899,7 @@ export default function BillsPage() {
                                         value={line.fish_count || ''}
                                         onChange={(e) => {
                                           const value = e.target.value;
-                                          updateFishLineFields(actualIndex, { fish_count: value === '' ? '' : parseInt(value) || 0 });
+                                          updateFishLineFields(actualIndex, { fish_count: value === '' ? undefined : parseInt(value) || 0 });
                                         }}
                                         placeholder="Number of fish (pcs)"
                                         className="h-12"
@@ -912,7 +913,7 @@ export default function BillsPage() {
                                         value={line.line_number || ''}
                                         onChange={(e) => {
                                           const value = e.target.value;
-                                          updateFishLineFields(actualIndex, { line_number: value === '' ? '' : parseFloat(value) || 0 });
+                                          updateFishLineFields(actualIndex, { line_number: value === '' ? undefined : parseFloat(value) || 0 });
                                         }}
                                         placeholder="e.g., 4 (pcs/kg)"
                                         className="h-12"
@@ -926,7 +927,7 @@ export default function BillsPage() {
                                         value={line.total_weight || ''}
                                         onChange={(e) => {
                                           const value = e.target.value;
-                                          updateFishLineFields(actualIndex, { total_weight: value === '' ? '' : parseFloat(value) || 0 });
+                                          updateFishLineFields(actualIndex, { total_weight: value === '' ? undefined : parseFloat(value) || 0 });
                                         }}
                                         placeholder="Auto/Manual total"
                                         className="h-12"

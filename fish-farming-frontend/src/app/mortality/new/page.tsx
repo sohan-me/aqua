@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useCreateMortality, usePonds, useSpecies } from '@/hooks/useApi';
+import { useCreateMortality, usePonds, useSpecies, useCustomerStocks } from '@/hooks/useApi';
 import { extractApiData } from '@/lib/utils';
-import { Pond, Species } from '@/lib/api';
+import { Pond, Species, CustomerStock } from '@/lib/api';
 import { ArrowLeft, Save, X, Fish, TrendingDown, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -13,18 +13,27 @@ export default function NewMortalityPage() {
   const createMortality = useCreateMortality();
   const { data: pondsData } = usePonds();
   const { data: speciesData } = useSpecies();
+  const { data: customerStocksData } = useCustomerStocks();
   
   const ponds = extractApiData<Pond>(pondsData?.data);
   const species = extractApiData<Species>(speciesData?.data);
+  const allCustomerStocks = extractApiData<CustomerStock>(customerStocksData?.data);
 
   const [formData, setFormData] = useState({
     pond: '',
-    species: '',
     date: new Date().toISOString().split('T')[0],
-    count: '',
     cause: '',
     notes: ''
   });
+
+  type MortalityEntry = {
+    customerStockId: string;
+    itemName: string;
+    count: string;
+    avgWeightKg: number | null;
+  };
+
+  const [entries, setEntries] = useState<MortalityEntry[]>([]);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -36,21 +45,98 @@ export default function NewMortalityPage() {
     }));
   };
 
+  // Fetch latest fish sampling avg weight for pond+species
+  const fetchLatestAvgWeight = async (pondId: string, speciesId?: string): Promise<number | null> => {
+    try {
+      if (!pondId) return null;
+      const params = new URLSearchParams();
+      params.append('pond', pondId);
+      if (speciesId) params.append('species', speciesId);
+      params.append('ordering', '-date');
+      params.append('page_size', '1');
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || ''}/fish-sampling/?${params.toString()}`.replace(/\/$/, ''), {
+        headers: {
+          'Authorization': `Token ${localStorage.getItem('authToken')}`,
+        },
+      });
+      if (!response.ok) return null;
+      const data = await response.json();
+      const results = Array.isArray(data?.results) ? data.results : Array.isArray(data) ? data : [];
+      if (results.length === 0) return null;
+      const avg = parseFloat(results[0]?.average_weight_kg);
+      return isNaN(avg) ? null : avg;
+    } catch {
+      return null;
+    }
+  };
+
+  const addEntry = () => {
+    setEntries(prev => ([...prev, { customerStockId: '', itemName: '', count: '', avgWeightKg: null }]));
+  };
+
+  const removeEntry = (index: number) => {
+    setEntries(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleEntryStockChange = async (index: number, customerStockId: string) => {
+    const cs = allCustomerStocks.find(s => s.customer_stock_id === (customerStockId ? parseInt(customerStockId) : -1));
+    const itemName = cs?.item_name || '';
+    let avgWeightKg: number | null = null;
+    if (cs && cs.fish_total_weight_kg && cs.fish_count) {
+      const total = Number(cs.fish_total_weight_kg);
+      const cnt = Number(cs.fish_count);
+      avgWeightKg = cnt > 0 ? total / cnt : null;
+    } else {
+      // fallback: try latest sampling for the pond
+      avgWeightKg = await fetchLatestAvgWeight(formData.pond, '');
+    }
+    setEntries(prev => prev.map((e, i) => i === index ? { ...e, customerStockId, itemName, avgWeightKg } : e));
+    if (avgWeightKg == null) {
+      toast.warning(`No recent sampling found for ${itemName || 'selected fish'}. Avg weight unavailable.`);
+    }
+  };
+
+  const handleEntryCountChange = (index: number, count: string) => {
+    setEntries(prev => prev.map((e, i) => i === index ? { ...e, count } : e));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
 
     try {
-      const submitData = {
-        pond: parseInt(formData.pond),
-        species: formData.species ? parseInt(formData.species) : null,
-        date: formData.date,
-        count: parseInt(formData.count),
-        cause: formData.cause || null,
-        notes: formData.notes || ''
-      };
+      if (!formData.pond) {
+        toast.error('Please select a pond.');
+        return;
+      }
+      if (entries.length === 0) {
+        toast.error('Add at least one species entry.');
+        return;
+      }
 
-      await createMortality.mutateAsync(submitData);
+      // Submit one record per entry
+      for (const entry of entries) {
+        if (!entry.customerStockId || !entry.count) continue;
+        const submitData: any = {
+          pond: parseInt(formData.pond),
+          date: formData.date,
+          count: parseInt(entry.count),
+          cause: formData.cause || null,
+          notes: formData.notes || ''
+        };
+        if (entry.avgWeightKg != null) {
+          submitData.avg_weight_kg = entry.avgWeightKg;
+          // total weight to deduct from stock
+          const totalWeight = parseInt(entry.count) * entry.avgWeightKg;
+          if (!isNaN(totalWeight)) {
+            submitData.total_weight_kg = Number(totalWeight.toFixed(3));
+          }
+        }
+        // link to customer stock for automatic deduction and movement
+        submitData.customer_stock_id = parseInt(entry.customerStockId);
+        await createMortality.mutateAsync(submitData);
+      }
+
       router.push('/mortality');
     } catch (error) {
       console.error('Error creating mortality record:', error);
@@ -120,26 +206,6 @@ export default function NewMortalityPage() {
               </div>
 
               <div>
-                <label htmlFor="species" className="block text-sm font-medium text-gray-700 mb-2">
-                  Species
-                </label>
-                <select
-                  id="species"
-                  name="species"
-                  value={formData.species}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
-                >
-                  <option value="">Select a species (optional)</option>
-                  {species.map((spec) => (
-                    <option key={spec.id} value={spec.id}>
-                      {spec.name} ({spec.scientific_name})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
                 <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-2">
                   Date *
                 </label>
@@ -156,31 +222,72 @@ export default function NewMortalityPage() {
             </div>
           </div>
 
-          {/* Mortality Details */}
+          {/* Mortality Details - Multiple Species */}
           <div className="bg-red-50 rounded-lg p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
               <TrendingDown className="h-5 w-5 mr-2 text-red-600" />
               Mortality Details
             </h2>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label htmlFor="count" className="block text-sm font-medium text-gray-700 mb-2">
-                  Number of Dead Fish *
-                </label>
-                <input
-                  type="number"
-                  id="count"
-                  name="count"
-                  required
-                  min="1"
-                  value={formData.count}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
-                  placeholder="Enter number of dead fish"
-                />
-              </div>
+            <div className="space-y-4">
+              {entries.map((entry, index) => (
+                <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end bg-white rounded-md p-4 border border-red-100">
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Fish from Customer Stock *</label>
+                    <select
+                      value={entry.customerStockId}
+                      onChange={(e) => handleEntryStockChange(index, e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    >
+                      <option value="">Select fish stock</option>
+                      {allCustomerStocks
+                        .filter((cs) => cs.item_type === 'inventory_part' && cs.category === 'fish' && (formData.pond ? cs.pond === parseInt(formData.pond) : true))
+                        .map((cs) => (
+                          <option key={cs.customer_stock_id} value={cs.customer_stock_id.toString()}>
+                            {cs.item_name} {cs.pond_name ? `(${cs.pond_name})` : ''}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
 
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Number Died *</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={entry.count}
+                      onChange={(e) => handleEntryCountChange(index, e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                      placeholder="Count"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Avg Weight (kg)</label>
+                    <input
+                      type="text"
+                      readOnly
+                      value={entry.avgWeightKg != null ? entry.avgWeightKg.toFixed(3) : 'N/A'}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-700"
+                    />
+                  </div>
+
+                  <div className="md:col-span-4 flex justify-between items-center">
+                    <div className="text-sm text-gray-600">
+                      Total Weight: {entry.avgWeightKg != null && entry.count ? (parseInt(entry.count || '0') * entry.avgWeightKg).toFixed(3) : 'N/A'} kg
+                    </div>
+                    <button type="button" onClick={() => removeEntry(index)} className="text-red-600 hover:text-red-800 text-sm">Remove</button>
+                  </div>
+                </div>
+              ))}
+
+              <button
+                type="button"
+                onClick={addEntry}
+                className="px-3 py-2 border border-red-300 rounded-md text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100"
+              >
+                + Add Species
+              </button>
             </div>
           </div>
 

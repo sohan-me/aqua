@@ -270,9 +270,41 @@ class MortalityViewSet(viewsets.ModelViewSet):
         return queryset
     
     def perform_create(self, serializer):
+        from decimal import Decimal
         pond_id = self.request.data.get('pond')
         pond = get_object_or_404(Pond, pond_id=pond_id, user=self.request.user)
-        serializer.save(pond=pond)
+        mortality = serializer.save(pond=pond)
+        try:
+            # If linked to a customer stock, deduct fish count and weight
+            customer_stock_id = self.request.data.get('customer_stock_id')
+            if customer_stock_id:
+                from .models import CustomerStock
+                cs = get_object_or_404(CustomerStock, customer_stock_id=customer_stock_id, user=self.request.user)
+                # Deduct total weight (kg) from current_stock for fish items
+                total_weight = self.request.data.get('total_weight_kg') or mortality.total_weight_kg
+                if total_weight:
+                    try:
+                        total_weight = Decimal(str(total_weight))
+                    except Exception:
+                        total_weight = Decimal('0')
+                    if total_weight and cs.current_stock is not None:
+                        cs.current_stock = (cs.current_stock or 0) - total_weight
+                        if cs.current_stock < 0:
+                            cs.current_stock = Decimal('0')
+                # Update fish_count if present or initialize from current state if None
+                try:
+                    cnt = int(self.request.data.get('count') or mortality.count or 0)
+                except Exception:
+                    cnt = 0
+                if cnt:
+                    # Initialize fish_count if missing using current derived count if available
+                    if getattr(cs, 'fish_count', None) is None:
+                        cs.fish_count = cnt  # initialize then subtract below to avoid None math
+                    cs.fish_count = max(0, int(cs.fish_count) - cnt)
+                cs.save()
+        except Exception as e:
+            # Log but do not prevent mortality creation
+            print(f"Mortality stock deduction failed: {e}")
 
 
 class HarvestViewSet(viewsets.ModelViewSet):
@@ -4658,6 +4690,44 @@ class CustomerStockViewSet(viewsets.ModelViewSet):
                 'amount': float(il.amount or 0),
                 'memo': il.description or '',
             })
+
+        # Mortality (issues) - OUT for fish items linked by pond and species
+        try:
+            if getattr(item, 'category', None) == 'fish' and pond:
+                from .models import Mortality, Species
+                # Attempt to link by species via recent invoice/bill lines species for this item
+                species_ids = set()
+                try:
+                    from .models import InvoiceLine, BillLine
+                    species_ids.update(
+                        InvoiceLine.objects.filter(item=item, pond=pond, species__isnull=False)
+                        .values_list('species_id', flat=True)[:5]
+                    )
+                    species_ids.update(
+                        BillLine.objects.filter(item=item, pond=pond, species__isnull=False)
+                        .values_list('species_id', flat=True)[:5]
+                    )
+                except Exception:
+                    pass
+                mortalities = Mortality.objects.filter(pond=pond)
+                if species_ids:
+                    mortalities = mortalities.filter(species_id__in=list(species_ids))
+                for m in mortalities.order_by('-date')[:200]:
+                    qty_kg = float(m.total_weight_kg or 0)
+                    movements.append({
+                        'date': m.date,
+                        'direction': 'out',
+                        'source': 'mortality',
+                        'ref': m.id,
+                        'qty_kg': qty_kg,
+                        'fish_count': int(m.count or 0),
+                        'line_number': None,
+                        'unit_cost': 0.0,
+                        'amount': 0.0,
+                        'memo': m.cause or 'Mortality',
+                    })
+        except Exception:
+            pass
 
         # Medicine consumption (issues) - OUT for non-fish medicine items linked via MedicineEvent
         try:

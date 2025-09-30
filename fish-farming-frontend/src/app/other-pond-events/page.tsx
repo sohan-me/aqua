@@ -111,7 +111,7 @@ export default function OtherPondEventsPage() {
     setFormData({
       pond_id: event.pond_id.toString(),
       event_date: event.event_date,
-      event_type: event.event_type,
+      category: event.category,
       memo: event.memo,
     });
     setIsDialogOpen(true);
@@ -281,7 +281,7 @@ export default function OtherPondEventsPage() {
                   <TableCell className="font-medium">{event.pond_name}</TableCell>
                   <TableCell>{new Date(event.event_date).toLocaleDateString()}</TableCell>
                   <TableCell>
-                    <Badge variant="outline">{event.event_type}</Badge>
+                    <Badge variant="outline">{event.category}</Badge>
                   </TableCell>
                   <TableCell className="max-w-xs truncate">{event.memo}</TableCell>
                   <TableCell>

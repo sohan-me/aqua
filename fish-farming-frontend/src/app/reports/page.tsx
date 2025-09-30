@@ -145,7 +145,7 @@ export default function ReportsPage() {
 
   // CSV Export functionality
   const exportToCSV = () => {
-    const selectedPond = filters.pondId === 'all' ? 'All Ponds' : ponds.find(p => p.id === parseInt(filters.pondId))?.name || 'Unknown Pond';
+    const selectedPond = filters.pondId === 'all' ? 'All Ponds' : ponds.find(p => p.pond_id === parseInt(filters.pondId))?.name || 'Unknown Pond';
     const reportType = filters.reportType === 'summary' ? 'Summary' : 'Detail';
     const filename = `P&L_Report_${selectedPond.replace(/\s+/g, '_')}_${filters.startDate}_to_${filters.endDate}_${reportType}.csv`;
 
