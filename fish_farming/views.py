@@ -55,35 +55,6 @@ class PondViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         ponds = Pond.objects.filter(user=self.request.user)
-        
-        # If no ponds exist, create demo pond
-        if ponds.count() == 0:
-            from fish_farming.models import Customer
-            # Create demo customer if doesn't exist
-            customer, created = Customer.objects.get_or_create(
-                user=self.request.user,
-                name="Demo Farm",
-                defaults={
-                    'type': 'internal_pond',
-                    'email': 'demo@example.com'
-                }
-            )
-            
-            # Create demo pond
-            pond = Pond.objects.create(
-                user=self.request.user,
-                name="Demo Pond 1",
-                water_area_decimal=1.0,
-                depth_ft=5.0,
-                location="Demo Location"
-            )
-            
-            # Link the customer to the pond
-            customer.pond = pond
-            customer.save()
-            print(f"Created demo pond: {pond.name}")
-            ponds = Pond.objects.filter(user=self.request.user)
-        
         return ponds
     
     def get_serializer_class(self):
@@ -427,26 +398,7 @@ class AlertViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
-        print(f"DEBUG AlertViewSet: User {self.request.user.username} requesting alerts")
         alerts = Alert.objects.filter(pond__user=self.request.user)
-        print(f"DEBUG AlertViewSet: Found {alerts.count()} alerts")
-        
-        # If no alerts exist, check if user has ponds and create demo alert
-        if alerts.count() == 0:
-            from fish_farming.models import Pond
-            ponds = Pond.objects.filter(user=self.request.user)
-            if ponds.exists():
-                pond = ponds.first()
-                print(f"No alerts found, creating demo alert for pond {pond.name}")
-                Alert.objects.create(
-                    pond=pond,
-                    alert_type="water_quality",
-                    message="Demo water quality alert - pH level is high",
-                    severity="medium"
-                )
-                alerts = Alert.objects.filter(pond__user=self.request.user)
-                print(f"Created demo alert, now have {alerts.count()} alerts")
-        
         return alerts
     
     @action(detail=True, methods=['post'])
@@ -3355,43 +3307,19 @@ class AccountViewSet(viewsets.ModelViewSet):
             for account in accounts:
                 balance = Decimal('0.00')
                 
-                # Calculate balance based on account type and transactions
-                if account.account_type == 'Bank':
-                    # For bank accounts, deposits increase balance, bill payments decrease balance
-                    deposits = Deposit.objects.filter(
-                        bank_account=account,
-                        user=request.user
-                    ).aggregate(total=Sum('total_amount'))['total'] or Decimal('0.00')
-                    from .models import BillPayment
-                    bill_payments = BillPayment.objects.filter(
-                        payment_account=account,
-                        user=request.user
-                    ).aggregate(total=Sum('total_amount'))['total'] or Decimal('0.00')
-                    balance = (deposits or Decimal('0.00')) - (bill_payments or Decimal('0.00'))
-                    
-                elif account.account_type == 'Accounts Receivable':
-                    # For AR, sum all outstanding invoice balances
-                    from .models import Invoice
-                    ar_balance = Invoice.objects.filter(
-                        customer__user=request.user
-                    ).aggregate(total=Sum('open_balance'))['total'] or Decimal('0.00')
-                    balance = ar_balance
-                    
-                elif account.account_type == 'Accounts Payable':
-                    # For AP, sum all outstanding bill balances
-                    from .models import Bill
-                    ap_balance = Bill.objects.filter(
-                        user=request.user
-                    ).aggregate(total=Sum('open_balance'))['total'] or Decimal('0.00')
-                    balance = ap_balance
-
-                elif account.account_type == 'Income':
-                    # For income accounts, sum all invoice amounts
-                    from .models import Invoice
-                    income_balance = Invoice.objects.filter(
-                        user=request.user
-                    ).aggregate(total=Sum('total_amount'))['total'] or Decimal('0.00')
-                    balance = income_balance
+                # Calculate balance based on journal entries (debits - credits)
+                from .models import JournalLine
+                journal_lines = JournalLine.objects.filter(
+                    account=account,
+                    journal_entry__user=request.user
+                ).aggregate(
+                    total_debits=Sum('debit'),
+                    total_credits=Sum('credit')
+                )
+                
+                total_debits = journal_lines['total_debits'] or Decimal('0.00')
+                total_credits = journal_lines['total_credits'] or Decimal('0.00')
+                balance = total_debits - total_credits
                 
                 account_balances.append({
                     'account_id': account.account_id,
@@ -3404,6 +3332,63 @@ class AccountViewSet(viewsets.ModelViewSet):
             
             return Response(account_balances)
             
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['post'])
+    def transfer(self, request):
+        """Transfer funds between two accounts by creating a journal entry with two lines"""
+        from decimal import Decimal
+        from .models import JournalEntry, JournalLine, Account
+        try:
+            date = request.data.get('date')
+            from_account_id = request.data.get('from_account')
+            to_account_id = request.data.get('to_account')
+            amount = request.data.get('amount')
+            memo = request.data.get('memo') or ''
+
+            if not (date and from_account_id and to_account_id and amount):
+                return Response({'error': 'date, from_account, to_account, amount are required'}, status=status.HTTP_400_BAD_REQUEST)
+
+            if str(from_account_id) == str(to_account_id):
+                return Response({'error': 'From and To accounts must be different'}, status=status.HTTP_400_BAD_REQUEST)
+
+            try:
+                amount_decimal = Decimal(str(amount))
+            except Exception:
+                return Response({'error': 'Invalid amount'}, status=status.HTTP_400_BAD_REQUEST)
+
+            from_account = Account.objects.filter(account_id=from_account_id, user=request.user).first()
+            to_account = Account.objects.filter(account_id=to_account_id, user=request.user).first()
+            if not from_account or not to_account:
+                return Response({'error': 'Invalid account(s)'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Create journal entry
+            je = JournalEntry.objects.create(
+                user=request.user,
+                date=date,
+                memo=memo or f"Transfer from {from_account.name} to {to_account.name}",
+                source='TRANSFER',
+                source_id=None,
+            )
+
+            # Debit to_account, Credit from_account
+            JournalLine.objects.create(
+                journal_entry=je,
+                account=to_account,
+                debit=amount_decimal,
+                credit=Decimal('0.00'),
+                memo=f"Transfer in from {from_account.name}"
+            )
+            JournalLine.objects.create(
+                journal_entry=je,
+                account=from_account,
+                debit=Decimal('0.00'),
+                credit=amount_decimal,
+                memo=f"Transfer out to {to_account.name}"
+            )
+
+            return Response({'journal_entry_id': je.je_id}, status=status.HTTP_201_CREATED)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -4087,6 +4072,9 @@ class InvoiceLineViewSet(viewsets.ModelViewSet):
         
         # Create customer stock record for internal customers (ponds)
         self._create_customer_stock_for_line(invoice_line)
+
+        # Deduct pond customer stock for external customers when pond is specified
+        self._deduct_customer_stock_for_external_sale(invoice_line)
     
     def perform_destroy(self, instance):
         """Handle deletion of invoice line - remove stock entries and inventory transactions"""
@@ -4200,6 +4188,55 @@ class InvoiceLineViewSet(viewsets.ModelViewSet):
             
             customer_stock.add_stock(effective_qty, invoice_line.rate)
 
+    def _deduct_customer_stock_for_external_sale(self, invoice_line):
+        """If selling to an external customer and a pond is specified, deduct from that pond's CustomerStock."""
+        try:
+            from .models import CustomerStock
+            # Only when customer is NOT internal pond and pond is provided
+            if getattr(invoice_line.invoice.customer, 'type', None) == 'internal_pond':
+                return
+            if not invoice_line.pond:
+                return
+
+            # Determine effective quantity similar to amount calc
+            item = invoice_line.item
+            # For fish: use total_weight if provided, else qty
+            if item and getattr(item, 'category', None) == 'fish' and invoice_line.total_weight:
+                effective_qty = invoice_line.total_weight
+            else:
+                effective_qty = invoice_line.qty
+                if invoice_line.packet_size and invoice_line.packet_size > 0:
+                    effective_qty = invoice_line.qty * invoice_line.packet_size
+
+            # Fetch pond's customer for internal pond mapping
+            pond_customer = invoice_line.pond.customers.filter(type='internal_pond').first()
+            if not pond_customer:
+                return
+
+            customer_stock = CustomerStock.objects.filter(
+                user=invoice_line.invoice.user,
+                customer=pond_customer,
+                pond=invoice_line.pond,
+                item=invoice_line.item
+            ).first()
+
+            if not customer_stock:
+                return
+
+            # Validate and deduct
+            if customer_stock.current_stock < effective_qty:
+                # Optionally, raise validation error; for now, clamp to available stock
+                # from rest_framework.exceptions import ValidationError
+                # raise ValidationError({"detail": "Insufficient pond stock for this sale."})
+                pass
+
+            customer_stock.current_stock = customer_stock.current_stock - effective_qty
+            customer_stock.save(update_fields=['current_stock'])
+        except Exception:
+            # Avoid breaking invoice flow; log instead
+            import logging
+            logging.getLogger(__name__).exception('Failed to deduct pond customer stock for external sale')
+
 
 class CustomerPaymentViewSet(viewsets.ModelViewSet):
     """ViewSet for customer payment management"""
@@ -4289,6 +4326,10 @@ class BillPaymentViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         bill_payment = serializer.save(user=self.request.user)
+        
+        # Create journal entry for bill payment
+        self._create_bill_payment_journal_entry(bill_payment)
+        
         # If a specific bill is provided in request, create an apply record and update open_balance
         try:
             bill_id = self.request.data.get('bill_id') or self.request.data.get('bill')
@@ -4310,14 +4351,67 @@ class BillPaymentViewSet(viewsets.ModelViewSet):
             # Do not block payment creation on apply errors; they can be managed separately
             pass
 
+    def _create_bill_payment_journal_entry(self, bill_payment):
+        """Create journal entry for bill payment - Debit Accounts Payable, Credit Bank Account"""
+        from .models import JournalEntry, JournalLine
+        from decimal import Decimal
+        
+        # Create journal entry
+        je = JournalEntry.objects.create(
+            user=bill_payment.user,
+            date=bill_payment.payment_date,
+            memo=f"Bill Payment - {bill_payment.memo or 'No memo'}",
+            source='BILL_PAYMENT',
+            source_id=bill_payment.bill_payment_id,
+        )
+        
+        # Debit: Accounts Payable (decreases AP balance)
+        ap_account = self._get_ap_account(bill_payment.user)
+        if ap_account:
+            JournalLine.objects.create(
+                journal_entry=je,
+                account=ap_account,
+                debit=bill_payment.total_amount or Decimal('0.00'),
+                credit=Decimal('0.00'),
+                memo=f"Bill payment - {bill_payment.payment_account.name}"
+            )
+        
+        # Credit: Bank Account (decreases bank balance)
+        JournalLine.objects.create(
+            journal_entry=je,
+            account=bill_payment.payment_account,
+            debit=Decimal('0.00'),
+            credit=bill_payment.total_amount or Decimal('0.00'),
+            memo=f"Payment from {bill_payment.payment_account.name}"
+        )
+
+    def _get_ap_account(self, user):
+        """Get existing Accounts Payable account"""
+        from .models import Account
+        
+        ap_account = Account.objects.filter(
+            user=user,
+            name='Accounts Payable',
+            account_type='Accounts Payable'
+        ).first()
+        return ap_account
+
     def perform_destroy(self, instance):
         # Reverse bill apply effects on deletion
-        from .models import BillPaymentApply
+        from .models import BillPaymentApply, JournalEntry
         applies = BillPaymentApply.objects.filter(bill_payment=instance).select_related('bill')
         for ap in applies:
             bill = ap.bill
             bill.open_balance = bill.open_balance + ap.amount_applied
             bill.save(update_fields=['open_balance'])
+        
+        # Delete associated journal entries
+        JournalEntry.objects.filter(
+            source='BILL_PAYMENT',
+            source_id=instance.bill_payment_id,
+            user=instance.user
+        ).delete()
+        
         instance.delete()
 
 
@@ -4362,6 +4456,9 @@ class DepositViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         deposit = serializer.save(user=self.request.user)
+        
+        # Create journal entry for deposit
+        self._create_deposit_journal_entry(deposit)
         
         # Handle customer payments if provided
         customer_payments = self.request.data.get('customer_payments', [])
@@ -4450,6 +4547,96 @@ class DepositViewSet(viewsets.ModelViewSet):
             deposit.total_amount = total_amount
         
         deposit.save(update_fields=['total_amount'])
+
+    def _create_deposit_journal_entry(self, deposit):
+        """Create journal entry for deposit - Debit Bank Account, Credit Cash in Hand"""
+        from .models import JournalEntry, JournalLine
+        from decimal import Decimal
+        
+        # Create journal entry
+        je = JournalEntry.objects.create(
+            user=deposit.user,
+            date=deposit.deposit_date,
+            memo=f"Deposit to {deposit.bank_account.name} - {deposit.memo or 'No memo'}",
+            source='DEPOSIT',
+            source_id=deposit.deposit_id,
+        )
+        
+        # Debit: Bank Account (increases bank balance)
+        JournalLine.objects.create(
+            journal_entry=je,
+            account=deposit.bank_account,
+            debit=deposit.total_amount or Decimal('0.00'),
+            credit=Decimal('0.00'),
+            memo=f"Deposit to {deposit.bank_account.name}"
+        )
+        
+        # Credit: Cash in Hand (decreases cash balance)
+        # Find existing Cash in Hand account
+        cash_account = self._get_cash_account(deposit.user)
+        if cash_account:
+            JournalLine.objects.create(
+                journal_entry=je,
+                account=cash_account,
+                debit=Decimal('0.00'),
+                credit=deposit.total_amount or Decimal('0.00'),
+                memo=f"Cash deposit to {deposit.bank_account.name}"
+            )
+
+    def _get_cash_account(self, user):
+        """Get existing Cash in Hand account"""
+        from .models import Account
+        
+        cash_account = Account.objects.filter(
+            user=user,
+            name='Cash in Hand',
+            account_type='Bank'
+        ).first()
+        return cash_account
+
+
+class JournalEntryViewSet(viewsets.ModelViewSet):
+    """ViewSet for journal entry management"""
+    queryset = JournalEntry.objects.all()
+    serializer_class = JournalEntrySerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return JournalEntry.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+    
+    @action(detail=True, methods=['get'])
+    def lines(self, request, pk=None):
+        """Get journal lines for a specific journal entry"""
+        try:
+            journal_entry = self.get_object()
+            lines = JournalLine.objects.filter(journal_entry=journal_entry)
+            serializer = JournalLineSerializer(lines, many=True)
+            return Response(serializer.data)
+        except JournalEntry.DoesNotExist:
+            return Response({'error': 'Journal entry not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class JournalLineViewSet(viewsets.ModelViewSet):
+    """ViewSet for journal line management"""
+    queryset = JournalLine.objects.all()
+    serializer_class = JournalLineSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        qs = JournalLine.objects.filter(journal_entry__user=self.request.user)
+        account_id = self.request.query_params.get('account')
+        if account_id:
+            qs = qs.filter(account__account_id=account_id)
+        source = self.request.query_params.get('source')
+        if source:
+            qs = qs.filter(journal_entry__source=source)
+        return qs
+    
+    def perform_create(self, serializer):
+        serializer.save()
 
 
 class StockLevelViewSet(viewsets.ViewSet):

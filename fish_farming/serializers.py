@@ -143,6 +143,9 @@ class ItemSerializer(serializers.ModelSerializer):
     total_stock_in_unit = serializers.SerializerMethodField()
     stock_summary = serializers.SerializerMethodField()
     stock_entries = StockEntrySerializer(many=True, read_only=True)
+    # Ensure fish aggregates are always present for frontend
+    fish_total_weight_kg = serializers.SerializerMethodField()
+    fish_count = serializers.SerializerMethodField()
     
     class Meta:
         model = Item
@@ -157,6 +160,65 @@ class ItemSerializer(serializers.ModelSerializer):
     
     def get_stock_summary(self, obj):
         return obj.get_stock_summary()
+
+    def get_fish_total_weight_kg(self, obj):
+        try:
+            if getattr(obj, 'fish_total_weight_kg', None) is not None:
+                return float(obj.fish_total_weight_kg)
+            # Default: for fish items, mirror current total stock in kg
+            if obj.category == 'fish':
+                return float(obj.get_total_stock_kg() or 0)
+            return None
+        except Exception:
+            return None
+
+    def get_fish_count(self, obj):
+        try:
+            if getattr(obj, 'fish_count', None) is not None:
+                return int(obj.fish_count)
+            # If not provided, aggregate for fish items: Receipts (Bills) minus Issues (Invoices)
+            if obj.category == 'fish':
+                from decimal import Decimal
+                try:
+                    from .models import BillLine, InvoiceLine
+                    # Helper to infer fish pieces from a line
+                    def infer_pcs(line):
+                        if getattr(line, 'fish_count', None):
+                            return int(line.fish_count or 0)
+                        # Prefer total_weight; fall back to qty assuming kg
+                        total_weight = line.total_weight
+                        if total_weight is None:
+                            # qty in our model stores effective qty; for fish we set it to kg
+                            total_weight = line.qty
+                        try:
+                            ln = Decimal(str(line.line_number)) if line.line_number is not None else None
+                            tw = Decimal(str(total_weight)) if total_weight is not None else None
+                        except Exception:
+                            ln = None
+                            tw = None
+                        if ln and ln > 0 and tw and tw > 0:
+                            return int(round(ln * tw))
+                        return 0
+
+                    # Sum receipts from all bill item lines for this item
+                    bill_lines = BillLine.objects.filter(item=obj)
+                    total_in = 0
+                    for bl in bill_lines:
+                        total_in += infer_pcs(bl)
+                    # Sum issues from all invoice lines for this item
+                    inv_lines = InvoiceLine.objects.filter(item=obj)
+                    total_out = 0
+                    for il in inv_lines:
+                        total_out += infer_pcs(il)
+                    result = total_in - total_out
+                    if result < 0:
+                        result = 0
+                    return int(result)
+                except Exception:
+                    return 0
+            return None
+        except Exception:
+            return None
 
 
 class ItemPriceSerializer(serializers.ModelSerializer):
@@ -185,6 +247,9 @@ class JournalLineSerializer(serializers.ModelSerializer):
     vendor_name = serializers.CharField(source='vendor.name', read_only=True)
     pond_name = serializers.CharField(source='pond.name', read_only=True)
     item_name = serializers.CharField(source='item.name', read_only=True)
+    entry_date = serializers.DateField(source='journal_entry.date', read_only=True)
+    entry_source = serializers.CharField(source='journal_entry.source', read_only=True)
+    journal_entry_id = serializers.IntegerField(source='journal_entry.je_id', read_only=True)
     
     class Meta:
         model = JournalLine
@@ -198,7 +263,7 @@ class BillLineMiniSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = BillLine
-        fields = ['bill_line_id', 'is_item', 'item_name', 'expense_account_name', 'description', 'qty', 'unit', 'cost', 'line_amount', 'amount']
+        fields = ['bill_line_id', 'is_item', 'item_name', 'expense_account_name', 'description', 'qty', 'unit', 'packet_size', 'cost', 'line_amount', 'amount', 'species', 'total_weight', 'fish_count', 'body_weight_per_fish']
         read_only_fields = ['bill_line_id']
 
 
@@ -225,6 +290,7 @@ class BillLineSerializer(serializers.ModelSerializer):
     expense_account_name = serializers.CharField(source='expense_account.name', read_only=True)
     pond_name = serializers.CharField(source='pond.name', read_only=True)
     item_name = serializers.CharField(source='item.name', read_only=True)
+    species_name = serializers.CharField(source='species.name', read_only=True)
     
     class Meta:
         model = BillLine
@@ -1072,6 +1138,11 @@ class CustomerStockSerializer(serializers.ModelSerializer):
     category = serializers.CharField(source='item.category', read_only=True)
     packet_size = serializers.DecimalField(source='item.packet_size', read_only=True, max_digits=10, decimal_places=2)
     stock_status = serializers.SerializerMethodField()
+    fish_total_weight_kg = serializers.SerializerMethodField()
+    fish_count = serializers.SerializerMethodField()
+    line_number = serializers.SerializerMethodField()
+    item_unit = serializers.CharField(source='item.unit', read_only=True)
+    item_category_name = serializers.CharField(source='item.get_category_display', read_only=True)
     
     class Meta:
         model = CustomerStock
@@ -1086,3 +1157,51 @@ class CustomerStockSerializer(serializers.ModelSerializer):
         # Automatically set the user from the request
         validated_data['user'] = self.context['request'].user
         return super().create(validated_data)
+
+    def get_fish_total_weight_kg(self, obj):
+        try:
+            if obj.item.category == 'fish':
+                return float(obj.current_stock or 0)
+            return None
+        except Exception:
+            return None
+
+    def get_line_number(self, obj):
+        # pcs per kg inferred from latest lines for this item and customer pond, if any
+        try:
+            if obj.item.category != 'fish':
+                return None
+            from .models import InvoiceLine, BillLine
+            line = (
+                InvoiceLine.objects.filter(item=obj.item, pond=obj.pond, line_number__isnull=False)
+                .order_by('-created_at').first()
+                or BillLine.objects.filter(item=obj.item, pond=obj.pond, line_number__isnull=False)
+                .order_by('-created_at').first()
+            )
+            return float(line.line_number) if line and line.line_number else None
+        except Exception:
+            return None
+
+    def get_fish_count(self, obj):
+        try:
+            if obj.item.category != 'fish':
+                return None
+            # fish_count ≈ line_number × current_stock when line_number known
+            ln = self.get_line_number(obj)
+            if ln and obj.current_stock:
+                return int(round(float(ln) * float(obj.current_stock)))
+            # Otherwise try aggregate method used in ItemSerializer but scoped to customer pond
+            from .models import BillLine, InvoiceLine
+            def infer_pcs(line):
+                if getattr(line, 'fish_count', None):
+                    return int(line.fish_count or 0)
+                tw = line.total_weight if line.total_weight is not None else line.qty
+                if line.line_number and tw:
+                    return int(round(float(line.line_number) * float(tw)))
+                return 0
+            total_in = sum(infer_pcs(bl) for bl in BillLine.objects.filter(item=obj.item, pond=obj.pond))
+            total_out = sum(infer_pcs(il) for il in InvoiceLine.objects.filter(item=obj.item, pond=obj.pond))
+            result = total_in - total_out
+            return int(result if result > 0 else 0)
+        except Exception:
+            return None

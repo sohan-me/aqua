@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -38,7 +38,7 @@ interface LedgerEntry {
   debit: number;
   credit: number;
   balance: number;
-  type: 'deposit' | 'invoice' | 'payment' | 'other';
+  type: 'deposit' | 'invoice' | 'payment' | 'transfer' | 'other';
 }
 
 const ACCOUNT_TYPES = [
@@ -82,11 +82,7 @@ export default function ChartAccountsPage() {
 
   const { get, post, put, delete: del } = useApi();
 
-  useEffect(() => {
-    fetchAccounts();
-  }, []);
-
-  const fetchAccounts = async () => {
+  const fetchAccounts = useCallback(async () => {
     try {
       setLoading(true);
       const [accountsResponse, balancesResponse] = await Promise.all([
@@ -113,9 +109,13 @@ export default function ChartAccountsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchLedgerEntries = async (account: Account) => {
+  useEffect(() => {
+    fetchAccounts();
+  }, [fetchAccounts]);
+
+  const fetchLedgerEntries = useCallback(async (account: Account) => {
     try {
       setLoadingLedger(true);
       setSelectedAccount(account);
@@ -125,12 +125,14 @@ export default function ChartAccountsPage() {
       
       if (account.account_type === 'Bank') {
         // Fetch deposits for this bank account
-        const [depositsResponse, billPaymentsResponse] = await Promise.all([
+        const [depositsResponse, billPaymentsResponse, transfersResponse] = await Promise.all([
           get('/deposits/'),
           get('/bill-payments/'),
+          get(`/journal-lines/?account=${account.account_id}&source=TRANSFER`),
         ]);
         const deposits = depositsResponse.results || depositsResponse;
         const billPayments = billPaymentsResponse.results || billPaymentsResponse;
+        const transfers = transfersResponse.results || transfersResponse;
         
         deposits
           .filter((deposit: any) => deposit.bank_account === account.account_id)
@@ -162,6 +164,21 @@ export default function ChartAccountsPage() {
               type: 'payment'
             });
           });
+
+        // Transfers affecting this account
+        transfers.forEach((line: any) => {
+          const isDebit = parseFloat(line.debit || '0') > 0;
+          entries.push({
+            id: `transfer-${line.journal_entry_id}-${line.jl_id || Math.random()}`,
+            date: line.entry_date,
+            description: isDebit ? 'Transfer In' : 'Transfer Out',
+            reference: `TR-${line.journal_entry_id}`,
+            debit: isDebit ? parseFloat(line.debit) : 0,
+            credit: !isDebit ? parseFloat(line.credit) : 0,
+            balance: isDebit ? parseFloat(line.debit) : -parseFloat(line.credit),
+            type: 'transfer',
+          });
+        });
       } else if (account.account_type === 'Accounts Receivable') {
         // Fetch invoices for AR
         const invoicesResponse = await get('/invoices/');
@@ -211,7 +228,7 @@ export default function ChartAccountsPage() {
     } finally {
       setLoadingLedger(false);
     }
-  };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

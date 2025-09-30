@@ -26,12 +26,12 @@ interface JournalEntry {
 }
 
 interface JournalEntryLine {
-  journal_line_id: number;
-  journal_entry_id: number;
-  account_id: number;
+  jl_id: number;
+  journal_entry: number;
+  account: number;
   account_name?: string;
-  debit_amount: number;
-  credit_amount: number;
+  debit: number;
+  credit: number;
   memo: string;
 }
 
@@ -93,16 +93,16 @@ export default function JournalEntriesPage() {
   };
 
   const calculateTotals = () => {
-    const totalDebit = lineItems.reduce((sum, line) => sum + (line.debit_amount || 0), 0);
-    const totalCredit = lineItems.reduce((sum, line) => sum + (line.credit_amount || 0), 0);
+    const totalDebit = lineItems.reduce((sum, line) => sum + (line.debit || 0), 0);
+    const totalCredit = lineItems.reduce((sum, line) => sum + (line.credit || 0), 0);
     return { totalDebit, totalCredit };
   };
 
   const addLineItem = () => {
     setLineItems([...lineItems, {
-      account_id: 0,
-      debit_amount: 0,
-      credit_amount: 0,
+      account: 0,
+      debit: 0,
+      credit: 0,
       memo: '',
     }]);
   };
@@ -136,11 +136,12 @@ export default function JournalEntriesPage() {
         
         // Create journal lines
         for (const line of lineItems) {
-          await post(`/journal-entries/${response.journal_entry_id}/lines/`, {
-            ...line,
-            journal_entry_id: response.journal_entry_id,
-            debit_amount: line.debit_amount || 0,
-            credit_amount: line.credit_amount || 0,
+          await post('/journal-lines/', {
+            account: line.account,
+            debit: line.debit || 0,
+            credit: line.credit || 0,
+            memo: line.memo || '',
+            journal_entry: response.journal_entry_id,
           });
         }
         
@@ -298,8 +299,8 @@ export default function JournalEntriesPage() {
                         <div className="space-y-2">
                           <Label>Account</Label>
                           <Select
-                            value={line.account_id?.toString() || ''}
-                            onValueChange={(value) => updateLineItem(index, 'account_id', parseInt(value))}
+                            value={line.account?.toString() || ''}
+                            onValueChange={(value) => updateLineItem(index, 'account', parseInt(value))}
                           >
                             <SelectTrigger className="h-12">
                               <SelectValue placeholder="Select account" />
@@ -319,8 +320,8 @@ export default function JournalEntriesPage() {
                           <Input
                             type="number"
                             step="0.01"
-                            value={line.debit_amount || ''}
-                            onChange={(e) => updateLineItem(index, 'debit_amount', parseFloat(e.target.value) || 0)}
+                            value={line.debit || ''}
+                            onChange={(e) => updateLineItem(index, 'debit', parseFloat(e.target.value) || 0)}
                             placeholder="Debit amount"
                             className="h-12"
                           />
@@ -331,8 +332,8 @@ export default function JournalEntriesPage() {
                           <Input
                             type="number"
                             step="0.01"
-                            value={line.credit_amount || ''}
-                            onChange={(e) => updateLineItem(index, 'credit_amount', parseFloat(e.target.value) || 0)}
+                            value={line.credit || ''}
+                            onChange={(e) => updateLineItem(index, 'credit', parseFloat(e.target.value) || 0)}
                             placeholder="Credit amount"
                             className="h-12"
                           />

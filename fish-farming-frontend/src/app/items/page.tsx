@@ -58,6 +58,8 @@ interface Item {
   total_stock_in_unit?: number;
   stock_summary?: string[];
   stock_entries?: StockEntry[];
+  fish_total_weight_kg?: number;
+  fish_count?: number;
 }
 
 interface Account {
@@ -97,6 +99,8 @@ export default function ItemsPage() {
     active: true,
     min_stock_level: 0,
     max_stock_level: 0,
+    fish_total_weight_kg: 0,
+    fish_count: 0,
   });
 
   const { get, post, put, delete: del } = useApi();
@@ -168,6 +172,8 @@ export default function ItemsPage() {
       active: item.active,
       min_stock_level: item.min_stock_level || 0,
       max_stock_level: item.max_stock_level || 0,
+      fish_total_weight_kg: item.fish_total_weight_kg || 0,
+      fish_count: item.fish_count || 0,
     });
     setIsDialogOpen(true);
   };
@@ -198,6 +204,8 @@ export default function ItemsPage() {
       active: true,
       min_stock_level: 0,
       max_stock_level: 0,
+      fish_total_weight_kg: 0,
+      fish_count: 0,
     });
   };
 
@@ -467,6 +475,31 @@ export default function ItemsPage() {
                       />
                     </div>
                   </div>
+                  {formData.category === 'fish' && (
+                    <div className="grid grid-cols-2 gap-4 p-4 border rounded-md bg-blue-50">
+                      <div className="space-y-2">
+                        <Label>Total Fish Weight (kg)</Label>
+                        <Input
+                          type="number"
+                          step="0.001"
+                          value={formData.fish_total_weight_kg}
+                          onChange={(e) => setFormData({ ...formData, fish_total_weight_kg: parseFloat(e.target.value) || 0 })}
+                          placeholder="e.g., 150.5"
+                          className="h-12"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Species Number (pcs)</Label>
+                        <Input
+                          type="number"
+                          value={formData.fish_count}
+                          onChange={(e) => setFormData({ ...formData, fish_count: parseInt(e.target.value) || 0 })}
+                          placeholder="e.g., 600"
+                          className="h-12"
+                        />
+                      </div>
+                    </div>
+                  )}
                   <div className="bg-blue-50 p-4 rounded-lg">
                     <p className="text-sm text-blue-800">
                       <strong>Note:</strong> Stock levels are automatically updated when inventory transactions occur. 

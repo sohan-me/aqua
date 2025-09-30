@@ -85,6 +85,7 @@ const navigation = [
     icon: DollarSign,
     submenu: [
       { name: 'Chart of Accounts', href: '/chart-accounts', icon: BookOpen },
+      { name: 'Fund Transfer', href: '/chart-accounts/transfer', icon: Calculator },
       { name: 'Items & Services', href: '/items', icon: Package },
       { name: 'Bills (AP)', href: '/bills', icon: Receipt },
       { name: 'Bill Payments', href: '/bill-payments', icon: Banknote },

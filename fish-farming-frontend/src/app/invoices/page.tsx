@@ -58,6 +58,7 @@ interface InvoiceLine {
   species_id?: number;
   total_weight?: number;
   line_number?: number;
+  fish_count?: number;
   pond_name?: string;
   species_name?: string;
 }
@@ -66,6 +67,9 @@ interface InvoiceLine {
 interface Customer {
   customer_id: number;
   name: string;
+  type?: string; // e.g., 'internal_pond' for internal customers
+  pond?: number; // internal customer's pond id
+  pond_name?: string;
 }
 
 interface Item {
@@ -80,6 +84,9 @@ interface Item {
   selling_price?: number;
   income_account?: number;
   unit?: string;
+  // Fish aggregate fields
+  fish_total_weight_kg?: number;
+  fish_count?: number;
   stock_entries?: Array<{
     entry_id: number;
     quantity: number;
@@ -115,6 +122,8 @@ export default function InvoicesPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [ponds, setPonds] = useState<Pond[]>([]);
   const [species, setSpecies] = useState<Species[]>([]);
+  // Cache of pond -> customer stock list
+  const [pondStockByPond, setPondStockByPond] = useState<Record<number, any[]>>({});
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -131,6 +140,90 @@ export default function InvoicesPage() {
   const [lineItems, setLineItems] = useState<Partial<InvoiceLine>[]>([]);
 
   const { get, post, put, delete: del } = useApi();
+
+  // Auto-apply pond for internal customer (customer linked to a pond)
+  useEffect(() => {
+    const customer = customers.find(c => String(c.customer_id) === String(formData.customer_id));
+    if (!customer) return;
+    if (customer.type === 'internal_pond' && customer.pond) {
+      // Set pond on all line items (fish and non-fish) to customer's pond, hide selector in UI
+      setLineItems(prev => prev.map(li => ({ ...li, pond_id: customer.pond })));
+    } else {
+      // External customer: do not force pond, allow manual selection
+      setLineItems(prev => prev.map(li => ({ ...li, pond_id: li.pond_id })));
+    }
+  }, [formData.customer_id, customers]);
+
+  // Prefetch customer stocks for any ponds referenced in lines or by the customer
+  useEffect(() => {
+    const customer = customers.find(c => String(c.customer_id) === String(formData.customer_id));
+    const pondIds = new Set<number>();
+    if (customer?.pond) pondIds.add(customer.pond);
+    lineItems.forEach(li => { if (li.pond_id) pondIds.add(li.pond_id as number); });
+
+    const fetchFor = Array.from(pondIds).filter(pid => !(pid in pondStockByPond));
+    if (fetchFor.length === 0) return;
+
+    (async () => {
+      try {
+        const results: Record<number, any[]> = {};
+        for (const pid of fetchFor) {
+          const resp = await get(`/customer-stocks/?pond=${pid}`);
+          results[pid] = resp.results || resp || [];
+        }
+        setPondStockByPond(prev => ({ ...prev, ...results }));
+      } catch (e) {
+        // ignore fetch errors for hints
+      }
+    })();
+  }, [lineItems, formData.customer_id, customers]);
+
+  const getPondStock = (itemId?: number, pondId?: number) => {
+    if (!itemId || !pondId) return undefined;
+    const list = pondStockByPond[pondId];
+    if (!list) return undefined;
+    return list.find((cs: any) => Number(cs.item) === Number(itemId));
+  };
+
+  // Auto-calc helper for fish: when any two of (fish_count, line_number [pcs/kg], total_weight) are provided, compute the third
+  const updateFishInvLineFields = (index: number, updates: any) => {
+    const li = { ...(lineItems[index] || {}) } as any;
+    // Merge with careful coercion to allow blanks and decimals
+    Object.entries(updates).forEach(([k, v]) => {
+      if (typeof v === 'string') {
+        if (v === '') {
+          li[k] = undefined;
+        } else {
+          const num = Number(v);
+          li[k] = isNaN(num) ? undefined : num;
+        }
+      } else {
+        li[k] = v;
+      }
+    });
+    const hasCount = typeof li.fish_count === 'number' && li.fish_count > 0;
+    const hasLn = typeof li.line_number === 'number' && li.line_number > 0; // pcs per kg
+    const hasTw = typeof li.total_weight === 'number' && li.total_weight > 0;
+
+    // total_weight = fish_count / line_number
+    if (hasCount && hasLn && !hasTw) {
+      li.total_weight = Number(li.fish_count) / Number(li.line_number);
+    } else if (hasCount && hasTw && !hasLn) {
+      const denom = Number(li.total_weight);
+      li.line_number = denom > 0 ? Number(li.fish_count) / denom : 0;
+    } else if (hasLn && hasTw && !hasCount) {
+      li.fish_count = Math.round(Number(li.line_number) * Number(li.total_weight));
+    }
+
+    // Auto compute amount for fish using total_weight (effective quantity)
+    const rate = Number(li.rate || 0);
+    const effectiveQty = Number(li.total_weight || 0);
+    li.amount = rate && effectiveQty ? rate * effectiveQty : li.amount;
+
+    const updated = [...lineItems];
+    updated[index] = { ...(lineItems[index] || {}), ...li };
+    setLineItems(updated);
+  };
 
   // Calculate correct stock from stock entries - returns stock in the item's primary unit
   const calculateCorrectStock = (item: Item): number => {
@@ -328,39 +421,57 @@ console.log("ponds", ponds);
 
   const updateLineItem = (index: number, field: keyof InvoiceLine, value: any) => {
     const updated = [...lineItems];
-    updated[index] = { ...updated[index], [field]: value };
+    const next: any = { ...updated[index] };
+
+    const numericFields = new Set(['qty','rate','amount','packet_size','gallon_size','total_weight','line_number','fish_count']);
+    if (numericFields.has(field as string)) {
+      if (typeof value === 'string') {
+        if (value === '') {
+          next[field] = undefined;
+        } else {
+          const num = Number(value);
+          if (!isNaN(num)) next[field] = num;
+        }
+      } else {
+        next[field] = value;
+      }
+    } else {
+      next[field] = value;
+    }
     
     // If item changes, reset unit to first available option for that category
     if (field === 'item_id' && value) {
       const uomOptions = getUomOptionsForItem(value);
-      updated[index].unit = uomOptions[0] || 'kg';
-      updated[index].packet_size = 0;
-      updated[index].gallon_size = 0;
+      next.unit = uomOptions[0] || 'kg';
+      next.packet_size = undefined;
+      next.gallon_size = undefined;
       
       // Auto-fill unit price when item is selected
       const selectedItem = items.find(item => item.item_id === value);
       if (selectedItem && selectedItem.selling_price) {
-        updated[index].rate = selectedItem.selling_price;
+        next.rate = selectedItem.selling_price;
       }
+    // For fish items, do not prefill editable fields; keep inputs blank.
     }
     
     // Calculate total price
     if (field === 'qty' || field === 'rate' || field === 'total_weight') {
-      const selectedItem = items.find(item => item.item_id === updated[index].item_id);
+      const selectedItem = items.find(item => item.item_id === next.item_id);
       const isFishItem = selectedItem?.category === 'fish'
       let quantity = 0;
       if (isFishItem) {
         // For fish items, use total weight
-        quantity = updated[index].total_weight || 0;
+        quantity = Number(next.total_weight) || 0;
       } else {
         // For non-fish items, use qty
-        quantity = updated[index].qty || 0;
+        quantity = Number(next.qty) || 0;
       }
       
-      const price = updated[index].rate || 0;
-      updated[index].amount = quantity * price;
+      const price = Number(next.rate) || 0;
+      next.amount = quantity && price ? quantity * price : undefined;
     }
     
+    updated[index] = next;
     setLineItems(updated);
   };
 
@@ -508,21 +619,23 @@ console.log("ponds", ponds);
         
         // Create new invoice lines
         for (const line of lineItems) {
+          const selectedItem = items.find(item => item.item_id === line.item_id);
+          const isFish = selectedItem?.category === 'fish';
           await post('/invoice-lines/', {
             invoice: editingInvoice.invoice_id,
             item: line.item_id || null,
             description: line.description || '',
-            qty: line.qty || 0,
-            unit: line.unit || 'kg',
-            packet_size: line.packet_size || null,
+            qty: isFish ? (Number(line.total_weight?.toFixed?.(2) ?? line.total_weight) || 0) : (Number(line.qty?.toFixed?.(2) ?? line.qty) || 0),
+            unit: isFish ? 'kg' : (line.unit || 'kg'),
+            packet_size: isFish ? null : (line.packet_size || null),
             gallon_size: line.gallon_size || null,
-            rate: line.rate || 0,
-            amount: line.amount || 0,
+            rate: Number(line.rate?.toFixed?.(2) ?? line.rate) || 0,
+            amount: Number(line.amount?.toFixed?.(2) ?? line.amount) || 0,
             // Fish-specific fields
             pond: line.pond_id || null,
             species: line.species_id || null,
-            total_weight: line.total_weight || null,
-            line_number: line.line_number || null,
+            total_weight: Number(line.total_weight?.toFixed?.(2) ?? line.total_weight) || null,
+            line_number: line.line_number ?? null,
           });
         }
         
@@ -532,21 +645,24 @@ console.log("ponds", ponds);
         
         // Create invoice lines
         for (const line of lineItems) {
+          const selectedItem = items.find(item => item.item_id === line.item_id);
+          const isFish = selectedItem?.category === 'fish';
           await post('/invoice-lines/', {
             invoice: response.invoice_id,
             item: line.item_id || null,
             description: line.description || '',
-            qty: line.qty || 0,
-            unit: line.unit || 'kg',
-            packet_size: line.packet_size || null,
+            qty: isFish ? (Number(line.total_weight?.toFixed?.(2) ?? line.total_weight) || 0) : (Number(line.qty?.toFixed?.(2) ?? line.qty) || 0),
+            unit: isFish ? 'kg' : (line.unit || 'kg'),
+            packet_size: isFish ? null : (line.packet_size || null),
             gallon_size: line.gallon_size || null,
-            rate: line.rate || 0,
-            amount: line.amount || 0,
+            rate: Number(line.rate?.toFixed?.(2) ?? line.rate) || 0,
+            amount: Number(line.amount?.toFixed?.(2) ?? line.amount) || 0,
             // Fish-specific fields
             pond: line.pond_id || null,
             species: line.species_id || null,
-            total_weight: line.total_weight || null,
-            line_number: line.line_number || null,
+            total_weight: Number(line.total_weight?.toFixed?.(2) ?? line.total_weight) || null,
+            line_number: line.line_number ?? null,
+            fish_count: line.fish_count || null,
           });
         }
         
@@ -939,70 +1055,90 @@ console.log("ponds", ponds);
                                   <span>Fish-Specific Details</span>
                                 </div>
                                 
-                                {/* Fish fields row 1 - Pond and Species */}
+                                {/* Fish fields row 1 - Pond (species is derived from item) */}
                                 <div className="grid grid-cols-2 gap-4">
                                   <div className="space-y-2">
                                     <Label>Select Pond</Label>
-                                    <Select
-                                      value={line.pond_id?.toString() || ''}
-                                      onValueChange={(value) => updateLineItem(index, 'pond_id', parseInt(value))}
-                                    >
-                                      <SelectTrigger className="h-12">
-                                        <SelectValue placeholder="Select pond" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {ponds.filter(pond => pond.is_active).map((pond) => (
-                                          <SelectItem key={pond.pond_id || pond.id} value={(pond.pond_id || pond.id)?.toString() || ''}>
-                                            {pond.name} - {pond.water_area_decimal} decimal
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                  
-                                  <div className="space-y-2">
-                                    <Label>Select Species</Label>
-                                    <Select
-                                      value={line.species_id?.toString() || ''}
-                                      onValueChange={(value) => updateLineItem(index, 'species_id', parseInt(value))}
-                                    >
-                                      <SelectTrigger className="h-12">
-                                        <SelectValue placeholder="Select species" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {species.map((spec) => (
-                                          <SelectItem key={spec.species_id || spec.id} value={(spec.species_id || spec.id)?.toString() || ''}>
-                                            {spec.name} {spec.scientific_name && `(${spec.scientific_name})`}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
+                                    {(() => {
+                                      const customer = customers.find(c => String(c.customer_id) === String(formData.customer_id));
+                                      const isInternal = customer?.type === 'internal_pond' && customer?.pond;
+                                      if (isInternal) {
+                                        const pondObj = ponds.find(p => (p.pond_id || p.id) === customer?.pond);
+                                        return (
+                                          <div className="h-12 flex items-center px-3 border rounded bg-gray-50 text-gray-700">
+                                            {pondObj ? `${pondObj.name} - ${pondObj.water_area_decimal} decimal` : 'Linked Pond'}
+                                          </div>
+                                        );
+                                      }
+                                      return (
+                                        <Select
+                                          value={line.pond_id?.toString() || ''}
+                                          onValueChange={(value) => updateLineItem(index, 'pond_id', parseInt(value))}
+                                        >
+                                          <SelectTrigger className="h-12">
+                                            <SelectValue placeholder="Select pond" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {ponds.filter(pond => pond.is_active).map((pond) => (
+                                              <SelectItem key={pond.pond_id || pond.id} value={(pond.pond_id || pond.id)?.toString() || ''}>
+                                                {pond.name} - {pond.water_area_decimal} decimal
+                                              </SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      );
+                                    })()}
                                   </div>
                                 </div>
                                 
-                                {/* Fish fields row 2 - Total Weight and Line Number */}
-                                <div className="grid grid-cols-2 gap-4">
+                                {/* Fish fields row 2 - Species Number, Body Weight per Fish, Total Weight */}
+                                <div className="grid grid-cols-3 gap-4">
+                                  <div className="space-y-2">
+                                    <Label>Species Number</Label>
+                                    <Input
+                                      type="number"
+                                      value={line.fish_count || ''}
+                                      onChange={(e) => updateFishInvLineFields(index, { fish_count: e.target.value })}
+                                      placeholder="Number of fish (pcs)"
+                                      className="h-12"
+                                    />
+                                    {(() => {
+                                      const cs = getPondStock(line.item_id, line.pond_id);
+                                      const hint = cs?.fish_count ? `${cs.fish_count} pcs` : undefined;
+                                      return hint ? (<div className="text-xs text-gray-500">Current (pond): {hint}</div>) : null;
+                                    })()}
+                                  </div>
+                                  <div className="space-y-2">
+                                    <Label>Line Number (pcs per kg)</Label>
+                                    <Input
+                                      type="number"
+                                      step="1"
+                                      value={line.line_number || ''}
+                                      onChange={(e) => updateFishInvLineFields(index, { line_number: e.target.value })}
+                                      placeholder="e.g., 4 (pcs/kg)"
+                                      className="h-12"
+                                    />
+                                    {(() => {
+                                      const cs = getPondStock(line.item_id, line.pond_id);
+                                      const ln = cs?.line_number;
+                                      return ln ? (<div className="text-xs text-gray-500">Current (pond): {Number(ln).toFixed(2)} pcs/kg</div>) : null;
+                                    })()}
+                                  </div>
                                   <div className="space-y-2">
                                     <Label>Total Weight (kg)</Label>
                                     <Input
                                       type="number"
                                       step="0.01"
                                       value={line.total_weight && line.total_weight > 0 ? line.total_weight : ''}
-                                      onChange={(e) => updateLineItem(index, 'total_weight', parseFloat(e.target.value) || 0)}
+                                      onChange={(e) => updateFishInvLineFields(index, { total_weight: e.target.value })}
                                       placeholder="Total weight in kg"
                                       className="h-12"
                                     />
-                                  </div>
-                                  
-                                  <div className="space-y-2">
-                                    <Label>Line Number</Label>
-                                    <Input
-                                      type="number"
-                                      value={line.line_number && line.line_number > 0 ? line.line_number : ''}
-                                      onChange={(e) => updateLineItem(index, 'line_number', parseInt(e.target.value) || 0)}
-                                      placeholder="Line number"
-                                      className="h-12"
-                                    />
+                                    {(() => {
+                                      const cs = getPondStock(line.item_id, line.pond_id);
+                                      const hint = cs?.fish_total_weight_kg ?? cs?.current_stock;
+                                      return hint ? (<div className="text-xs text-gray-500">Current (pond): {Number(hint).toFixed(2)} kg</div>) : null;
+                                    })()}
                                   </div>
                                 </div>
                               </div>
@@ -1023,6 +1159,12 @@ console.log("ponds", ponds);
                               placeholder="Rate per unit"
                               className="h-12"
                             />
+                            {(() => {
+                              const item = items.find(it => it.item_id === line.item_id);
+                              return item?.selling_price ? (
+                                <div className="text-xs text-gray-500">Current: {Number(item.selling_price).toFixed(2)}</div>
+                              ) : null;
+                            })()}
                           </div>
                           
                           <div className="space-y-2">
@@ -1034,6 +1176,17 @@ console.log("ponds", ponds);
                               readOnly
                               className="bg-gray-50 h-12"
                             />
+                            {/* Helper: total_weight = fish_count / line_number */}
+                            {(() => {
+                              const item = items.find(it => it.item_id === line.item_id);
+                              if (item?.category === 'fish' && line.fish_count && line.line_number && !line.total_weight) {
+                                const tw = (line.fish_count || 0) / (line.line_number || 1);
+                                return (
+                                  <div className="text-xs text-blue-600">Suggested total weight: {tw.toFixed(2)} kg</div>
+                                );
+                              }
+                              return null;
+                            })()}
                           </div>
                           
                           <div className="space-y-2">

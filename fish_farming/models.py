@@ -193,6 +193,10 @@ class Item(models.Model):
     selling_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, help_text="Selling price per unit")
     
     description = models.TextField(blank=True)
+
+    # Fish aggregation (for fish category only)
+    fish_total_weight_kg = models.DecimalField(max_digits=12, decimal_places=3, null=True, blank=True, help_text="Aggregate total fish weight in kg")
+    fish_count = models.PositiveIntegerField(null=True, blank=True, help_text="Aggregate number of fish (pieces)")
     active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -374,6 +378,7 @@ class JournalEntry(models.Model):
         ('INVOICE', 'Invoice'),
         ('CUST_PAYMENT', 'Customer Payment'),
         ('DEPOSIT', 'Deposit'),
+        ('TRANSFER', 'Transfer'),
         ('CHECK', 'Check'),
         ('INVENTORY', 'Inventory'),
         ('STOCKING_FEED_MED', 'Stocking/Feed/Medicine'),
@@ -492,6 +497,13 @@ class BillLine(models.Model):
     gallon_size = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Gallon size in litres")
     cost = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     line_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+
+    # Fish-specific fields for item lines
+    species = models.ForeignKey('Species', on_delete=models.SET_NULL, null=True, blank=True, related_name='bill_lines', help_text="Species for fish items")
+    total_weight = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total weight in kg for fish items")
+    fish_count = models.PositiveIntegerField(null=True, blank=True, help_text="Number of fish (pieces)")
+    body_weight_per_fish = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True, help_text="Average body weight (kg) per fish")
+    line_number = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True, help_text="Line number (pcs per kg) for fish items")
     
     line_memo = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -504,6 +516,24 @@ class BillLine(models.Model):
             return f"{self.item.name} - {self.qty} @ {self.cost}"
         else:
             return f"{self.expense_account.name} - {self.amount}"
+
+    def save(self, *args, **kwargs):
+        # Auto-calculate line_amount for item lines
+        if self.is_item and self.item and self.cost is not None:
+            if self.item.category == 'fish':
+                effective_qty = None
+                if self.total_weight and self.total_weight > 0:
+                    effective_qty = self.total_weight
+                elif self.fish_count and self.body_weight_per_fish:
+                    effective_qty = self.fish_count * self.body_weight_per_fish
+                else:
+                    effective_qty = self.qty or 0
+            else:
+                effective_qty = self.qty or 0
+                if self.packet_size and self.packet_size > 0:
+                    effective_qty = (self.qty or 0) * self.packet_size
+            self.line_amount = effective_qty * self.cost
+        super().save(*args, **kwargs)
 
 
 class BillPayment(models.Model):
@@ -590,7 +620,9 @@ class InvoiceLine(models.Model):
     pond = models.ForeignKey('Pond', on_delete=models.SET_NULL, null=True, blank=True, related_name='invoice_lines', help_text="Pond for fish items")
     species = models.ForeignKey('Species', on_delete=models.SET_NULL, null=True, blank=True, related_name='invoice_lines', help_text="Species for fish items")
     total_weight = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total weight in kg for fish items")
-    line_number = models.PositiveIntegerField(null=True, blank=True, help_text="Line number for fish items")
+    fish_count = models.PositiveIntegerField(null=True, blank=True, help_text="Number of fish (pieces)")
+    body_weight_per_fish = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True, help_text="Average body weight (kg) per fish")
+    line_number = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True, help_text="Line number (pcs per kg) for fish items")
     
     created_at = models.DateTimeField(auto_now_add=True)
     
@@ -602,14 +634,20 @@ class InvoiceLine(models.Model):
     
     def save(self, *args, **kwargs):
         # Auto-calculate amount
-        # For fish items, use total_weight if available, otherwise use qty
-        if self.item and self.item.category == 'fish' and self.total_weight:
-            effective_qty = self.total_weight
+        # For fish items: prefer explicit total_weight; otherwise derive from fish_count * body_weight_per_fish
+        if self.item and self.item.category == 'fish':
+            effective_qty = None
+            if self.total_weight and self.total_weight > 0:
+                effective_qty = self.total_weight
+            elif self.fish_count and self.body_weight_per_fish:
+                effective_qty = self.fish_count * self.body_weight_per_fish
+            else:
+                effective_qty = self.qty or 0
         else:
             # If packet_size is provided, multiply quantity by packet_size, otherwise use quantity as is
-            effective_qty = self.qty
+            effective_qty = self.qty or 0
             if self.packet_size and self.packet_size > 0:
-                effective_qty = self.qty * self.packet_size
+                effective_qty = (self.qty or 0) * self.packet_size
         
         self.amount = effective_qty * self.rate
         super().save(*args, **kwargs)

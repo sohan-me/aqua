@@ -59,6 +59,12 @@ interface BillLine {
   packet_size?: number; // Packet size in kg
   cost?: number; // Cost field name from API
   line_amount?: number; // Line amount field name from API
+  // Fish-specific
+  species?: number;
+  total_weight?: number;
+  fish_count?: number;
+  body_weight_per_fish?: number;
+  line_number?: number;
   // Expense mode fields
   expense_account?: number; // Foreign key to expense account
   expense_account_name?: string;
@@ -111,6 +117,41 @@ export default function BillsPage() {
   const [activeTab, setActiveTab] = useState<'expenses' | 'items'>('expenses');
 
   const { get, post, put, delete: del } = useApi();
+
+  // Auto-calc helper for fish: when any two of (fish_count, body_weight_per_fish, total_weight) are provided, compute the third
+  const updateFishLineFields = (index: number, updates: Partial<BillLine>) => {
+    const li = { ...(lineItems[index] || {}), ...updates } as any;
+    const hasCount = Number(li.fish_count) > 0;
+    const hasLn = Number(li.line_number) > 0; // pcs per kg
+    const hasTw = Number(li.total_weight) > 0;
+
+    // Relations for fish: total_weight = fish_count / line_number
+    if (hasCount && hasLn && !hasTw) {
+      li.total_weight = Number(li.fish_count) / Number(li.line_number);
+    } else if (hasCount && hasTw && !hasLn) {
+      const denom = Number(li.total_weight);
+      li.line_number = denom > 0 ? Number(li.fish_count) / denom : 0;
+    } else if (hasLn && hasTw && !hasCount) {
+      li.fish_count = Math.round(Number(li.line_number) * Number(li.total_weight));
+    }
+
+    // Keep qty/unit aligned for fish: qty mirrors total_weight in kg
+    if (Number(li.total_weight) > 0) {
+      li.qty = Number(li.total_weight);
+      li.unit = 'kg';
+    }
+
+    // Auto compute line_amount for fish using total_weight (effective quantity)
+    const cost = Number(li.cost) || 0;
+    const effectiveQty = Number(li.total_weight) || 0;
+    if (cost && effectiveQty) {
+      li.line_amount = cost * effectiveQty;
+    }
+
+    const updated = [...lineItems];
+    updated[index] = li;
+    setLineItems(updated);
+  };
 
   useEffect(() => {
     fetchData();
@@ -255,9 +296,19 @@ export default function BillsPage() {
           toast.error(`Please select an item for line ${i + 1}`);
           return;
         }
-        if (!line.qty || line.qty <= 0) {
-          toast.error(`Please enter a valid quantity for line ${i + 1}`);
-          return;
+        // Determine if fish item
+        const selectedItem = items.find(it => it.item_id === line.item);
+        const isFish = selectedItem?.category === 'fish';
+        if (isFish) {
+          if (!line.total_weight || line.total_weight <= 0) {
+            toast.error(`Please enter a valid total weight for line ${i + 1}`);
+            return;
+          }
+        } else {
+          if (!line.qty || line.qty <= 0) {
+            toast.error(`Please enter a valid quantity for line ${i + 1}`);
+            return;
+          }
         }
         if (!line.cost || line.cost <= 0) {
           toast.error(`Please enter a valid unit cost for line ${i + 1}`);
@@ -305,13 +356,20 @@ export default function BillsPage() {
           };
           
           if (line.is_item) {
+            const selectedItem = items.find(it => it.item_id === line.item);
+            const isFish = selectedItem?.category === 'fish';
             billLineData.item = line.item || null;
             billLineData.description = line.description || '';
-            billLineData.qty = line.qty || 0;
-            billLineData.unit = line.unit || 'kg';
-            billLineData.packet_size = line.packet_size || null;
+            billLineData.qty = isFish ? (line.total_weight || 0) : (line.qty || 0);
+            billLineData.unit = isFish ? 'kg' : (line.unit || 'kg');
+            billLineData.packet_size = isFish ? null : (line.packet_size || null);
             billLineData.cost = line.cost || 0;
             billLineData.line_amount = line.line_amount || 0;
+            if (isFish) {
+              billLineData.total_weight = line.total_weight || 0;
+              billLineData.fish_count = line.fish_count || null;
+              billLineData.body_weight_per_fish = line.body_weight_per_fish || null;
+            }
           } else {
             billLineData.expense_account = line.expense_account || null;
             billLineData.amount = line.amount || 0;
@@ -334,13 +392,20 @@ export default function BillsPage() {
           };
           
           if (line.is_item) {
+            const selectedItem = items.find(it => it.item_id === line.item);
+            const isFish = selectedItem?.category === 'fish';
             billLineData.item = line.item || null;
             billLineData.description = line.description || '';
-            billLineData.qty = line.qty || 0;
-            billLineData.unit = line.unit || 'kg';
-            billLineData.packet_size = line.packet_size || null;
+            billLineData.qty = isFish ? (line.total_weight || 0) : (line.qty || 0);
+            billLineData.unit = isFish ? 'kg' : (line.unit || 'kg');
+            billLineData.packet_size = isFish ? null : (line.packet_size || null);
             billLineData.cost = line.cost || 0;
             billLineData.line_amount = line.line_amount || 0;
+            if (isFish) {
+              billLineData.total_weight = line.total_weight || 0;
+              billLineData.fish_count = line.fish_count || null;
+              billLineData.body_weight_per_fish = line.body_weight_per_fish || null;
+            }
           } else {
             billLineData.expense_account = line.expense_account || null;
             billLineData.amount = line.amount || 0;
@@ -744,54 +809,97 @@ export default function BillsPage() {
                               </div>
                             </div>
                             
-                            {/* Second row - Quantity, Unit, and Packet Size */}
-                            <div className="grid grid-cols-3 gap-4">
-                              <div className="space-y-2">
-                                <Label>Quantity</Label>
-                                <Input
-                                  type="number"
-                                  value={line.qty || ''}
-                                  onChange={(e) => updateLineItem(actualIndex, 'qty', parseInt(e.target.value) || 0)}
-                                  placeholder="Quantity"
-                                  className="h-12"
-                                />
-                              </div>
-                              
-                              <div className="space-y-2">
-                                <Label>Unit of Measure</Label>
-                                <Select
-                                  value={line.unit || 'kg'}
-                                  onValueChange={(value) => updateLineItem(actualIndex, 'unit', value)}
-                                >
-                                  <SelectTrigger className="h-12">
-                                    <SelectValue placeholder="Select unit" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {getUomOptionsForItem(line.item || 0).map((uom) => (
-                                      <SelectItem key={uom} value={uom}>
-                                        {uom}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              
-                              {/* Conditional packet size field */}
-                              {line.unit === 'packet' && (
-                                <div className="space-y-2">
-                                  <Label>Packet Size (kg)</Label>
-                                  <Input
-                                    type="number"
-                                    step="0.1"
-                                    value={line.packet_size || ''}
-                                    onChange={(e) => updateLineItem(actualIndex, 'packet_size', parseFloat(e.target.value) || 0)}
-                                    placeholder="e.g., 10, 25"
-                                    className="h-12"
-                                  />
+                            {/* Conditional block: standard fields for non-fish items; fish block otherwise */}
+                            {(() => {
+                              const selectedItem = items.find(i => i.item_id === line.item);
+                              const isFish = selectedItem?.category === 'fish';
+                              if (!isFish) {
+                                return (
+                                  <div className="grid grid-cols-3 gap-4">
+                                    <div className="space-y-2">
+                                      <Label>Quantity</Label>
+                                      <Input
+                                        type="number"
+                                        step="0.01"
+                                        value={line.qty || ''}
+                                        onChange={(e) => updateLineItem(actualIndex, 'qty', parseFloat(e.target.value) || 0)}
+                                        placeholder="Quantity"
+                                        className="h-12"
+                                      />
+                                    </div>
+                                    <div className="space-y-2">
+                                      <Label>Unit of Measure</Label>
+                                      <Select
+                                        value={line.unit || 'kg'}
+                                        onValueChange={(value) => updateLineItem(actualIndex, 'unit', value)}
+                                      >
+                                        <SelectTrigger className="h-12">
+                                          <SelectValue placeholder="Select unit" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {getUomOptionsForItem(line.item || 0).map((uom) => (
+                                            <SelectItem key={uom} value={uom}>
+                                              {uom}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                    {line.unit === 'packet' && (
+                                      <div className="space-y-2">
+                                        <Label>Packet Size (kg)</Label>
+                                        <Input
+                                          type="number"
+                                          step="0.1"
+                                          value={line.packet_size || ''}
+                                          onChange={(e) => updateLineItem(actualIndex, 'packet_size', parseFloat(e.target.value) || 0)}
+                                          placeholder="e.g., 10, 25"
+                                          className="h-12"
+                                        />
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              }
+                              return (
+                                <div className="space-y-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                                  <div className="grid grid-cols-3 gap-4">
+                                    <div className="space-y-2">
+                                      <Label>Species Number</Label>
+                                      <Input
+                                        type="number"
+                                        value={line.fish_count || ''}
+                                        onChange={(e) => updateFishLineFields(actualIndex, { fish_count: parseInt(e.target.value) || 0 })}
+                                        placeholder="Number of fish (pcs)"
+                                        className="h-12"
+                                      />
+                                    </div>
+                                    <div className="space-y-2">
+                                      <Label>Line Number (pcs per kg)</Label>
+                                      <Input
+                                        type="number"
+                                        step="1"
+                                        value={line.line_number || ''}
+                                        onChange={(e) => updateFishLineFields(actualIndex, { line_number: parseFloat(e.target.value) || 0 })}
+                                        placeholder="e.g., 4 (pcs/kg)"
+                                        className="h-12"
+                                      />
+                                    </div>
+                                    <div className="space-y-2">
+                                      <Label>Total Weight (kg)</Label>
+                                      <Input
+                                        type="number"
+                                        step="0.01"
+                                        value={line.total_weight || ''}
+                                        onChange={(e) => updateFishLineFields(actualIndex, { total_weight: parseFloat(e.target.value) || 0 })}
+                                        placeholder="Auto/Manual total"
+                                        className="h-12"
+                                      />
+                                    </div>
+                                  </div>
                                 </div>
-                              )}
-                              
-                            </div>
+                              );
+                            })()}
                             
                             {/* Third row - Cost, Amount, and Actions */}
                             <div className="grid grid-cols-3 gap-4">
@@ -801,7 +909,15 @@ export default function BillsPage() {
                                   type="number"
                                   step="0.01"
                                   value={line.cost || ''}
-                                  onChange={(e) => updateLineItem(actualIndex, 'cost', parseFloat(e.target.value) || 0)}
+                                  onChange={(e) => {
+                                    const cost = parseFloat(e.target.value) || 0;
+                                    const selectedItem = items.find(i => i.item_id === line.item);
+                                    if (selectedItem?.category === 'fish') {
+                                      updateFishLineFields(actualIndex, { cost });
+                                    } else {
+                                      updateLineItem(actualIndex, 'cost', cost);
+                                    }
+                                  }}
                                   placeholder="Cost per unit"
                                   className="h-12"
                                 />

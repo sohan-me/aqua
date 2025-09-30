@@ -13,7 +13,10 @@ import {
   XCircle,
   TrendingUp,
   Eye,
-  EyeOff
+  EyeOff,
+  DollarSign,
+  Clock,
+  ArrowUpDown
 } from 'lucide-react';
 
 export default function InventoryPage() {
@@ -21,6 +24,9 @@ export default function InventoryPage() {
   const [selectedPond, setSelectedPond] = useState<number | null>(null);
   const [selectedItemType, setSelectedItemType] = useState<string | null>(null);
   const [showLowStockOnly, setShowLowStockOnly] = useState(false);
+  const [showCosts, setShowCosts] = useState(false);
+  const [sortBy, setSortBy] = useState<'name' | 'last_updated' | 'status'>('name');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [expandedPonds, setExpandedPonds] = useState<Set<number>>(new Set());
 
   // Fetch data
@@ -29,6 +35,40 @@ export default function InventoryPage() {
   
   const customerStocks = extractApiData<CustomerStock>(customerStocksData?.data);
   const ponds = extractApiData<Pond>(pondsData?.data);
+
+
+  const parseNumber = (value: unknown): number => {
+    if (value === null || value === undefined) return 0;
+    if (typeof value === 'number') return isFinite(value) ? value : 0;
+    if (typeof value === 'string') {
+      const num = parseFloat(value);
+      return isNaN(num) ? 0 : num;
+    }
+    return 0;
+  };
+
+  const formatCurrency = (amount: number): string => {
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(amount);
+  };
+
+  const formatRelativeTime = (isoDate: string | null | undefined): string => {
+    if (!isoDate) return '—';
+    const date = new Date(isoDate);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffSec = Math.floor(diffMs / 1000);
+    if (diffSec < 60) return `${diffSec}s ago`;
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return `${diffHr}h ago`;
+    const diffDay = Math.floor(diffHr / 24);
+    if (diffDay < 30) return `${diffDay}d ago`;
+    const diffMon = Math.floor(diffDay / 30);
+    if (diffMon < 12) return `${diffMon}mo ago`;
+    const diffYr = Math.floor(diffMon / 12);
+    return `${diffYr}y ago`;
+  };
 
 
   // Filter stocks based on search and filters
@@ -61,8 +101,62 @@ export default function InventoryPage() {
       );
     }
 
-    return filtered;
+    // Sorting
+    const sorted = [...filtered].sort((a, b) => {
+      if (sortBy === 'name') {
+        const an = (a.item_name || '').toLowerCase();
+        const bn = (b.item_name || '').toLowerCase();
+        return an.localeCompare(bn);
+      }
+      if (sortBy === 'last_updated') {
+        const ad = new Date(a.last_updated || a.created_at || 0).getTime();
+        const bd = new Date(b.last_updated || b.created_at || 0).getTime();
+        return ad - bd;
+      }
+      if (sortBy === 'status') {
+        const order: Record<string, number> = { out_of_stock: 0, low_stock: 1, in_stock: 2, overstocked: 3 };
+        const av = order[a.stock_status] ?? 99;
+        const bv = order[b.stock_status] ?? 99;
+        return av - bv;
+      }
+      return 0;
+    });
+
+    if (sortDir === 'desc') sorted.reverse();
+
+    return sorted;
   };
+
+  // KPI calculations
+  const totals = (() => {
+    const stocks = customerStocks || [];
+    let totalFishWeightKg = 0;
+    let totalFishCount = 0;
+    let totalFeedKg = 0;
+    let totalInventoryValue = 0;
+
+    for (const s of stocks) {
+      const sAny = s as any;
+      const categoryName = String((sAny?.category ?? sAny?.item_category_name ?? '')).toLowerCase();
+      const isFish = categoryName === 'fish';
+      const isFeed = categoryName === 'feed';
+      if (isFish) {
+        totalFishWeightKg += parseNumber(sAny?.fish_total_weight_kg);
+        totalFishCount += parseNumber(sAny?.fish_count);
+      }
+      if (isFeed) {
+        const unitLower = String((s.unit ?? sAny?.item_unit ?? '')).toLowerCase();
+        if (unitLower === 'kg') {
+          totalFeedKg += parseNumber(s.current_stock);
+        }
+      }
+      const qty = parseNumber(s.current_stock);
+      const cost = parseNumber(s.unit_cost);
+      totalInventoryValue += qty * cost;
+    }
+
+    return { totalFishWeightKg, totalFishCount, totalFeedKg, totalInventoryValue };
+  })();
 
   // Group stocks by pond
   const getStocksByPond = () => {
@@ -156,6 +250,9 @@ export default function InventoryPage() {
           <p className="text-gray-600 mt-2">
             Monitor inventory stocks across all ponds
           </p>
+          <div className="mt-2 text-xs text-gray-600 bg-blue-50 border border-blue-200 rounded px-2 py-1 inline-block">
+            External sales with a selected pond now deduct that pond's stock.
+          </div>
         </div>
       </div>
 
@@ -227,6 +324,51 @@ export default function InventoryPage() {
             </button>
           </div>
         </div>
+        {/* Sorting and Cost Controls */}
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-gray-700">Sort By</label>
+            <div className="flex items-center space-x-2">
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as 'name' | 'last_updated' | 'status')}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="name">Name</option>
+                <option value="last_updated">Last Updated</option>
+                <option value="status">Stock Status</option>
+              </select>
+              <button
+                onClick={() => setSortDir(sortDir === 'asc' ? 'desc' : 'asc')}
+                className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                title={`Direction: ${sortDir}`}
+              >
+                <ArrowUpDown className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-gray-700">Show Costs</label>
+            <button
+              onClick={() => setShowCosts(!showCosts)}
+              className={`w-full px-3 py-2 border rounded-lg flex items-center justify-center ${
+                showCosts ? 'bg-green-50 border-green-300 text-green-700' : 'bg-gray-50 border-gray-300 text-gray-700'
+              }`}
+            >
+              <DollarSign className="h-4 w-4 mr-2" />
+              {showCosts ? 'Hide Costs' : 'Show Costs'}
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-gray-700">Data Freshness</label>
+            <div className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 flex items-center">
+              <Clock className="h-4 w-4 mr-2 text-gray-400" />
+              Updated {customerStocks && customerStocks.length > 0 ? formatRelativeTime(customerStocks[0].last_updated || customerStocks[0].created_at) : '—'}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Summary Cards */}
@@ -286,6 +428,54 @@ export default function InventoryPage() {
         </div>
       </div>
 
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="flex items-center">
+            <div className="p-2 bg-indigo-100 rounded-lg">
+              <Package className="h-6 w-6 text-indigo-600" />
+            </div>
+            <div className="ml-4">
+              <p className="text-sm font-medium text-gray-600">Fish Weight</p>
+              <p className="text-2xl font-bold text-gray-900">{totals.totalFishWeightKg.toFixed(2)} kg</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="flex items-center">
+            <div className="p-2 bg-blue-100 rounded-lg">
+              <Package className="h-6 w-6 text-blue-600" />
+            </div>
+            <div className="ml-4">
+              <p className="text-sm font-medium text-gray-600">Fish Count</p>
+              <p className="text-2xl font-bold text-gray-900">{totals.totalFishCount}</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="flex items-center">
+            <div className="p-2 bg-amber-100 rounded-lg">
+              <Package className="h-6 w-6 text-amber-600" />
+            </div>
+            <div className="ml-4">
+              <p className="text-sm font-medium text-gray-600">Feed (kg)</p>
+              <p className="text-2xl font-bold text-gray-900">{totals.totalFeedKg.toFixed(0)}</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="flex items-center">
+            <div className="p-2 bg-emerald-100 rounded-lg">
+              <DollarSign className="h-6 w-6 text-emerald-600" />
+            </div>
+            <div className="ml-4">
+              <p className="text-sm font-medium text-gray-600">Inventory Value</p>
+              <p className="text-2xl font-bold text-gray-900">{formatCurrency(totals.totalInventoryValue)}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Stock List by Pond */}
       <div className="bg-white rounded-lg shadow">
         <div className="p-6 border-b border-gray-200">
@@ -306,6 +496,17 @@ export default function InventoryPage() {
               const pondIdNum = parseInt(pondId);
               const isExpanded = expandedPonds.has(pondIdNum);
               const pondName = getPondName(pondIdNum);
+              const pondValue = stocks.reduce((sum, s) => sum + parseNumber(s.current_stock) * parseNumber(s.unit_cost), 0);
+              const pondFishCount = stocks.reduce((sum, s) => {
+                const sAny = s as any;
+                const categoryName = String((sAny?.category ?? sAny?.item_category_name ?? '')).toLowerCase();
+                return sum + (categoryName === 'fish' ? parseNumber(sAny?.fish_count) : 0);
+              }, 0);
+              const pondFishWeight = stocks.reduce((sum, s) => {
+                const sAny = s as any;
+                const categoryName = String((sAny?.category ?? sAny?.item_category_name ?? '')).toLowerCase();
+                return sum + (categoryName === 'fish' ? parseNumber(sAny?.fish_total_weight_kg) : 0);
+              }, 0);
               
               return (
                 <div key={pondId} className="p-6">
@@ -322,7 +523,7 @@ export default function InventoryPage() {
                       )}
                       <div>
                         <h3 className="text-lg font-medium text-gray-900">{pondName}</h3>
-                        <p className="text-sm text-gray-500">{stocks.length} items</p>
+                        <p className="text-sm text-gray-500">{stocks.length} items • {pondFishCount} fish • {pondFishWeight.toFixed(1)} kg {showCosts && `• ${formatCurrency(pondValue)}`}</p>
                       </div>
                     </div>
                     <div className="flex items-center space-x-4">
@@ -349,6 +550,12 @@ export default function InventoryPage() {
                         {stocks.map(stock => {
                           const statusInfo = getStatusInfo(stock.stock_status);
                           const StatusIcon = statusInfo.icon;
+                          const qty = parseNumber(stock.current_stock);
+                          const cost = parseNumber(stock.unit_cost);
+                          const lineValue = qty * cost;
+                          const sAny = stock as any;
+                          const categoryName = String((sAny?.category ?? sAny?.item_category_name ?? '')).toLowerCase();
+                          const isFish = categoryName === 'fish';
                           
                           return (
                             <div key={stock.customer_stock_id} className={`border rounded-lg p-4 ${statusInfo.bg}`}>
@@ -373,21 +580,30 @@ export default function InventoryPage() {
                                         (Min: {stock.min_stock_level} {stock.unit})
                                       </span>
                                     )}
-                                    {(stock.unit === 'packet' || stock.unit === 'pack') && stock.packet_size && (
+                                    {(stock.unit === 'packet' || stock.unit === 'pack') && (stock as any).packet_size && (
                                       <span className="text-green-600 ml-2 font-semibold">
-                                        = {(stock.current_stock * stock.packet_size).toFixed(2)} kg
+                                        = {(qty * (sAny.packet_size ?? 0)).toFixed(2)} kg
                                       </span>
                                     )}
                                   </p>
+                                  {isFish && (
+                                    <p className="text-sm text-gray-700 mb-2">
+                                      <span className="mr-4">Weight: <span className="font-medium">{parseNumber(sAny?.fish_total_weight_kg).toFixed(2)} kg</span></span>
+                                      <span>Count: <span className="font-medium">{parseNumber(sAny?.fish_count)}</span></span>
+                                    </p>
+                                  )}
                                   <div className="flex items-center justify-between">
                                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${statusInfo.bg} ${statusInfo.color}`}>
                                       {getStatusText(stock.stock_status)}
                                     </span>
-                                    {stock.unit_cost && (
-                                      <span className="text-sm text-gray-600">
-                                        ${Number(stock.unit_cost).toFixed(2)}/{stock.unit}
-                                      </span>
-                                    )}
+                                    <div className="text-right">
+                                      <div className="text-xs text-gray-500 flex items-center justify-end"><Clock className="h-3 w-3 mr-1" />{formatRelativeTime(stock.last_updated || stock.created_at)}</div>
+                                      {showCosts && (
+                                        <div className="text-sm text-gray-700">
+                                          {formatCurrency(cost)}/{stock.unit} • <span className="font-semibold">{formatCurrency(lineValue)}</span>
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
                               </div>
