@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useCustomerStocks, usePonds } from '@/hooks/useApi';
 import { CustomerStock, Pond } from '@/lib/api';
+import { useApi } from '@/hooks/useApi';
 import { extractApiData } from '@/lib/utils';
 import { 
   Package, 
@@ -18,6 +19,9 @@ import {
   Clock,
   ArrowUpDown
 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Button } from '@/components/ui/button';
 
 export default function InventoryPage() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -35,6 +39,25 @@ export default function InventoryPage() {
   
   const customerStocks = extractApiData<CustomerStock>(customerStocksData?.data);
   const ponds = extractApiData<Pond>(pondsData?.data);
+  const { get } = useApi();
+  const [movementsById, setMovementsById] = useState<Record<number, any[]>>({});
+  const [loadingMovements, setLoadingMovements] = useState<Record<number, boolean>>({});
+  const [movementsModal, setMovementsModal] = useState<{open: boolean; stockId?: number; title?: string}>({open: false});
+
+  const openMovements = async (cs: CustomerStock) => {
+    const id = (cs as any).customer_stock_id as number;
+    setLoadingMovements(prev => ({ ...prev, [id]: true }));
+    try {
+      const resp = await get(`/customer-stocks/${id}/movements/`);
+      setMovementsById(prev => ({ ...prev, [id]: resp }));
+      setMovementsModal({ open: true, stockId: id, title: `${(cs as any).pond_name || 'Pond'} • ${(cs as any).item_name}` });
+    } catch (e) {
+      setMovementsById(prev => ({ ...prev, [id]: [] }));
+      setMovementsModal({ open: true, stockId: id, title: `${(cs as any).pond_name || 'Pond'} • ${(cs as any).item_name}` });
+    } finally {
+      setLoadingMovements(prev => ({ ...prev, [id]: false }));
+    }
+  };
 
 
   const parseNumber = (value: unknown): number => {
@@ -428,6 +451,48 @@ export default function InventoryPage() {
         </div>
       </div>
 
+      {/* Movements Modal */}
+      <Dialog open={movementsModal.open} onOpenChange={(open) => setMovementsModal(prev => ({ ...prev, open }))}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Stock Movements{movementsModal.title ? ` • ${movementsModal.title}` : ''}</DialogTitle>
+          </DialogHeader>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Direction</TableHead>
+                  <TableHead>Qty (kg)</TableHead>
+                  <TableHead>Species (pcs)</TableHead>
+                  <TableHead>pcs/kg</TableHead>
+                  <TableHead>Source</TableHead>
+                  <TableHead>Ref</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(movementsModal.stockId && movementsById[movementsModal.stockId] || []).length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center text-sm text-gray-500">No movements found.</TableCell>
+                  </TableRow>
+                ) : (
+                  (movementsById[movementsModal.stockId as number] || []).map((m: any, idx: number) => (
+                    <TableRow key={idx}>
+                      <TableCell>{new Date(m.date).toLocaleDateString()}</TableCell>
+                      <TableCell className={m.direction === 'in' ? 'text-green-600' : 'text-red-600'}>{m.direction.toUpperCase()}</TableCell>
+                      <TableCell>{Number(m.qty_kg).toFixed(2)}</TableCell>
+                      <TableCell>{m.fish_count ?? '—'}</TableCell>
+                      <TableCell>{m.line_number ? Number(m.line_number).toFixed(2) : '—'}</TableCell>
+                      <TableCell className="capitalize">{m.source}</TableCell>
+                      <TableCell>#{m.ref}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </DialogContent>
+      </Dialog>
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg shadow p-6">
@@ -592,7 +657,7 @@ export default function InventoryPage() {
                                       <span>Count: <span className="font-medium">{parseNumber(sAny?.fish_count)}</span></span>
                                     </p>
                                   )}
-                                  <div className="flex items-center justify-between">
+                              <div className="flex items-center justify-between">
                                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${statusInfo.bg} ${statusInfo.color}`}>
                                       {getStatusText(stock.stock_status)}
                                     </span>
@@ -605,6 +670,17 @@ export default function InventoryPage() {
                                       )}
                                     </div>
                                   </div>
+                              <div className="mt-2">
+                                <button
+                                  onClick={() => openMovements(stock)}
+                                  className="text-sm text-blue-600 hover:underline"
+                                >
+                                  View Movements
+                                </button>
+                                {loadingMovements[(stock as any).customer_stock_id] && (
+                                  <div className="text-xs text-gray-500 mt-2">Loading movements...</div>
+                                )}
+                              </div>
                                 </div>
                               </div>
                             </div>

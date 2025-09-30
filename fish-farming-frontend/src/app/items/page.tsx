@@ -27,6 +27,7 @@ interface StockEntry {
   expiry_date?: string;
   notes?: string;
   kg_equivalent?: number;
+  fish_count?: number;
   created_at: string;
 }
 
@@ -62,12 +63,6 @@ interface Item {
   fish_count?: number;
 }
 
-interface Account {
-  account_id: number;
-  name: string;
-  code: string;
-  account_type: string;
-}
 
 
 const ITEM_TYPES = [
@@ -81,7 +76,6 @@ const ITEM_TYPES = [
 
 export default function ItemsPage() {
   const [items, setItems] = useState<Item[]>([]);
-  const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
@@ -92,9 +86,6 @@ export default function ItemsPage() {
     item_type: 'inventory_part' as 'inventory_part' | 'non_inventory' | 'service' | 'payment' | 'discount',
     category: '',
     unit: 'kg',
-    income_account: '',
-    expense_account: '',
-    cost_of_goods_sold_account: '',
     description: '',
     active: true,
     min_stock_level: 0,
@@ -112,19 +103,14 @@ export default function ItemsPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [itemsResponse, accountsResponse] = await Promise.all([
-        get('/items/'),
-        get('/accounts/'),
-      ]);
+      const itemsResponse = await get('/items/');
       
       setItems(itemsResponse.results || itemsResponse);
-      setAccounts(accountsResponse.results || accountsResponse);
     } catch (error: any) {
       console.error('Error fetching data:', error);
       const errorMessage = error?.response?.data?.detail || error?.message || 'Failed to fetch data';
       toast.error(`Error: ${errorMessage}`);
       setItems([]);
-      setAccounts([]);
     } finally {
       setLoading(false);
     }
@@ -136,9 +122,6 @@ export default function ItemsPage() {
       const submitData = {
         ...formData,
         category: formData.category && formData.category !== 'none' ? formData.category : null,
-        income_account: formData.income_account && formData.income_account !== 'none' ? parseInt(formData.income_account) : null,
-        expense_account: formData.expense_account && formData.expense_account !== 'none' ? parseInt(formData.expense_account) : null,
-        cost_of_goods_sold_account: formData.cost_of_goods_sold_account && formData.cost_of_goods_sold_account !== 'none' ? parseInt(formData.cost_of_goods_sold_account) : null,
       };
 
       if (editingItem) {
@@ -165,9 +148,6 @@ export default function ItemsPage() {
       item_type: item.item_type,
       category: item.category || '',
       unit: item.unit || 'kg',
-      income_account: item.income_account?.toString() || '',
-      expense_account: item.expense_account?.toString() || '',
-      cost_of_goods_sold_account: item.cost_of_goods_sold_account?.toString() || '',
       description: item.description,
       active: item.active,
       min_stock_level: item.min_stock_level || 0,
@@ -197,9 +177,6 @@ export default function ItemsPage() {
       item_type: 'inventory_part',
       category: '',
       unit: 'kg',
-      income_account: '',
-      expense_account: '',
-      cost_of_goods_sold_account: '',
       description: '',
       active: true,
       min_stock_level: 0,
@@ -311,11 +288,10 @@ export default function ItemsPage() {
             </DialogHeader>
             <form onSubmit={handleSubmit}>
               <Tabs defaultValue="basic" className="w-full">
-                <TabsList className="grid w-full grid-cols-4">
+                <TabsList className="grid w-full grid-cols-3">
                   <TabsTrigger value="basic">Basic Info</TabsTrigger>
                   <TabsTrigger value="stock">Stock</TabsTrigger>
                   <TabsTrigger value="stock-entries">Stock Entries</TabsTrigger>
-                  <TabsTrigger value="accounts">Accounts</TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="basic" className="space-y-4">
@@ -446,7 +422,7 @@ export default function ItemsPage() {
                         type="number"
                         step="0.001"
                         value={editingItem?.total_stock_in_unit || editingItem?.total_stock_kg || 0}
-                        // readOnly
+                        readOnly
                         className="bg-gray-50"
                         placeholder="0.000"
                       />
@@ -537,6 +513,11 @@ export default function ItemsPage() {
                                       = {entry.kg_equivalent.toFixed(2)} kg
                                     </p>
                                   )}
+                                  {typeof entry.fish_count === 'number' && (
+                                    <p className="text-sm text-gray-600">
+                                      Species Number: {entry.fish_count} pcs
+                                    </p>
+                                  )}
                                   <p className="text-sm text-gray-500">
                                     Added on {new Date(entry.entry_date).toLocaleDateString()}
                                   </p>
@@ -591,67 +572,6 @@ export default function ItemsPage() {
                   </div>
                 </TabsContent>
                 
-                <TabsContent value="accounts" className="space-y-4">
-                  <div className="grid grid-cols-1 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="income_account">Income Account</Label>
-                      <Select
-                        value={formData.income_account}
-                        onValueChange={(value) => setFormData({ ...formData, income_account: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select income account" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">No income account</SelectItem>
-                          {accounts.map((account) => (
-                            <SelectItem key={account.account_id} value={account.account_id.toString()}>
-                              {account.code} - {account.name} ({account.account_type})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="expense_account">Expense Account</Label>
-                      <Select
-                        value={formData.expense_account}
-                        onValueChange={(value) => setFormData({ ...formData, expense_account: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select expense account" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">No expense account</SelectItem>
-                          {accounts.map((account) => (
-                            <SelectItem key={account.account_id} value={account.account_id.toString()}>
-                              {account.code} - {account.name} ({account.account_type})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="cost_of_goods_sold_account">Cost of Goods Sold Account</Label>
-                      <Select
-                        value={formData.cost_of_goods_sold_account}
-                        onValueChange={(value) => setFormData({ ...formData, cost_of_goods_sold_account: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select COGS account" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">No COGS account</SelectItem>
-                          {accounts.map((account) => (
-                            <SelectItem key={account.account_id} value={account.account_id.toString()}>
-                              {account.code} - {account.name} ({account.account_type})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </TabsContent>
                 
               </Tabs>
               

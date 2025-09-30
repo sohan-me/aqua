@@ -615,6 +615,7 @@ export interface CustomerStock {
   item: number;
   item_name: string;
   item_type: string;
+  category?: string | null;
   current_stock: number;
   min_stock_level: number;
   max_stock_level?: number;
@@ -624,6 +625,10 @@ export interface CustomerStock {
   stock_status: 'out_of_stock' | 'low_stock' | 'in_stock' | 'overstocked';
   last_updated: string;
   created_at: string;
+  // Fish-specific derived fields (optional on backend)
+  fish_total_weight_kg?: number | null;
+  fish_count?: number | null;
+  line_number?: number | null;
 }
 
 export interface PaymentTerms {
@@ -678,6 +683,7 @@ export interface StockEntry {
   expiry_date?: string;
   notes?: string;
   kg_equivalent?: number;
+  fish_count?: number;
   created_at: string;
   updated_at: string;
 }
@@ -973,19 +979,6 @@ export const apiService = {
   updateIncome: (id: number, data: Partial<Income>) => api.put<Income>(`/incomes/${id}/`, data),
   deleteIncome: (id: number) => api.delete(`/incomes/${id}/`),
 
-  // Expense Types
-  getExpenseTypes: () => api.get<ExpenseType[]>('/expense-types/'),
-  getExpenseTypeById: (id: number) => api.get<ExpenseType>(`/expense-types/${id}/`),
-  createExpenseType: (data: Partial<ExpenseType>) => api.post<ExpenseType>('/expense-types/', data),
-  updateExpenseType: (id: number, data: Partial<ExpenseType>) => api.put<ExpenseType>(`/expense-types/${id}/`, data),
-  deleteExpenseType: (id: number) => api.delete(`/expense-types/${id}/`),
-
-  // Income Types
-  getIncomeTypes: () => api.get<IncomeType[]>('/income-types/'),
-  getIncomeTypeById: (id: number) => api.get<IncomeType>(`/income-types/${id}/`),
-  createIncomeType: (data: Partial<IncomeType>) => api.post<IncomeType>('/income-types/', data),
-  updateIncomeType: (id: number, data: Partial<IncomeType>) => api.put<IncomeType>(`/income-types/${id}/`, data),
-  deleteIncomeType: (id: number) => api.delete(`/income-types/${id}/`),
 
   // Alerts
   getAlerts: () => api.get<Alert[]>('/alerts/'),

@@ -1,8 +1,8 @@
 'use client';
 
-import { usePonds, useSpecies, useCreateFishSampling } from '@/hooks/useApi';
+import { usePonds, useCreateFishSampling, useCustomerStocks } from '@/hooks/useApi';
 import { extractApiData } from '@/lib/utils';
-import { Pond, Species } from '@/lib/api';
+import { Pond, CustomerStock } from '@/lib/api';
 import { Scale, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -12,17 +12,19 @@ import { toast } from 'sonner';
 export default function NewFishSamplingPage() {
   const router = useRouter();
   const { data: pondsData } = usePonds();
-  const { data: speciesData } = useSpecies();
+  const { data: customerStocksData } = useCustomerStocks();
   const createSampling = useCreateFishSampling();
   const ponds = extractApiData<Pond>(pondsData?.data);
-  const species = extractApiData<Species>(speciesData?.data);
+  const allCustomerStocks = extractApiData<CustomerStock>(customerStocksData?.data);
   
   const [formData, setFormData] = useState({
     pond: '',
-    species: '',
+    customer_stock_id: '',
     date: new Date().toISOString().split('T')[0],
     sample_size: '',
     total_weight_kg: '',
+    line_number: '',
+    count_before: '',
     notes: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -35,17 +37,34 @@ export default function NewFishSamplingPage() {
     }));
   };
 
+  // Derived line number (fish per kg) from sample_size and total_weight_kg
+  const derivedLineNumber = (() => {
+    const ss = parseInt(formData.sample_size);
+    const tw = parseFloat(formData.total_weight_kg);
+    if (!isNaN(ss) && ss > 0 && !isNaN(tw) && tw > 0) {
+      return (ss / tw).toFixed(2);
+    }
+    return '';
+  })();
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
 
     try {
+      // Look up selected stock to grab fish_count as count_before if available
+      const selectedStock = allCustomerStocks.find(cs => cs.customer_stock_id === (formData.customer_stock_id ? parseInt(formData.customer_stock_id) : -1));
+      const derivedCountBefore = selectedStock?.fish_count;
+
       await createSampling.mutateAsync({
         pond: parseInt(formData.pond),
-        species: formData.species ? parseInt(formData.species) : null,
         date: formData.date,
         sample_size: parseInt(formData.sample_size),
         total_weight_kg: parseFloat(formData.total_weight_kg),
+        // Send computed line number for backend stock update logic
+        line_number: derivedLineNumber ? parseFloat(derivedLineNumber) : undefined,
+        customer_stock_id: formData.customer_stock_id ? parseInt(formData.customer_stock_id) : undefined,
+        count_before: formData.count_before ? parseInt(formData.count_before) : (derivedCountBefore ?? undefined),
         notes: formData.notes
       });
       
@@ -97,24 +116,39 @@ export default function NewFishSamplingPage() {
             </div>
 
             <div>
-              <label htmlFor="species" className="block text-sm font-medium text-gray-700 mb-2">
-                Species
+              <label htmlFor="customer_stock_id" className="block text-sm font-medium text-gray-700 mb-2">
+                Fish from Customer Stock
               </label>
               <select
-                id="species"
-                name="species"
-                value={formData.species}
+                id="customer_stock_id"
+                name="customer_stock_id"
+                value={formData.customer_stock_id}
                 onChange={handleInputChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
               >
-                <option value="">Select a species (optional)</option>
-                {species.map((spec) => (
-                  <option key={spec.id} value={spec.id}>
-                    {spec.name} ({spec.scientific_name})
-                  </option>
-                ))}
+                <option value="">Select fish stock (optional)</option>
+                {allCustomerStocks
+                  .filter((cs) => cs.item_type === 'inventory_part' && cs.category === 'fish' && (formData.pond ? cs.pond === parseInt(formData.pond) : true))
+                  .map((cs) => (
+                    <option key={cs.customer_stock_id} value={cs.customer_stock_id}>
+                      {cs.item_name} - {cs.current_stock} {cs.unit} {cs.pond_name ? `(${cs.pond_name})` : ''}
+                    </option>
+                  ))}
               </select>
+              <p className="text-xs text-gray-500 mt-1">Link sampling to a specific pond fish stock to update weights</p>
             </div>
+
+            {formData.customer_stock_id && (() => {
+              const cs = allCustomerStocks.find(s => s.customer_stock_id === parseInt(formData.customer_stock_id));
+              if (!cs) return null;
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-700">
+                  <div className="p-3 bg-gray-50 rounded border">Current weight: <strong>{Number(cs.current_stock).toFixed(3)} kg</strong></div>
+                  <div className="p-3 bg-gray-50 rounded border">Current count: <strong>{cs.fish_count ?? '—'}</strong></div>
+                  <div className="p-3 bg-gray-50 rounded border">Current line: <strong>{cs.line_number ?? '—'}</strong></div>
+                </div>
+              );
+            })()}
 
             <div>
               <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-2">
@@ -166,6 +200,20 @@ export default function NewFishSamplingPage() {
                 placeholder="e.g., 2.500"
               />
               <p className="text-xs text-gray-500 mt-1">Total weight of all sampled fish in kilograms</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Line Number (auto)
+              </label>
+              <input
+                type="text"
+                readOnly
+                value={derivedLineNumber}
+                className="w-full px-3 py-2 border border-gray-200 rounded-md bg-gray-50 text-gray-900"
+                placeholder="Auto-calculated: sample size / total weight"
+              />
+              <p className="text-xs text-gray-500 mt-1">Fish per kg = sample size ÷ total weight</p>
             </div>
 
             <div>

@@ -179,46 +179,95 @@ export default function InvoicesPage() {
   }, [lineItems, formData.customer_id, customers]);
 
   const getPondStock = (itemId?: number, pondId?: number) => {
-    if (!itemId || !pondId) return undefined;
-    const list = pondStockByPond[pondId];
-    if (!list) return undefined;
-    return list.find((cs: any) => Number(cs.item) === Number(itemId));
+    // Decide data source based on customer type
+    const customer = customers.find(c => String(c.customer_id) === String(formData.customer_id));
+    const isInternal = customer?.type === 'internal_pond';
+    if (!itemId) return undefined;
+
+    if (isInternal) {
+      // For internal ponds, show item-level aggregates (global item info)
+      const itm = items.find(i => Number(i.item_id) === Number(itemId));
+      if (!itm) return undefined;
+      return {
+        item: itemId,
+        fish_count: itm.fish_count,
+        line_number: undefined,
+        fish_total_weight_kg: itm.fish_total_weight_kg,
+        current_stock: itm.total_stock_kg || itm.total_stock_in_unit,
+      } as any;
+    }
+
+    // For external buyers, show selected pond's customer stock
+    const effectivePondId = pondId; // required to be selected in UI
+    if (!effectivePondId) return undefined;
+    const list = pondStockByPond[effectivePondId];
+    return list?.find?.((cs: any) => Number(cs.item) === Number(itemId));
   };
 
   // Auto-calc helper for fish: when any two of (fish_count, line_number [pcs/kg], total_weight) are provided, compute the third
   const updateFishInvLineFields = (index: number, updates: any) => {
     const li = { ...(lineItems[index] || {}) } as any;
-    // Merge with careful coercion to allow blanks and decimals
+    
+    // Get current values, handling empty strings and null values
+    const fishCount = li.fish_count !== '' && li.fish_count !== null && li.fish_count !== undefined ? Number(li.fish_count) : 0;
+    const lineNumber = li.line_number !== '' && li.line_number !== null && li.line_number !== undefined ? Number(li.line_number) : 0;
+    const totalWeight = li.total_weight !== '' && li.total_weight !== null && li.total_weight !== undefined ? Number(li.total_weight) : 0;
+    
+    const hasCount = fishCount > 0;
+    const hasLn = lineNumber > 0; // pcs per kg
+    const hasTw = totalWeight > 0;
+
+    // Determine which field was just updated
+    const updatedField = Object.keys(updates)[0];
+    
+    // Apply the update first
     Object.entries(updates).forEach(([k, v]) => {
       if (typeof v === 'string') {
         if (v === '') {
-          li[k] = undefined;
+          li[k] = '';
         } else {
           const num = Number(v);
-          li[k] = isNaN(num) ? undefined : num;
+          li[k] = isNaN(num) ? '' : num;
         }
       } else {
         li[k] = v;
       }
     });
-    const hasCount = typeof li.fish_count === 'number' && li.fish_count > 0;
-    const hasLn = typeof li.line_number === 'number' && li.line_number > 0; // pcs per kg
-    const hasTw = typeof li.total_weight === 'number' && li.total_weight > 0;
-
-    // total_weight = fish_count / line_number
-    if (hasCount && hasLn && !hasTw) {
-      li.total_weight = Number(li.fish_count) / Number(li.line_number);
-    } else if (hasCount && hasTw && !hasLn) {
-      const denom = Number(li.total_weight);
-      li.line_number = denom > 0 ? Number(li.fish_count) / denom : 0;
-    } else if (hasLn && hasTw && !hasCount) {
-      li.fish_count = Math.round(Number(li.line_number) * Number(li.total_weight));
+    
+    // Auto-calculate based on which field was updated and what other values are available
+    if (updatedField === 'fish_count' || updatedField === 'line_number') {
+      // If species number or line number changed, calculate total weight
+      const newFishCount = li.fish_count !== '' && li.fish_count !== null && li.fish_count !== undefined ? Number(li.fish_count) : 0;
+      const newLineNumber = li.line_number !== '' && li.line_number !== null && li.line_number !== undefined ? Number(li.line_number) : 0;
+      
+      if (newFishCount > 0 && newLineNumber > 0) {
+        li.total_weight = newFishCount / newLineNumber;
+      } else if (newFishCount === 0 || newLineNumber === 0) {
+        // If one of the inputs is cleared, clear total weight
+        li.total_weight = '';
+      }
+    } else if (updatedField === 'total_weight') {
+      // If total weight was manually changed, check if we can calculate line number
+      const newTotalWeight = li.total_weight !== '' && li.total_weight !== null && li.total_weight !== undefined ? Number(li.total_weight) : 0;
+      const currentFishCount = li.fish_count !== '' && li.fish_count !== null && li.fish_count !== undefined ? Number(li.fish_count) : 0;
+      
+      if (newTotalWeight > 0 && currentFishCount > 0) {
+        // Calculate line number when both species number and total weight are provided
+        li.line_number = currentFishCount / newTotalWeight;
+      } else if (newTotalWeight === 0 || currentFishCount === 0) {
+        // If one of the inputs is cleared, clear line number
+        li.line_number = '';
+      }
     }
 
     // Auto compute amount for fish using total_weight (effective quantity)
     const rate = Number(li.rate || 0);
-    const effectiveQty = Number(li.total_weight || 0);
-    li.amount = rate && effectiveQty ? rate * effectiveQty : li.amount;
+    const finalTotalWeight = li.total_weight !== '' && li.total_weight !== null && li.total_weight !== undefined ? Number(li.total_weight) : 0;
+    if (rate && finalTotalWeight) {
+      li.amount = rate * finalTotalWeight;
+    } else {
+      li.amount = '';
+    }
 
     const updated = [...lineItems];
     updated[index] = { ...(lineItems[index] || {}), ...li };
@@ -1098,14 +1147,33 @@ console.log("ponds", ponds);
                                     <Input
                                       type="number"
                                       value={line.fish_count || ''}
-                                      onChange={(e) => updateFishInvLineFields(index, { fish_count: e.target.value })}
+                                      onChange={(e) => {
+                                        const value = e.target.value;
+                                        updateFishInvLineFields(index, { fish_count: value === '' ? '' : parseInt(value) || 0 });
+                                      }}
                                       placeholder="Number of fish (pcs)"
                                       className="h-12"
                                     />
                                     {(() => {
+                                      const customer = customers.find(c => String(c.customer_id) === String(formData.customer_id));
+                                      const isInternal = customer?.type === 'internal_pond' && customer?.pond;
+                                      if (!line.item_id) {
+                                        return (
+                                          <div className="text-xs text-gray-500">Select a fish item to view pond stock.</div>
+                                        );
+                                      }
+                                      if (!isInternal && !line.pond_id) {
+                                        return (
+                                          <div className="text-xs text-gray-500">Select pond to view stock for this fish.</div>
+                                        );
+                                      }
                                       const cs = getPondStock(line.item_id, line.pond_id);
                                       const hint = cs?.fish_count ? `${cs.fish_count} pcs` : undefined;
-                                      return hint ? (<div className="text-xs text-gray-500">Current (pond): {hint}</div>) : null;
+                                      return (
+                                        <div className="text-xs text-gray-500">
+                                          {hint ? `Current (pond): ${hint}` : 'No stock data for this fish in the selected pond.'}
+                                        </div>
+                                      );
                                     })()}
                                   </div>
                                   <div className="space-y-2">
@@ -1114,14 +1182,33 @@ console.log("ponds", ponds);
                                       type="number"
                                       step="1"
                                       value={line.line_number || ''}
-                                      onChange={(e) => updateFishInvLineFields(index, { line_number: e.target.value })}
+                                      onChange={(e) => {
+                                        const value = e.target.value;
+                                        updateFishInvLineFields(index, { line_number: value === '' ? '' : parseFloat(value) || 0 });
+                                      }}
                                       placeholder="e.g., 4 (pcs/kg)"
                                       className="h-12"
                                     />
                                     {(() => {
+                                      const customer = customers.find(c => String(c.customer_id) === String(formData.customer_id));
+                                      const isInternal = customer?.type === 'internal_pond' && customer?.pond;
+                                      if (!line.item_id) {
+                                        return (
+                                          <div className="text-xs text-gray-500">Select a fish item to view pond stock.</div>
+                                        );
+                                      }
+                                      if (!isInternal && !line.pond_id) {
+                                        return (
+                                          <div className="text-xs text-gray-500">Select pond to view stock for this fish.</div>
+                                        );
+                                      }
                                       const cs = getPondStock(line.item_id, line.pond_id);
                                       const ln = cs?.line_number;
-                                      return ln ? (<div className="text-xs text-gray-500">Current (pond): {Number(ln).toFixed(2)} pcs/kg</div>) : null;
+                                      return (
+                                        <div className="text-xs text-gray-500">
+                                          {ln ? `Current (pond): ${Number(ln).toFixed(2)} pcs/kg` : 'No stock data for this fish in the selected pond.'}
+                                        </div>
+                                      );
                                     })()}
                                   </div>
                                   <div className="space-y-2">
@@ -1130,14 +1217,33 @@ console.log("ponds", ponds);
                                       type="number"
                                       step="0.01"
                                       value={line.total_weight && line.total_weight > 0 ? line.total_weight : ''}
-                                      onChange={(e) => updateFishInvLineFields(index, { total_weight: e.target.value })}
+                                      onChange={(e) => {
+                                        const value = e.target.value;
+                                        updateFishInvLineFields(index, { total_weight: value === '' ? '' : parseFloat(value) || 0 });
+                                      }}
                                       placeholder="Total weight in kg"
                                       className="h-12"
                                     />
                                     {(() => {
+                                      const customer = customers.find(c => String(c.customer_id) === String(formData.customer_id));
+                                      const isInternal = customer?.type === 'internal_pond' && customer?.pond;
+                                      if (!line.item_id) {
+                                        return (
+                                          <div className="text-xs text-gray-500">Select a fish item to view pond stock.</div>
+                                        );
+                                      }
+                                      if (!isInternal && !line.pond_id) {
+                                        return (
+                                          <div className="text-xs text-gray-500">Select pond to view stock for this fish.</div>
+                                        );
+                                      }
                                       const cs = getPondStock(line.item_id, line.pond_id);
                                       const hint = cs?.fish_total_weight_kg ?? cs?.current_stock;
-                                      return hint ? (<div className="text-xs text-gray-500">Current (pond): {Number(hint).toFixed(2)} kg</div>) : null;
+                                      return (
+                                        <div className="text-xs text-gray-500">
+                                          {hint ? `Current (pond): ${Number(hint).toFixed(2)} kg` : 'No stock data for this fish in the selected pond.'}
+                                        </div>
+                                      );
                                     })()}
                                   </div>
                                 </div>

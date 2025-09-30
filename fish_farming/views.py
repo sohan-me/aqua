@@ -9,7 +9,7 @@ from decimal import Decimal
 
 from .models import (
     Pond, Species, Stocking, DailyLog, FeedType, Feed, SampleType, Sampling, 
-    Mortality, Harvest, ExpenseType, IncomeType, Expense, Income,
+    Mortality, Harvest, Expense, Income,
     InventoryFeed, Treatment, Alert, Setting, FeedingBand, 
     EnvAdjustment, KPIDashboard, FishSampling, FeedingAdvice, SurvivalRate,
     MedicalDiagnostic, PaymentTerms, Customer, Vendor, ItemCategory,
@@ -25,8 +25,7 @@ from .serializers import (
     PondSerializer, PondDetailSerializer, PondSummarySerializer,
     SpeciesSerializer, StockingSerializer, DailyLogSerializer,
     FeedTypeSerializer, FeedSerializer, SampleTypeSerializer, SamplingSerializer,
-    MortalitySerializer, HarvestSerializer, ExpenseTypeSerializer,
-    IncomeTypeSerializer, ExpenseSerializer, IncomeSerializer,
+    MortalitySerializer, HarvestSerializer, ExpenseSerializer, IncomeSerializer,
     InventoryFeedSerializer, TreatmentSerializer, AlertSerializer,
     SettingSerializer, FeedingBandSerializer, EnvAdjustmentSerializer,
     KPIDashboardSerializer, FinancialSummarySerializer,
@@ -180,7 +179,7 @@ class StockingViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         pond_id = self.request.data.get('pond')
-        pond = get_object_or_404(Pond, id=pond_id, user=self.request.user)
+        pond = get_object_or_404(Pond, pond_id=pond_id, user=self.request.user)
         serializer.save(pond=pond)
 
 
@@ -195,7 +194,7 @@ class DailyLogViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         pond_id = self.request.data.get('pond')
-        pond = get_object_or_404(Pond, id=pond_id, user=self.request.user)
+        pond = get_object_or_404(Pond, pond_id=pond_id, user=self.request.user)
         serializer.save(pond=pond)
 
 
@@ -217,7 +216,7 @@ class FeedViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         pond_id = self.request.data.get('pond')
-        pond = get_object_or_404(Pond, id=pond_id, user=self.request.user)
+        pond = get_object_or_404(Pond, pond_id=pond_id, user=self.request.user)
         serializer.save(pond=pond)
 
 
@@ -245,7 +244,7 @@ class SamplingViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         pond_id = self.request.data.get('pond')
-        pond = get_object_or_404(Pond, id=pond_id, user=self.request.user)
+        pond = get_object_or_404(Pond, pond_id=pond_id, user=self.request.user)
         serializer.save(pond=pond)
 
 
@@ -272,7 +271,7 @@ class MortalityViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         pond_id = self.request.data.get('pond')
-        pond = get_object_or_404(Pond, id=pond_id, user=self.request.user)
+        pond = get_object_or_404(Pond, pond_id=pond_id, user=self.request.user)
         serializer.save(pond=pond)
 
 
@@ -299,48 +298,10 @@ class HarvestViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         pond_id = self.request.data.get('pond')
-        pond = get_object_or_404(Pond, id=pond_id, user=self.request.user)
+        pond = get_object_or_404(Pond, pond_id=pond_id, user=self.request.user)
         serializer.save(pond=pond)
 
 
-class ExpenseTypeViewSet(viewsets.ModelViewSet):
-    """ViewSet for expense types"""
-    queryset = ExpenseType.objects.all()
-    serializer_class = ExpenseTypeSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def get_queryset(self):
-        return ExpenseType.objects.filter(user=self.request.user)
-    
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
-    
-    @action(detail=False, methods=['get'])
-    def tree(self, request):
-        """Get expense types in tree structure"""
-        root_types = ExpenseType.objects.filter(user=request.user, parent=None)
-        serializer = ExpenseTypeSerializer(root_types, many=True)
-        return Response(serializer.data)
-
-
-class IncomeTypeViewSet(viewsets.ModelViewSet):
-    """ViewSet for income types"""
-    queryset = IncomeType.objects.all()
-    serializer_class = IncomeTypeSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def get_queryset(self):
-        return IncomeType.objects.filter(user=self.request.user)
-    
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
-    
-    @action(detail=False, methods=['get'])
-    def tree(self, request):
-        """Get income types in tree structure"""
-        root_types = IncomeType.objects.filter(user=request.user, parent=None)
-        serializer = IncomeTypeSerializer(root_types, many=True)
-        return Response(serializer.data)
 
 
 class ExpenseViewSet(viewsets.ModelViewSet):
@@ -387,7 +348,7 @@ class TreatmentViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         pond_id = self.request.data.get('pond')
-        pond = get_object_or_404(Pond, id=pond_id, user=self.request.user)
+        pond = get_object_or_404(Pond, pond_id=pond_id, user=self.request.user)
         serializer.save(pond=pond)
 
 
@@ -443,7 +404,7 @@ class EnvAdjustmentViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         pond_id = self.request.data.get('pond')
-        pond = get_object_or_404(Pond, id=pond_id, user=self.request.user)
+        pond = get_object_or_404(Pond, pond_id=pond_id, user=self.request.user)
         serializer.save(pond=pond)
 
 
@@ -458,7 +419,7 @@ class KPIDashboardViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         pond_id = self.request.data.get('pond')
-        pond = get_object_or_404(Pond, id=pond_id, user=self.request.user)
+        pond = get_object_or_404(Pond, pond_id=pond_id, user=self.request.user)
         serializer.save(pond=pond)
 
 
@@ -492,10 +453,140 @@ class FishSamplingViewSet(viewsets.ModelViewSet):
         
         return queryset
     
-    def perform_create(self, serializer):
-        pond_id = self.request.data.get('pond')
-        pond = get_object_or_404(Pond, id=pond_id, user=self.request.user)
-        serializer.save(pond=pond, user=self.request.user)
+    def create(self, request, *args, **kwargs):
+        """Override create to sanitize payload (prevent client-provided id)."""
+        from decimal import Decimal
+        data = request.data.copy()
+        # Remove any provided id to avoid PK collisions
+        if 'id' in data:
+            try:
+                del data['id']
+            except Exception:
+                pass
+        # Resolve pond
+        pond_id = data.get('pond')
+        pond = get_object_or_404(Pond, pond_id=pond_id, user=request.user)
+
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        from django.db import transaction, IntegrityError
+        try:
+            with transaction.atomic():
+                # Build instance explicitly to guarantee pk is not provided
+                validated = dict(serializer.validated_data)
+                # Remove any accidental primary key or read-only fields
+                for k in ['id', 'pk', 'user', 'pond', 'created_at', 'updated_at']:
+                    validated.pop(k, None)
+                sampling = FishSampling(**validated, pond=pond, user=request.user)
+                sampling.save()
+                # Re-serialize from saved instance
+                serializer = self.get_serializer(sampling)
+        except IntegrityError:
+            # If a duplicate insert happened concurrently (double submit), return latest similar record
+            fields = {
+                'pond': pond,
+                'date': serializer.validated_data.get('date'),
+                'sample_size': serializer.validated_data.get('sample_size'),
+                'total_weight_kg': serializer.validated_data.get('total_weight_kg'),
+                'notes': serializer.validated_data.get('notes', ''),
+            }
+            sampling = FishSampling.objects.filter(**{k: v for k, v in fields.items() if v is not None}).order_by('-id').first()
+            if sampling is None:
+                raise
+            serializer = self.get_serializer(sampling)
+
+        # Optional stock update
+        customer_stock_id = data.get('customer_stock_id')
+        provided_line_number = data.get('line_number')
+        provided_count_before = data.get('count_before')
+        try:
+            if customer_stock_id:
+                from .models import CustomerStock, BillLine, InvoiceLine
+                stock = CustomerStock.objects.get(customer_stock_id=customer_stock_id, user=request.user)
+                if stock.pond and stock.pond != pond:
+                    raise Exception('Customer stock pond mismatch')
+
+                # Determine NEW line number to use
+                ln_dec = None
+                if provided_line_number:
+                    ln_dec = Decimal(str(provided_line_number))
+                elif sampling.fish_per_kg:
+                    ln_dec = Decimal(str(sampling.fish_per_kg))
+                if not ln_dec or ln_dec <= 0:
+                    raise Exception('Invalid line number')
+
+                # If caller provides authoritative count_before, use it directly
+                if provided_count_before is not None:
+                    try:
+                        cb = Decimal(str(provided_count_before))
+                        if cb >= 0:
+                            new_weight = (cb / ln_dec).quantize(Decimal('0.001'))
+                            stock.current_stock = new_weight
+                            stock.save(update_fields=['current_stock', 'last_updated'])
+                            raise Exception('UPDATED_USING_PROVIDED_COUNT_BEFORE')  # escape the rest gracefully
+                    except Exception:
+                        # fall through to inferred count
+                        pass
+
+                # Determine PREVIOUS line number (pcs/kg) from latest pond-specific movement
+                prev_ln = None
+                latest_line = (
+                    InvoiceLine.objects.filter(item=stock.item, pond=pond, line_number__isnull=False)
+                    .order_by('-created_at').first()
+                    or BillLine.objects.filter(item=stock.item, pond=pond, line_number__isnull=False)
+                    .order_by('-created_at').first()
+                )
+                if latest_line and latest_line.line_number:
+                    try:
+                        prev_ln = Decimal(str(latest_line.line_number))
+                    except Exception:
+                        prev_ln = None
+
+                # Estimate fish COUNT (prioritize previous sampling over bills)
+                estimated_fish_count = None
+                # 1) If there is a previous fish sampling for this pond, prefer it with current weight
+                try:
+                    prev_sampling = FishSampling.objects.filter(pond=pond).order_by('-date', '-id').first()
+                except Exception:
+                    prev_sampling = None
+                if prev_sampling and prev_sampling.fish_per_kg and stock.current_stock is not None:
+                    try:
+                        prev_pcs_per_kg = Decimal(str(prev_sampling.fish_per_kg))
+                        estimated_fish_count = int(round(float(prev_pcs_per_kg) * float(stock.current_stock)))
+                    except Exception:
+                        estimated_fish_count = None
+                # 2) Else use previous movement line number if available
+                if estimated_fish_count is None and prev_ln and stock.current_stock is not None:
+                    estimated_fish_count = int(round(float(prev_ln) * float(stock.current_stock)))
+                # 3) Else fallback to movements (Bills IN - Invoices OUT)
+                if estimated_fish_count is None:
+                    def infer_pcs(line):
+                        if getattr(line, 'fish_count', None):
+                            return int(line.fish_count or 0)
+                        tw = line.total_weight if line.total_weight is not None else line.qty
+                        if line.line_number and tw:
+                            return int(round(float(line.line_number) * float(tw)))
+                        return 0
+                    bills_qs = BillLine.objects.filter(item=stock.item, is_item=True)
+                    if hasattr(BillLine, 'pond') and pond:
+                        bills_qs = bills_qs.filter(pond=pond)
+                    total_in = sum(infer_pcs(bl) for bl in bills_qs)
+                    inv_qs = InvoiceLine.objects.filter(item=stock.item)
+                    if pond:
+                        inv_qs = inv_qs.filter(pond=pond)
+                    total_out = sum(infer_pcs(il) for il in inv_qs)
+                    estimated_fish_count = max(0, total_in - total_out)
+
+                # NEW weight = fish_count / NEW line
+                new_weight = (Decimal(estimated_fish_count) / ln_dec).quantize(Decimal('0.001'))
+                stock.current_stock = new_weight
+                stock.save(update_fields=['current_stock', 'last_updated'])
+        except Exception:
+            # Ignore stock update errors
+            pass
+
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
     
     def perform_update(self, serializer):
         """Override update to recalculate growth rates for affected records"""
@@ -988,7 +1079,7 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
                 )
             
             # Get the pond
-            pond = get_object_or_404(Pond, id=pond_id, user=request.user)
+            pond = get_object_or_404(Pond, pond_id=pond_id, user=request.user)
             
             # Get latest stocking data for this pond
             latest_stocking = Stocking.objects.filter(pond=pond).order_by('-date').first()
@@ -1082,7 +1173,7 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         pond_id = self.request.data.get('pond')
-        pond = get_object_or_404(Pond, id=pond_id, user=self.request.user)
+        pond = get_object_or_404(Pond, pond_id=pond_id, user=self.request.user)
         serializer.save(pond=pond, user=self.request.user)
     
     @action(detail=True, methods=['post'])
@@ -1106,7 +1197,7 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
         if not pond_id:
             return Response({'error': 'Pond ID is required'}, status=status.HTTP_400_BAD_REQUEST)
         
-        pond = get_object_or_404(Pond, id=pond_id, user=request.user)
+        pond = get_object_or_404(Pond, pond_id=pond_id, user=request.user)
         
         # Get all species in this pond
         species_in_pond = Species.objects.filter(
@@ -2754,7 +2845,7 @@ class SurvivalRateViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         pond_id = self.request.data.get('pond')
-        pond = get_object_or_404(Pond, id=pond_id, user=self.request.user)
+        pond = get_object_or_404(Pond, pond_id=pond_id, user=self.request.user)
         serializer.save(pond=pond)
     
     @action(detail=False, methods=['post'])
@@ -2766,7 +2857,7 @@ class SurvivalRateViewSet(viewsets.ModelViewSet):
         if not pond_id:
             return Response({'error': 'Pond ID is required'}, status=status.HTTP_400_BAD_REQUEST)
         
-        pond = get_object_or_404(Pond, id=pond_id, user=request.user)
+        pond = get_object_or_404(Pond, pond_id=pond_id, user=request.user)
         
         # Get latest stocking data
         latest_stocking = Stocking.objects.filter(
@@ -2879,7 +2970,7 @@ class TargetBiomassViewSet(viewsets.ViewSet):
                 }, status=status.HTTP_400_BAD_REQUEST)
             
             # Get pond and species
-            pond = get_object_or_404(Pond, id=pond_id, user=request.user)
+            pond = get_object_or_404(Pond, pond_id=pond_id, user=request.user)
             species = get_object_or_404(Species, id=species_id)
             
             # Calculate current biomass from latest fish sampling data
@@ -3504,6 +3595,17 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         invoice = serializer.save(user=self.request.user)
+        # If the invoice customer is an internal pond, default pond on lines
+        try:
+            pond = getattr(invoice.customer, 'pond', None)
+            is_internal = getattr(invoice.customer, 'type', None) == 'internal_pond'
+            if pond and is_internal:
+                # Set pond on any fish item lines where pond is missing
+                from .models import InvoiceLine, Item
+                fish_items = Item.objects.filter(category='fish')
+                InvoiceLine.objects.filter(invoice=invoice, pond__isnull=True, item__in=fish_items).update(pond=pond)
+        except Exception:
+            pass
         
         # Note: Inventory transactions are created when invoice lines are created
         # in InvoiceLineViewSet.perform_create()
@@ -4004,6 +4106,7 @@ class BillLineViewSet(viewsets.ModelViewSet):
                 batch_number=f"BILL-{bill_line.bill.bill_no}",
                 notes=f"Received from {bill_line.bill.vendor.name} via Bill {bill_line.bill.bill_no}" + 
                       (f" ({bill_line.qty} {bill_line.unit})" if bill_line.unit != storage_unit else ""),
+                fish_count=bill_line.fish_count if getattr(bill_line.item, 'category', None) == 'fish' else None,
             )
             
             # Also create inventory transaction for backward compatibility
@@ -4116,7 +4219,12 @@ class InvoiceLineViewSet(viewsets.ModelViewSet):
         """Create inventory transaction and stock entry for a single invoice line"""
         from .models import InventoryTransaction, InventoryTransactionLine, StockEntry
         
-        # Only create inventory transaction for inventory items
+        # For external buyers selling fish, we deduct ONLY from pond (customer) stock
+        # and should NOT deduct from the global item stock.
+        if getattr(invoice_line.invoice.customer, 'type', None) == 'external_buyer' and getattr(invoice_line.item, 'category', None) == 'fish':
+            return
+
+        # Only create inventory transaction for inventory items otherwise
         if invoice_line.item.item_type == 'inventory_part':
             # Create StockEntry record for the stock deduction (negative quantity)
             # We'll create a "negative" stock entry to represent the deduction
@@ -4132,6 +4240,7 @@ class InvoiceLineViewSet(viewsets.ModelViewSet):
                 supplier=f"SOLD TO {invoice_line.invoice.customer.name}",
                 batch_number=f"INVOICE-{invoice_line.invoice.invoice_no}",
                 notes=f"Sold to {invoice_line.invoice.customer.name} via Invoice {invoice_line.invoice.invoice_no}",
+                fish_count=invoice_line.fish_count if getattr(invoice_line.item, 'category', None) == 'fish' else None,
             )
             
             # Also create inventory transaction for backward compatibility
@@ -4443,6 +4552,139 @@ class CustomerStockViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
+
+    @action(detail=True, methods=['get'])
+    def movements(self, request, pk=None):
+        """Return normalized in/out movements for this pond item stock."""
+        stock = self.get_object()
+        item = stock.item
+        pond = stock.pond
+        from .models import BillLine, InvoiceLine, MedicineEvent
+        movements = []
+
+        def infer_line_number(fish_count, total_weight, qty):
+            try:
+                # Prefer explicit total_weight; else fall back to qty (which is kg for fish in our forms)
+                tw = total_weight if total_weight is not None else qty
+                if fish_count and tw and float(tw) > 0:
+                    return float(fish_count) / float(tw)
+            except Exception:
+                return None
+            return None
+
+        # For fish items, movements should be based on Invoices:
+        # IN  = invoices to internal pond customer (stock in to pond)
+        # OUT = invoices that specify this pond for external customers (stock out from pond)
+        if getattr(item, 'category', None) == 'fish':
+            try:
+                pond_customer = pond.customers.filter(type='internal_pond').first() if pond else None
+            except Exception:
+                pond_customer = None
+
+            # IN: invoice lines whose invoice customer is the pond's internal customer
+            inv_in = InvoiceLine.objects.filter(item=item, invoice__customer=pond_customer)
+            for il in inv_in.order_by('-created_at')[:200]:
+                qty_kg = float(il.total_weight or il.qty or 0)
+                fish_pcs = int(il.fish_count or 0) if getattr(item, 'category', None) == 'fish' else None
+                ln = float(il.line_number) if getattr(il, 'line_number', None) else (
+                    infer_line_number(fish_pcs, il.total_weight, il.qty) if fish_pcs is not None else None
+                )
+                movements.append({
+                    'date': il.invoice.invoice_date,
+                    'direction': 'in',
+                    'source': 'invoice',
+                    'ref': il.invoice.invoice_no,
+                    'qty_kg': qty_kg,
+                    'fish_count': fish_pcs,
+                    'line_number': ln,
+                    'unit_cost': float(il.rate or 0),
+                    'amount': float(il.amount or 0),
+                    'memo': il.description or '',
+                })
+        else:
+            # Bills (receipts) - IN for non-fish items
+            from django.db.models import Q
+            bill_lines = BillLine.objects.filter(item=item, is_item=True)
+            try:
+                if hasattr(BillLine, 'pond') and pond:
+                    bill_lines = bill_lines.filter(Q(pond=pond) | Q(pond__isnull=True))
+            except Exception:
+                pass
+            for bl in bill_lines.order_by('-created_at')[:200]:
+                qty_kg = float(bl.total_weight or bl.qty or 0)
+                movements.append({
+                    'date': bl.bill.bill_date,
+                    'direction': 'in',
+                    'source': 'bill',
+                    'ref': bl.bill.bill_no,
+                    'qty_kg': qty_kg,
+                    'fish_count': None,
+                    'line_number': None,
+                    'unit_cost': float(bl.cost or 0),
+                    'amount': float(bl.line_amount or 0),
+                    'memo': bl.description or '',
+                })
+
+        # Invoices (issues) - OUT
+        inv_lines = InvoiceLine.objects.filter(item=item)
+        if getattr(item, 'category', None) == 'fish':
+            # OUT only when pond is specified and customer is not the pond's internal customer
+            try:
+                pond_customer = pond.customers.filter(type='internal_pond').first() if pond else None
+            except Exception:
+                pond_customer = None
+            if pond:
+                inv_lines = inv_lines.filter(pond=pond)
+            if pond_customer:
+                inv_lines = inv_lines.exclude(invoice__customer=pond_customer)
+        else:
+            if pond:
+                inv_lines = inv_lines.filter(pond=pond)
+        for il in inv_lines.order_by('-created_at')[:200]:
+            qty_kg = float(il.total_weight or il.qty or 0)
+            fish_pcs = int(il.fish_count or 0) if getattr(item, 'category', None) == 'fish' else None
+            ln = float(il.line_number) if getattr(il, 'line_number', None) else (
+                infer_line_number(fish_pcs, il.total_weight, il.qty) if fish_pcs is not None else None
+            )
+            movements.append({
+                'date': il.invoice.invoice_date,
+                'direction': 'out',
+                'source': 'invoice',
+                'ref': il.invoice.invoice_no,
+                'qty_kg': qty_kg,
+                'fish_count': fish_pcs,
+                'line_number': ln,
+                'unit_cost': float(il.rate or 0),
+                'amount': float(il.amount or 0),
+                'memo': il.description or '',
+            })
+
+        # Medicine consumption (issues) - OUT for non-fish medicine items linked via MedicineEvent
+        try:
+            if getattr(item, 'category', None) != 'fish':
+                med_events = MedicineEvent.objects.filter(medicine_item=item)
+                if pond:
+                    med_events = med_events.filter(pond=pond)
+                for me in med_events.order_by('-event_date')[:200]:
+                    qty_kg = float(me.dosage_amount or 0)
+                    movements.append({
+                        'date': me.event_date,
+                        'direction': 'out',
+                        'source': 'medicine',
+                        'ref': me.medicine_id,
+                        'qty_kg': qty_kg,
+                        'fish_count': None,
+                        'line_number': None,
+                        'unit_cost': 0.0,
+                        'amount': 0.0,
+                        'memo': me.memo or '',
+                    })
+        except Exception:
+            pass
+
+        # Sort by date desc
+        movements.sort(key=lambda m: str(m['date']), reverse=True)
+        return Response(movements)
 
 
 class DepositViewSet(viewsets.ModelViewSet):

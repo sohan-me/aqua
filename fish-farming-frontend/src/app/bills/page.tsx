@@ -121,31 +121,58 @@ export default function BillsPage() {
   // Auto-calc helper for fish: when any two of (fish_count, body_weight_per_fish, total_weight) are provided, compute the third
   const updateFishLineFields = (index: number, updates: Partial<BillLine>) => {
     const li = { ...(lineItems[index] || {}), ...updates } as any;
-    const hasCount = Number(li.fish_count) > 0;
-    const hasLn = Number(li.line_number) > 0; // pcs per kg
-    const hasTw = Number(li.total_weight) > 0;
+    
+    // Get current values, handling empty strings and null values
+    const fishCount = li.fish_count !== '' && li.fish_count !== null ? Number(li.fish_count) : 0;
+    const lineNumber = li.line_number !== '' && li.line_number !== null ? Number(li.line_number) : 0;
+    const totalWeight = li.total_weight !== '' && li.total_weight !== null ? Number(li.total_weight) : 0;
+    
+    const hasCount = fishCount > 0;
+    const hasLn = lineNumber > 0; // pcs per kg
+    const hasTw = totalWeight > 0;
 
-    // Relations for fish: total_weight = fish_count / line_number
-    if (hasCount && hasLn && !hasTw) {
-      li.total_weight = Number(li.fish_count) / Number(li.line_number);
-    } else if (hasCount && hasTw && !hasLn) {
-      const denom = Number(li.total_weight);
-      li.line_number = denom > 0 ? Number(li.fish_count) / denom : 0;
-    } else if (hasLn && hasTw && !hasCount) {
-      li.fish_count = Math.round(Number(li.line_number) * Number(li.total_weight));
+    // Determine which field was just updated
+    const updatedField = Object.keys(updates)[0];
+    
+    // Auto-calculate based on which field was updated and what other values are available
+    if (updatedField === 'fish_count' || updatedField === 'line_number') {
+      // If species number or line number changed, calculate total weight
+      if (hasCount && hasLn) {
+        li.total_weight = fishCount / lineNumber;
+      } else if (!hasCount || !hasLn) {
+        // If one of the inputs is cleared, clear total weight
+        li.total_weight = '';
+      }
+    } else if (updatedField === 'total_weight') {
+      // If total weight was manually changed, check if we can calculate line number
+      const newTotalWeight = li.total_weight !== '' && li.total_weight !== null ? Number(li.total_weight) : 0;
+      const currentFishCount = li.fish_count !== '' && li.fish_count !== null ? Number(li.fish_count) : 0;
+      
+      if (newTotalWeight > 0 && currentFishCount > 0) {
+        // Calculate line number when both species number and total weight are provided
+        li.line_number = currentFishCount / newTotalWeight;
+      } else if (newTotalWeight === 0 || currentFishCount === 0) {
+        // If one of the inputs is cleared, clear line number
+        li.line_number = '';
+      }
     }
 
     // Keep qty/unit aligned for fish: qty mirrors total_weight in kg
-    if (Number(li.total_weight) > 0) {
-      li.qty = Number(li.total_weight);
+    const finalTotalWeight = li.total_weight !== '' && li.total_weight !== null ? Number(li.total_weight) : 0;
+    if (finalTotalWeight > 0) {
+      li.qty = finalTotalWeight;
       li.unit = 'kg';
+    } else {
+      li.qty = '';
     }
 
     // Auto compute line_amount for fish using total_weight (effective quantity)
     const cost = Number(li.cost) || 0;
-    const effectiveQty = Number(li.total_weight) || 0;
+    const effectiveQty = finalTotalWeight;
     if (cost && effectiveQty) {
       li.line_amount = cost * effectiveQty;
+    } else {
+      li.line_amount = '';
     }
 
     const updated = [...lineItems];
@@ -869,7 +896,10 @@ export default function BillsPage() {
                                       <Input
                                         type="number"
                                         value={line.fish_count || ''}
-                                        onChange={(e) => updateFishLineFields(actualIndex, { fish_count: parseInt(e.target.value) || 0 })}
+                                        onChange={(e) => {
+                                          const value = e.target.value;
+                                          updateFishLineFields(actualIndex, { fish_count: value === '' ? '' : parseInt(value) || 0 });
+                                        }}
                                         placeholder="Number of fish (pcs)"
                                         className="h-12"
                                       />
@@ -880,7 +910,10 @@ export default function BillsPage() {
                                         type="number"
                                         step="1"
                                         value={line.line_number || ''}
-                                        onChange={(e) => updateFishLineFields(actualIndex, { line_number: parseFloat(e.target.value) || 0 })}
+                                        onChange={(e) => {
+                                          const value = e.target.value;
+                                          updateFishLineFields(actualIndex, { line_number: value === '' ? '' : parseFloat(value) || 0 });
+                                        }}
                                         placeholder="e.g., 4 (pcs/kg)"
                                         className="h-12"
                                       />
@@ -891,7 +924,10 @@ export default function BillsPage() {
                                         type="number"
                                         step="0.01"
                                         value={line.total_weight || ''}
-                                        onChange={(e) => updateFishLineFields(actualIndex, { total_weight: parseFloat(e.target.value) || 0 })}
+                                        onChange={(e) => {
+                                          const value = e.target.value;
+                                          updateFishLineFields(actualIndex, { total_weight: value === '' ? '' : parseFloat(value) || 0 });
+                                        }}
                                         placeholder="Auto/Manual total"
                                         className="h-12"
                                       />

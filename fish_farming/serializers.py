@@ -27,7 +27,7 @@ from .models import (
     
     # Original Models (Updated)
     Pond, Species, Stocking, DailyLog, FeedType, Feed, SampleType, Sampling, 
-    Mortality, Harvest, ExpenseType, IncomeType, Expense, Income,
+    Mortality, Harvest, Expense, Income,
     InventoryFeed, Treatment, Alert, Setting, FeedingBand, 
     EnvAdjustment, KPIDashboard, FishSampling, FeedingAdvice, SurvivalRate,
     MedicalDiagnostic
@@ -120,6 +120,7 @@ class AccountTreeSerializer(serializers.ModelSerializer):
 class StockEntrySerializer(serializers.ModelSerializer):
     item_name = serializers.CharField(source='item.name', read_only=True)
     kg_equivalent = serializers.SerializerMethodField()
+    fish_count = serializers.SerializerMethodField()
     
     class Meta:
         model = StockEntry
@@ -128,6 +129,18 @@ class StockEntrySerializer(serializers.ModelSerializer):
     
     def get_kg_equivalent(self, obj):
         return obj.get_kg_equivalent()
+
+    def get_fish_count(self, obj):
+        try:
+            # Prefer explicit fish_count on the stock entry if present
+            if obj.fish_count is not None:
+                return int(obj.fish_count)
+            # Fallback: if item is a fish, surface the item's aggregate fish_count
+            if getattr(obj.item, 'category', None) == 'fish' and getattr(obj.item, 'fish_count', None) is not None:
+                return int(obj.item.fish_count)
+        except Exception:
+            pass
+        return None
 
 
 class ItemSerializer(serializers.ModelSerializer):
@@ -860,38 +873,6 @@ class HarvestSerializer(serializers.ModelSerializer):
         read_only_fields = ['avg_weight_kg', 'total_count', 'total_revenue', 'created_at']
 
 
-class ExpenseTypeSerializer(serializers.ModelSerializer):
-    user_username = serializers.CharField(source='user.username', read_only=True)
-    parent_name = serializers.CharField(source='parent.category', read_only=True)
-    full_path = serializers.CharField(source='get_full_path', read_only=True)
-    children = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = ExpenseType
-        fields = ['id', 'user', 'user_username', 'category', 'description', 'parent', 'parent_name', 'full_path', 'children', 'created_at']
-        read_only_fields = ['id', 'user', 'created_at']
-    
-    def get_children(self, obj):
-        """Get children expense types"""
-        children = obj.get_children()
-        return ExpenseTypeSerializer(children, many=True).data
-
-
-class IncomeTypeSerializer(serializers.ModelSerializer):
-    user_username = serializers.CharField(source='user.username', read_only=True)
-    parent_name = serializers.CharField(source='parent.category', read_only=True)
-    full_path = serializers.CharField(source='get_full_path', read_only=True)
-    children = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = IncomeType
-        fields = ['id', 'user', 'user_username', 'category', 'description', 'parent', 'parent_name', 'full_path', 'children', 'created_at']
-        read_only_fields = ['id', 'user', 'created_at']
-    
-    def get_children(self, obj):
-        """Get children income types"""
-        children = obj.get_children()
-        return IncomeTypeSerializer(children, many=True).data
 
 
 class ExpenseSerializer(serializers.ModelSerializer):
@@ -1051,7 +1032,12 @@ class FishSamplingSerializer(serializers.ModelSerializer):
     class Meta:
         model = FishSampling
         fields = '__all__'
-        read_only_fields = ['company', 'average_weight_kg', 'fish_per_kg', 'condition_factor', 'growth_rate_kg_per_day', 'biomass_difference_kg', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'user', 'average_weight_kg', 'fish_per_kg', 'condition_factor', 'growth_rate_kg_per_day', 'biomass_difference_kg', 'created_at', 'updated_at']
+        extra_kwargs = {
+            'species': { 'required': False, 'allow_null': True },
+            'notes': { 'required': False, 'allow_blank': True },
+            'user': { 'read_only': True },
+        }
     
     def validate(self, data):
         """Custom validation to provide better error messages for unique constraint violations"""
@@ -1167,18 +1153,41 @@ class CustomerStockSerializer(serializers.ModelSerializer):
             return None
 
     def get_line_number(self, obj):
-        # pcs per kg inferred from latest lines for this item and customer pond, if any
+        # pcs per kg inferred in priority:
+        # 1) Latest FishSampling for the pond (fish_per_kg)
+        # 2) Latest pond-specific movement line_number (Invoice/Bill)
+        # 3) Latest movement for this item across any pond
         try:
             if obj.item.category != 'fish':
                 return None
-            from .models import InvoiceLine, BillLine
+            from .models import InvoiceLine, BillLine, FishSampling
+            # 1) Prefer latest fish sampling for this pond
+            if obj.pond:
+                sampling = (
+                    FishSampling.objects.filter(pond=obj.pond)
+                    .order_by('-date', '-id').first()
+                )
+                if sampling and sampling.fish_per_kg:
+                    return float(sampling.fish_per_kg)
+            # 1) Try pond-specific latest
             line = (
                 InvoiceLine.objects.filter(item=obj.item, pond=obj.pond, line_number__isnull=False)
                 .order_by('-created_at').first()
                 or BillLine.objects.filter(item=obj.item, pond=obj.pond, line_number__isnull=False)
                 .order_by('-created_at').first()
             )
-            return float(line.line_number) if line and line.line_number else None
+            if line and line.line_number:
+                return float(line.line_number)
+            # 2) Fallback to latest for this item across any pond
+            line_any = (
+                InvoiceLine.objects.filter(item=obj.item, line_number__isnull=False)
+                .order_by('-created_at').first()
+                or BillLine.objects.filter(item=obj.item, line_number__isnull=False)
+                .order_by('-created_at').first()
+            )
+            if line_any and line_any.line_number:
+                return float(line_any.line_number)
+            return None
         except Exception:
             return None
 
@@ -1186,21 +1195,31 @@ class CustomerStockSerializer(serializers.ModelSerializer):
         try:
             if obj.item.category != 'fish':
                 return None
-            # fish_count ≈ line_number × current_stock when line_number known
-            ln = self.get_line_number(obj)
-            if ln and obj.current_stock:
-                return int(round(float(ln) * float(obj.current_stock)))
-            # Otherwise try aggregate method used in ItemSerializer but scoped to customer pond
+            # Important: Keep count constant based on historical movements (Bills/Invoices),
+            # not derived from current stock or latest sampling line number.
             from .models import BillLine, InvoiceLine
+            from django.db.models import Q
             def infer_pcs(line):
+                # Prefer explicit fish_count stored on the line
                 if getattr(line, 'fish_count', None):
                     return int(line.fish_count or 0)
+                # Otherwise infer from the line's own line_number and weight/qty
                 tw = line.total_weight if line.total_weight is not None else line.qty
                 if line.line_number and tw:
                     return int(round(float(line.line_number) * float(tw)))
                 return 0
-            total_in = sum(infer_pcs(bl) for bl in BillLine.objects.filter(item=obj.item, pond=obj.pond))
-            total_out = sum(infer_pcs(il) for il in InvoiceLine.objects.filter(item=obj.item, pond=obj.pond))
+            # IN to pond stock: invoice lines whose invoice customer is THIS internal pond customer
+            inv_in_qs = InvoiceLine.objects.filter(item=obj.item, invoice__customer=obj.customer)
+            total_in = sum(infer_pcs(il) for il in inv_in_qs)
+
+            # OUT from pond stock: invoice lines that specify this pond but belong to a DIFFERENT (external) customer
+            inv_out_qs = InvoiceLine.objects.filter(item=obj.item)
+            try:
+                inv_out_qs = inv_out_qs.filter(pond=obj.pond).exclude(invoice__customer=obj.customer)
+            except Exception:
+                # If pond field is missing, we can't resolve pond-specific outflows; default to none
+                inv_out_qs = inv_out_qs.none()
+            total_out = sum(infer_pcs(il) for il in inv_out_qs)
             result = total_in - total_out
             return int(result if result > 0 else 0)
         except Exception:

@@ -324,6 +324,8 @@ class StockEntry(models.Model):
     batch_number = models.CharField(max_length=100, blank=True, help_text="Batch or lot number")
     expiry_date = models.DateField(null=True, blank=True, help_text="Expiry date if applicable")
     notes = models.TextField(blank=True)
+    # Fish-specific optional info for fish items
+    fish_count = models.PositiveIntegerField(null=True, blank=True, help_text="Number of fish (pieces) for fish items")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -2112,7 +2114,6 @@ class FishSampling(models.Model):
     
     class Meta:
         ordering = ['-date', '-created_at']
-        unique_together = ['pond', 'species', 'date']
     
     def __str__(self):
         species_name = self.species.name if self.species else "Mixed"
@@ -2120,6 +2121,25 @@ class FishSampling(models.Model):
     
     def save(self, *args, **kwargs):
         # Auto-calculate derived metrics
+        from decimal import Decimal, InvalidOperation, DivisionByZero
+        try:
+            # Ensure Decimal arithmetic with proper precision
+            sample_size_dec = Decimal(str(self.sample_size)) if self.sample_size is not None else None
+            total_weight_dec = Decimal(str(self.total_weight_kg)) if self.total_weight_kg is not None else None
+            if sample_size_dec and total_weight_dec and total_weight_dec > 0:
+                # average_weight_kg = total_weight / sample_size
+                self.average_weight_kg = (total_weight_dec / sample_size_dec).quantize(Decimal('0.0000000001'))
+                # fish_per_kg (aka line number) = sample_size / total_weight
+                self.fish_per_kg = (sample_size_dec / total_weight_dec).quantize(Decimal('0.0000000001'))
+                # condition_factor: simple proxy using g/fish (avg kg * 1000)
+                try:
+                    self.condition_factor = (self.average_weight_kg * Decimal('1000')).quantize(Decimal('0.001'))
+                except Exception:
+                    pass
+        except (InvalidOperation, DivisionByZero, Exception):
+            # Leave fields as-is if calculation fails
+            pass
+        super().save(*args, **kwargs)
         if self.total_weight_kg and self.sample_size:
             # Calculate average weight in kg
             self.average_weight_kg = self.total_weight_kg / self.sample_size

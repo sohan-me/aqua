@@ -57,8 +57,6 @@ const navigation = [
       { name: 'Vendors', href: '/vendors', icon: Truck },
       { name: 'Payment Terms', href: '/payment-terms', icon: Receipt },
       { name: 'Feed Types', href: '/feed-types', icon: Package },
-      { name: 'Expense Types', href: '/expense-types', icon: TrendingDown },
-      { name: 'Income Types', href: '/income-types', icon: TrendingUp },
     ]
   },
 
@@ -71,7 +69,7 @@ const navigation = [
       { name: 'Ponds', href: '/ponds', icon: Fish },
       { name: 'Species', href: '/species', icon: Fish },
       { name: 'Inventory Management', href: '/inventory', icon: Archive },
-      { name: 'Fish Stocking', href: '/stocking-events', icon: Package },
+      // { name: 'Fish Stocking', href: '/stocking-events', icon: Package },
       { name: 'Feeding Events', href: '/feeding-events', icon: Activity },
       { name: 'Medicine Events', href: '/medicine-events', icon: Stethoscope },
       { name: 'Other Pond Events', href: '/other-pond-events', icon: Calendar },
@@ -115,7 +113,7 @@ const navigation = [
       { name: 'Daily Logs', href: '/daily-logs', icon: Calendar },
       { name: 'Fish Sampling', href: '/fish-sampling', icon: Scale },
       { name: 'Mortality', href: '/mortality', icon: TrendingDown },
-      { name: 'Harvest', href: '/harvest', icon: TrendingUp },
+      // { name: 'Harvest', href: '/harvest', icon: TrendingUp },
       { name: 'Water Quality', href: '/water-quality', icon: Activity },
     ]
   },
@@ -155,6 +153,7 @@ const navigation = [
       { name: 'Feeding Advice', href: '/feeding-advice', icon: Lightbulb },
       { name: 'Target Biomass', href: '/reports/target-biomass', icon: Target },
       { name: 'Asset Calculator', href: '/asset-calculator', icon: Calculator },
+      { name: 'Load Calculator', href: '/load-calculator', icon: Calculator },
     ]
   },
 
