@@ -61,6 +61,7 @@ interface InvoiceLine {
   fish_count?: number;
   pond_name?: string;
   species_name?: string;
+  fish_unit?: 'kg' | 'piece'; // Unit for fish pricing calculation
 }
 
 
@@ -222,7 +223,10 @@ export default function InvoicesPage() {
     
     // Apply the update first
     Object.entries(updates).forEach(([k, v]) => {
-      if (typeof v === 'string') {
+      if (k === 'fish_unit') {
+        // fish_unit should remain a string
+        li[k] = v;
+      } else if (typeof v === 'string') {
         if (v === '') {
           li[k] = '';
         } else {
@@ -258,13 +262,41 @@ export default function InvoicesPage() {
         // If one of the inputs is cleared, clear line number
         li.line_number = '';
       }
+    } else if (updatedField === 'fish_unit') {
+      // If fish_unit changed, recalculate amount based on new unit selection
+      console.log('Fish unit changed to:', li.fish_unit, 'Type:', typeof li.fish_unit);
+      console.log('Current fish_count:', li.fish_count);
+      console.log('Current total_weight:', li.total_weight);
+      console.log('Current rate:', li.rate);
+      // The amount calculation will be handled below in the amount calculation section
     }
 
-    // Auto compute amount for fish using total_weight (effective quantity)
+    // Auto compute amount for fish based on fish_unit selection
     const rate = Number(li.rate || 0);
-    const finalTotalWeight = li.total_weight !== '' && li.total_weight !== null && li.total_weight !== undefined ? Number(li.total_weight) : 0;
-    if (rate && finalTotalWeight) {
-      li.amount = rate * finalTotalWeight;
+    const fishUnit = li.fish_unit || 'kg'; // Default to 'kg' if not set
+    
+    console.log('Amount calculation - fishUnit:', fishUnit, 'rate:', rate);
+    
+    if (rate > 0) {
+      if (fishUnit === 'piece') {
+        // For piece pricing: species number * rate per unit
+        const finalFishCount = li.fish_count !== '' && li.fish_count !== null && li.fish_count !== undefined ? Number(li.fish_count) : 0;
+        console.log('Piece calculation - fish_count:', finalFishCount, 'amount:', rate * finalFishCount);
+        if (finalFishCount > 0) {
+          li.amount = rate * finalFishCount;
+        } else {
+          li.amount = '';
+        }
+      } else {
+        // For kg pricing: total weight * rate per unit
+        const finalTotalWeight = li.total_weight !== '' && li.total_weight !== null && li.total_weight !== undefined ? Number(li.total_weight) : 0;
+        console.log('Kg calculation - total_weight:', finalTotalWeight, 'amount:', rate * finalTotalWeight);
+        if (finalTotalWeight > 0) {
+          li.amount = rate * finalTotalWeight;
+        } else {
+          li.amount = '';
+        }
+      }
     } else {
       li.amount = '';
     }
@@ -465,6 +497,7 @@ console.log("ponds", ponds);
       species_id: 0,
       total_weight: 0,
       line_number: 0,
+      fish_unit: 'kg', // Default fish unit
     }]);
   };
 
@@ -500,24 +533,31 @@ console.log("ponds", ponds);
       if (selectedItem && selectedItem.selling_price) {
         next.rate = selectedItem.selling_price;
       }
-    // For fish items, do not prefill editable fields; keep inputs blank.
+      
+      // Initialize fish_unit for fish items
+      if (selectedItem && selectedItem.category === 'fish') {
+        next.fish_unit = 'kg'; // Default to kg
+        // Clear fish-specific fields when switching to a fish item
+        next.fish_count = '';
+        next.total_weight = '';
+        next.line_number = '';
+        next.pond_id = null;
+        next.species_id = null;
+      }
     }
     
-    // Calculate total price
-    if (field === 'qty' || field === 'rate' || field === 'total_weight') {
+    // Calculate total price (skip for fish items - handled by updateFishInvLineFields)
+    if (field === 'qty' || field === 'rate') {
       const selectedItem = items.find(item => item.item_id === next.item_id);
       const isFishItem = selectedItem?.category === 'fish'
-      let quantity = 0;
-      if (isFishItem) {
-        // For fish items, use total weight
-        quantity = Number(next.total_weight) || 0;
-      } else {
-        // For non-fish items, use qty
-        quantity = Number(next.qty) || 0;
-      }
       
-      const price = Number(next.rate) || 0;
-      next.amount = quantity && price ? quantity * price : undefined;
+      if (!isFishItem) {
+        // For non-fish items only
+        const quantity = Number(next.qty) || 0;
+        const price = Number(next.rate) || 0;
+        next.amount = quantity && price ? quantity * price : undefined;
+      }
+      // For fish items, amount calculation is handled by updateFishInvLineFields
     }
     
     updated[index] = next;
@@ -670,38 +710,28 @@ console.log("ponds", ponds);
         for (const line of lineItems) {
           const selectedItem = items.find(item => item.item_id === line.item_id);
           const isFish = selectedItem?.category === 'fish';
-          await post('/invoice-lines/', {
+          
+          // Determine qty and unit based on fish_unit selection
+          let qty, unit;
+          if (isFish) {
+            if (line.fish_unit === 'piece') {
+              qty = Number(line.fish_count?.toFixed?.(2) ?? line.fish_count) || 0;
+              unit = 'piece';
+            } else {
+              qty = Number(line.total_weight?.toFixed?.(2) ?? line.total_weight) || 0;
+              unit = 'kg';
+            }
+          } else {
+            qty = Number(line.qty?.toFixed?.(2) ?? line.qty) || 0;
+            unit = line.unit || 'kg';
+          }
+          
+          const invoiceLineData: any = {
             invoice: editingInvoice.invoice_id,
             item: line.item_id || null,
             description: line.description || '',
-            qty: isFish ? (Number(line.total_weight?.toFixed?.(2) ?? line.total_weight) || 0) : (Number(line.qty?.toFixed?.(2) ?? line.qty) || 0),
-            unit: isFish ? 'kg' : (line.unit || 'kg'),
-            packet_size: isFish ? null : (line.packet_size || null),
-            gallon_size: line.gallon_size || null,
-            rate: Number(line.rate?.toFixed?.(2) ?? line.rate) || 0,
-            amount: Number(line.amount?.toFixed?.(2) ?? line.amount) || 0,
-            // Fish-specific fields
-            pond: line.pond_id || null,
-            species: line.species_id || null,
-            total_weight: Number(line.total_weight?.toFixed?.(2) ?? line.total_weight) || null,
-            line_number: line.line_number ?? null,
-          });
-        }
-        
-        toast.success('Invoice updated successfully');
-      } else {
-        const response = await post('/invoices/', invoiceData);
-        
-        // Create invoice lines
-        for (const line of lineItems) {
-          const selectedItem = items.find(item => item.item_id === line.item_id);
-          const isFish = selectedItem?.category === 'fish';
-          await post('/invoice-lines/', {
-            invoice: response.invoice_id,
-            item: line.item_id || null,
-            description: line.description || '',
-            qty: isFish ? (Number(line.total_weight?.toFixed?.(2) ?? line.total_weight) || 0) : (Number(line.qty?.toFixed?.(2) ?? line.qty) || 0),
-            unit: isFish ? 'kg' : (line.unit || 'kg'),
+            qty: qty,
+            unit: unit,
             packet_size: isFish ? null : (line.packet_size || null),
             gallon_size: line.gallon_size || null,
             rate: Number(line.rate?.toFixed?.(2) ?? line.rate) || 0,
@@ -712,7 +742,64 @@ console.log("ponds", ponds);
             total_weight: Number(line.total_weight?.toFixed?.(2) ?? line.total_weight) || null,
             line_number: line.line_number ?? null,
             fish_count: line.fish_count || null,
-          });
+          };
+          
+          // Only include fish_unit for fish items
+          if (isFish) {
+            invoiceLineData.fish_unit = line.fish_unit || 'kg';
+          }
+          
+          await post('/invoice-lines/', invoiceLineData);
+        }
+        
+        toast.success('Invoice updated successfully');
+      } else {
+        const response = await post('/invoices/', invoiceData);
+        
+        // Create invoice lines
+        for (const line of lineItems) {
+          const selectedItem = items.find(item => item.item_id === line.item_id);
+          const isFish = selectedItem?.category === 'fish';
+          
+          // Determine qty and unit based on fish_unit selection
+          let qty, unit;
+          if (isFish) {
+            if (line.fish_unit === 'piece') {
+              qty = Number(line.fish_count?.toFixed?.(2) ?? line.fish_count) || 0;
+              unit = 'piece';
+            } else {
+              qty = Number(line.total_weight?.toFixed?.(2) ?? line.total_weight) || 0;
+              unit = 'kg';
+            }
+          } else {
+            qty = Number(line.qty?.toFixed?.(2) ?? line.qty) || 0;
+            unit = line.unit || 'kg';
+          }
+          
+          const invoiceLineData: any = {
+            invoice: response.invoice_id,
+            item: line.item_id || null,
+            description: line.description || '',
+            qty: qty,
+            unit: unit,
+            packet_size: isFish ? null : (line.packet_size || null),
+            gallon_size: line.gallon_size || null,
+            rate: Number(line.rate?.toFixed?.(2) ?? line.rate) || 0,
+            amount: Number(line.amount?.toFixed?.(2) ?? line.amount) || 0,
+            // Fish-specific fields
+            pond: line.pond_id || null,
+            species: line.species_id || null,
+            total_weight: Number(line.total_weight?.toFixed?.(2) ?? line.total_weight) || null,
+            line_number: line.line_number ?? null,
+            fish_count: line.fish_count || null,
+          };
+          
+          // Only include fish_unit for fish items
+          if (isFish) {
+            invoiceLineData.fish_unit = line.fish_unit || 'kg';
+          }
+          
+          await post('/invoice-lines/', invoiceLineData);
         }
         
         toast.success('Invoice created successfully');
@@ -785,6 +872,8 @@ console.log("ponds", ponds);
           species_id: line.species || null,
           total_weight: line.total_weight || null,
           line_number: line.line_number || null,
+          fish_count: line.fish_count || null,
+          fish_unit: line.fish_unit || 'kg',
           pond_name: line.pond_name || '',
           species_name: line.species_name || '',
         };
@@ -1104,6 +1193,56 @@ console.log("ponds", ponds);
                                   <span>Fish-Specific Details</span>
                                 </div>
                                 
+                                {/* Fish Unit Selection - Radio Buttons */}
+                                <div className="space-y-2">
+                                  <Label>Pricing Unit</Label>
+                                  <div className="text-xs text-gray-500 mb-2">
+                                    Current fish_unit: {line.fish_unit || 'undefined'} (Type: {typeof line.fish_unit})
+                                  </div>
+                                  <div className="flex gap-6">
+                                    <div className="flex items-center space-x-2">
+                                      <input
+                                        type="radio"
+                                        id={`fish-unit-kg-${index}`}
+                                        name={`fish-unit-${index}`}
+                                        value="kg"
+                                        checked={line.fish_unit === 'kg'}
+                                        onChange={(e) => {
+                                          console.log('Radio button clicked - kg value:', e.target.value);
+                                          updateFishInvLineFields(index, { fish_unit: e.target.value });
+                                        }}
+                                        className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 focus:ring-blue-500"
+                                      />
+                                      <label htmlFor={`fish-unit-kg-${index}`} className="text-sm font-medium text-gray-700">
+                                        Per kg (Total Weight × Rate)
+                                      </label>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                      <input
+                                        type="radio"
+                                        id={`fish-unit-piece-${index}`}
+                                        name={`fish-unit-${index}`}
+                                        value="piece"
+                                        checked={line.fish_unit === 'piece'}
+                                        onChange={(e) => {
+                                          console.log('Radio button clicked - piece value:', e.target.value);
+                                          updateFishInvLineFields(index, { fish_unit: e.target.value });
+                                        }}
+                                        className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 focus:ring-blue-500"
+                                      />
+                                      <label htmlFor={`fish-unit-piece-${index}`} className="text-sm font-medium text-gray-700">
+                                        Per piece (Species Number × Rate)
+                                      </label>
+                                    </div>
+                                  </div>
+                                  <div className="text-xs text-gray-600">
+                                    {line.fish_unit === 'kg' 
+                                      ? 'Amount will be calculated as: Total Weight × Rate per kg'
+                                      : 'Amount will be calculated as: Species Number × Rate per piece'
+                                    }
+                                  </div>
+                                </div>
+                                
                                 {/* Fish fields row 1 - Pond (species is derived from item) */}
                                 <div className="grid grid-cols-2 gap-4">
                                   <div className="space-y-2">
@@ -1261,7 +1400,15 @@ console.log("ponds", ponds);
                               type="number"
                               step="0.01"
                               value={line.rate && line.rate > 0 ? line.rate : ''}
-                              onChange={(e) => updateLineItem(index, 'rate', parseFloat(e.target.value) || 0)}
+                              onChange={(e) => {
+                                const selectedItem = items.find(item => item.item_id === line.item_id);
+                                const isFishItem = selectedItem?.category === 'fish';
+                                if (isFishItem) {
+                                  updateFishInvLineFields(index, { rate: parseFloat(e.target.value) || 0 });
+                                } else {
+                                  updateLineItem(index, 'rate', parseFloat(e.target.value) || 0);
+                                }
+                              }}
                               placeholder="Rate per unit"
                               className="h-12"
                             />
@@ -1527,20 +1674,13 @@ console.log("ponds", ponds);
                                 // Use item_category directly from the line data
                                 const isFishItem = line.item_category === 'fish';
                                 
-                                console.log('Line data:', line);
-                                console.log('Item category:', line.item_category);
-                                console.log('Is fish item:', isFishItem);
-                                
-                                console.log('Quantity/Weight display:', { 
-                                  isFishItem, 
-                                  total_weight: line.total_weight, 
-                                  qty: line.qty,
-                                  item_name: line.item_name,
-                                  item_category: line.item_category 
-                                });
-                                
                                 if (isFishItem) {
-                                  return line.total_weight ? `${line.total_weight} kg` : '-';
+                                  // For fish items, show quantity based on unit
+                                  if (line.unit === 'piece') {
+                                    return line.qty ? `${line.qty} pcs` : '-';
+                                  } else {
+                                    return line.total_weight ? `${line.total_weight} kg` : '-';
+                                  }
                                 }
                                 return line.qty || '-';
                               })()}
@@ -1552,7 +1692,12 @@ console.log("ponds", ponds);
                                   console.log('Displaying fish item:', { isFishItem, total_weight: line.total_weight, line });
                                   return (
                                     <div className="text-sm space-y-1">
-                                      {line.total_weight && (
+                                      {line.unit === 'piece' && line.qty && (
+                                        <div className="text-orange-600 font-semibold">
+                                          <span className="font-medium">Pieces:</span> {line.qty} pcs
+                                        </div>
+                                      )}
+                                      {line.unit === 'kg' && line.total_weight && (
                                         <div className="text-orange-600 font-semibold">
                                           <span className="font-medium">Weight:</span> {line.total_weight} kg
                                         </div>

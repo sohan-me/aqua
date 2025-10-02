@@ -482,7 +482,11 @@ export default function InventoryPage() {
                       <TableCell className={m.direction === 'in' ? 'text-green-600' : 'text-red-600'}>{m.direction.toUpperCase()}</TableCell>
                       <TableCell>{Number(m.qty_kg).toFixed(2)}</TableCell>
                       <TableCell>{m.fish_count ?? '—'}</TableCell>
-                      <TableCell>{m.line_number ? Number(m.line_number).toFixed(2) : '—'}</TableCell>
+                      <TableCell>
+                        {m.line_number ? Number(m.line_number).toFixed(2) : 
+                         (m.fish_count && m.qty_kg && m.qty_kg > 0 ? 
+                          Number(m.fish_count / m.qty_kg).toFixed(2) : '—')}
+                      </TableCell>
                       <TableCell className="capitalize">{m.source}</TableCell>
                       <TableCell>#{m.ref}</TableCell>
                     </TableRow>

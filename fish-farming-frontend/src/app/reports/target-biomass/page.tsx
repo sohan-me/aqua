@@ -63,7 +63,7 @@ export default function TargetBiomassPage() {
 
     setIsLoading(true);
     try {
-      const response = await fetch('https://apipremium.sascorporationbd.com/api/fish-farming/target-biomass/calculate/', {
+      const response = await fetch('http://localhost:8000/api/fish-farming/target-biomass/calculate/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

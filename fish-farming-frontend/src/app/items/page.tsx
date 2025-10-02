@@ -28,6 +28,8 @@ interface StockEntry {
   notes?: string;
   kg_equivalent?: number;
   fish_count?: number;
+  calculated_weight_kg?: number;
+  calculated_weight_display?: string;
   created_at: string;
 }
 
@@ -416,12 +418,15 @@ export default function ItemsPage() {
                 <TabsContent value="stock" className="space-y-4">
                   <div className="grid grid-cols-3 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="total_stock">Total Stock ({editingItem?.unit || 'kg'})</Label>
+                      <Label htmlFor="total_stock">Total Stock ({editingItem?.category === 'fish' ? 'piece' : editingItem?.unit || 'kg'})</Label>
                       <Input
                         id="total_stock"
                         type="number"
                         step="0.001"
-                        value={editingItem?.total_stock_in_unit || editingItem?.total_stock_kg || 0}
+                        value={editingItem?.category === 'fish' 
+                          ? (editingItem?.fish_count || 0)
+                          : (editingItem?.total_stock_in_unit || editingItem?.total_stock_kg || 0)
+                        }
                         readOnly
                         className="bg-gray-50"
                         placeholder="0.000"
@@ -508,7 +513,12 @@ export default function ItemsPage() {
                               <div className="flex justify-between items-start">
                                 <div>
                                   <p className="font-medium">{entry.quantity} {entry.unit}</p>
-                                  {entry.kg_equivalent && (
+                                  {entry.calculated_weight_display && (
+                                    <p className="text-sm text-gray-600">
+                                      Weight: {entry.calculated_weight_display}
+                                    </p>
+                                  )}
+                                  {entry.kg_equivalent && !entry.calculated_weight_display && (
                                     <p className="text-sm text-gray-600">
                                       = {entry.kg_equivalent.toFixed(2)} kg
                                     </p>
@@ -687,13 +697,15 @@ export default function ItemsPage() {
                         Stock levels are determined by fish population in the pond
                       </p>
                     </div>
-                  ) : (item.total_stock_in_unit !== undefined || item.total_stock_kg !== undefined) && (
+                  ) : (item.total_stock_in_unit !== undefined || item.total_stock_kg !== undefined || item.fish_count !== undefined) && (
                     <div className="space-y-1">
                       <p className="text-sm font-semibold text-blue-600">
                         <strong>Total Stock:</strong> {
-                          item.total_stock_in_unit !== undefined 
-                            ? `${Number(item.total_stock_in_unit).toFixed(2)} ${item.unit || 'kg'}`
-                            : `${Number(item.total_stock_kg).toFixed(2)} kg`
+                          item.category === 'fish' && item.fish_count !== undefined
+                            ? `${Number(item.fish_count).toFixed(0)} piece`
+                            : item.total_stock_in_unit !== undefined 
+                              ? `${Number(item.total_stock_in_unit).toFixed(2)} ${item.unit || 'kg'}`
+                              : `${Number(item.total_stock_kg).toFixed(2)} kg`
                         }
                       </p>
                       {item.stock_summary && item.stock_summary.length > 0 && (

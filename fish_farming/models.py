@@ -2,6 +2,8 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db.models import Sum
+from django.db.models.signals import post_save, post_delete
+from django.dispatch import receiver
 from decimal import Decimal
 from mptt.models import MPTTModel, TreeForeignKey
 
@@ -306,6 +308,56 @@ class Item(models.Model):
             else:
                 entries.append(f"{entry.quantity} {entry.unit}")
         return entries
+    
+    def calculate_fish_weight_from_stock(self):
+        """Calculate total fish weight and count from stock entries for fish items"""
+        if self.category != 'fish':
+            return {'total_weight': 0, 'total_count': 0}
+        
+        total_weight = 0
+        total_count = 0
+        
+        for entry in self.stock_entries.all():
+            # Calculate count - prefer explicit fish_count, otherwise use quantity based on unit
+            if entry.fish_count is not None:
+                # Use explicit fish_count if provided (this is the most accurate)
+                total_count += entry.fish_count
+            elif entry.unit == 'piece':
+                # For piece-based entries without fish_count, use quantity
+                total_count += int(entry.quantity)
+            elif entry.unit == 'kg':
+                # For kg-based entries without fish_count, estimate from weight
+                if hasattr(self, 'average_fish_weight_kg') and self.average_fish_weight_kg:
+                    total_count += int(entry.quantity / self.average_fish_weight_kg)
+                else:
+                    # Default assumption: 1 kg = 4 pieces
+                    total_count += int(entry.quantity * Decimal('4'))
+            
+            # Calculate weight - use calculated_weight_kg if available, otherwise estimate
+            if entry.calculated_weight_kg is not None:
+                # Use the calculated weight from the entry
+                total_weight += entry.calculated_weight_kg
+            elif entry.unit == 'piece':
+                # For piece-based entries, estimate weight from pieces
+                piece_count = entry.fish_count if entry.fish_count is not None else entry.quantity
+                if hasattr(self, 'average_fish_weight_kg') and self.average_fish_weight_kg:
+                    total_weight += piece_count * self.average_fish_weight_kg
+                else:
+                    # Default assumption: 1 piece = 0.25 kg
+                    total_weight += piece_count * Decimal('0.25')
+            elif entry.unit == 'kg':
+                # If stock entry is in kg, use quantity as weight
+                total_weight += entry.quantity
+        
+        return {'total_weight': total_weight, 'total_count': int(total_count)}
+    
+    def update_fish_aggregation(self):
+        """Update fish_total_weight_kg and fish_count from stock entries"""
+        if self.category == 'fish':
+            fish_data = self.calculate_fish_weight_from_stock()
+            self.fish_total_weight_kg = fish_data['total_weight']
+            self.fish_count = fish_data['total_count']
+            self.save(update_fields=['fish_total_weight_kg', 'fish_count'])
 
 
 class StockEntry(models.Model):
@@ -325,7 +377,8 @@ class StockEntry(models.Model):
     expiry_date = models.DateField(null=True, blank=True, help_text="Expiry date if applicable")
     notes = models.TextField(blank=True)
     # Fish-specific optional info for fish items
-    fish_count = models.PositiveIntegerField(null=True, blank=True, help_text="Number of fish (pieces) for fish items")
+    fish_count = models.IntegerField(null=True, blank=True, help_text="Number of fish (pieces) for fish items")
+    calculated_weight_kg = models.DecimalField(max_digits=12, decimal_places=3, null=True, blank=True, help_text="Calculated weight in kg for fish items")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -346,10 +399,36 @@ class StockEntry(models.Model):
         else:
             return 0  # Unknown unit conversion
     
+    def calculate_fish_weight(self):
+        """Calculate weight for fish items"""
+        if self.item.category == 'fish':
+            if self.unit == 'piece':
+                # For piece-based entries, use fish_count if available, otherwise use quantity
+                piece_count = self.fish_count if self.fish_count else self.quantity
+                # Default assumption: 1 piece = 0.25 kg (this should be configurable)
+                return piece_count * Decimal('0.25')
+            elif self.unit == 'kg':
+                # Use quantity directly for kg-based entries
+                return self.quantity
+            else:
+                return Decimal('0')
+        return Decimal('0')
+    
+    def update_calculated_weight(self):
+        """Update the calculated_weight_kg field"""
+        if self.item.category == 'fish':
+            self.calculated_weight_kg = self.calculate_fish_weight()
+            self.save(update_fields=['calculated_weight_kg'])
+    
     def save(self, *args, **kwargs):
         # Auto-calculate total cost
         if self.unit_cost and self.quantity:
             self.total_cost = self.unit_cost * self.quantity
+        
+        # Auto-calculate fish weight for fish items
+        if self.item and self.item.category == 'fish':
+            self.calculated_weight_kg = self.calculate_fish_weight()
+        
         super().save(*args, **kwargs)
 
 
@@ -524,16 +603,23 @@ class BillLine(models.Model):
         if self.is_item and self.item and self.cost is not None:
             if self.item.category == 'fish':
                 effective_qty = None
-                if self.total_weight and self.total_weight > 0:
+                # For fish items, determine quantity based on unit of measurement
+                if self.unit == 'piece' and self.fish_count:
+                    # When selling by piece, use fish_count
+                    effective_qty = self.fish_count
+                elif self.total_weight and self.total_weight > 0:
+                    # When selling by weight, use total_weight
                     effective_qty = self.total_weight
                 elif self.fish_count and self.body_weight_per_fish:
+                    # Fallback: calculate from fish_count and body_weight_per_fish
                     effective_qty = self.fish_count * self.body_weight_per_fish
                 else:
+                    # Final fallback to qty
                     effective_qty = self.qty or 0
             else:
+                # For non-fish items, use qty directly
+                # packet_size is only for display/weight calculation, not for pricing
                 effective_qty = self.qty or 0
-                if self.packet_size and self.packet_size > 0:
-                    effective_qty = (self.qty or 0) * self.packet_size
             self.line_amount = effective_qty * self.cost
         super().save(*args, **kwargs)
 
@@ -625,6 +711,7 @@ class InvoiceLine(models.Model):
     fish_count = models.PositiveIntegerField(null=True, blank=True, help_text="Number of fish (pieces)")
     body_weight_per_fish = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True, help_text="Average body weight (kg) per fish")
     line_number = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True, help_text="Line number (pcs per kg) for fish items")
+    fish_unit = models.CharField(max_length=10, choices=[('kg', 'Per kg'), ('piece', 'Per piece')], null=True, blank=True, help_text="Unit for fish pricing calculation (required for fish items)")
     
     created_at = models.DateTimeField(auto_now_add=True)
     
@@ -636,20 +723,26 @@ class InvoiceLine(models.Model):
     
     def save(self, *args, **kwargs):
         # Auto-calculate amount
-        # For fish items: prefer explicit total_weight; otherwise derive from fish_count * body_weight_per_fish
+        # For fish items: use different calculation based on fish_unit
         if self.item and self.item.category == 'fish':
-            effective_qty = None
-            if self.total_weight and self.total_weight > 0:
-                effective_qty = self.total_weight
-            elif self.fish_count and self.body_weight_per_fish:
-                effective_qty = self.fish_count * self.body_weight_per_fish
+            # Set default fish_unit if not specified for fish items
+            if not self.fish_unit:
+                self.fish_unit = 'kg'
+                
+            if self.fish_unit == 'piece':
+                # For piece pricing: use fish_count
+                effective_qty = self.fish_count or 0
             else:
-                effective_qty = self.qty or 0
+                # For kg pricing: prefer explicit total_weight; otherwise derive from fish_count * body_weight_per_fish
+                if self.total_weight and self.total_weight > 0:
+                    effective_qty = self.total_weight
+                elif self.fish_count and self.body_weight_per_fish:
+                    effective_qty = self.fish_count * self.body_weight_per_fish
+                else:
+                    effective_qty = self.qty or 0
         else:
-            # If packet_size is provided, multiply quantity by packet_size, otherwise use quantity as is
+            # For non-fish items: use quantity directly
             effective_qty = self.qty or 0
-            if self.packet_size and self.packet_size > 0:
-                effective_qty = (self.qty or 0) * self.packet_size
         
         self.amount = effective_qty * self.rate
         super().save(*args, **kwargs)
@@ -2562,3 +2655,18 @@ class CustomerStock(models.Model):
             self.save(update_fields=['current_stock', 'last_updated'])
             return True
         return False
+
+
+# ===================== SIGNALS =====================
+
+@receiver(post_save, sender=StockEntry)
+def update_item_fish_aggregation_on_stock_save(sender, instance, **kwargs):
+    """Update fish aggregation when stock entry is saved"""
+    if instance.item.category == 'fish':
+        instance.item.update_fish_aggregation()
+
+@receiver(post_delete, sender=StockEntry)
+def update_item_fish_aggregation_on_stock_delete(sender, instance, **kwargs):
+    """Update fish aggregation when stock entry is deleted"""
+    if instance.item.category == 'fish':
+        instance.item.update_fish_aggregation()

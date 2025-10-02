@@ -85,6 +85,7 @@ interface Item {
   name: string;
   item_type: string;
   category?: string | null;
+  unit?: string;
 }
 
 interface Account {
@@ -123,6 +124,10 @@ export default function BillsPage() {
   const updateFishLineFields = (index: number, updates: Partial<BillLine>) => {
     const li = { ...(lineItems[index] || {}), ...updates } as any;
     
+    // Get the selected item to check its unit from database
+    const selectedItem = items.find(it => it.item_id === li.item);
+    const itemUnit = selectedItem?.unit || 'kg';
+    
     // Get current values, handling empty strings and null values
     const fishCount = li.fish_count !== '' && li.fish_count !== null ? Number(li.fish_count) : 0;
     const lineNumber = li.line_number !== '' && li.line_number !== null ? Number(li.line_number) : 0;
@@ -158,20 +163,30 @@ export default function BillsPage() {
       }
     }
 
-    // Keep qty/unit aligned for fish: qty mirrors total_weight in kg
+    // Set unit from item's database unit field
+    li.unit = itemUnit;
+    
+    // Set qty based on item's unit
     const finalTotalWeight = li.total_weight !== '' && li.total_weight !== null ? Number(li.total_weight) : 0;
-    if (finalTotalWeight > 0) {
-      li.qty = finalTotalWeight;
-      li.unit = 'kg';
-    } else {
-      li.qty = '';
+    if (itemUnit === 'kg') {
+      li.qty = finalTotalWeight > 0 ? finalTotalWeight : '';
+    } else if (itemUnit === 'piece') {
+      li.qty = fishCount > 0 ? fishCount : '';
     }
 
-    // Auto compute line_amount for fish using total_weight (effective quantity)
+    // Auto compute line_amount based on item's unit from database
     const cost = Number(li.cost) || 0;
-    const effectiveQty = finalTotalWeight;
-    if (cost && effectiveQty) {
-      li.line_amount = cost * effectiveQty;
+    
+    if (cost) {
+      if (itemUnit === 'kg' && finalTotalWeight > 0) {
+        // For kg: line_amount = total_weight * cost
+        li.line_amount = cost * finalTotalWeight;
+      } else if (itemUnit === 'piece' && fishCount > 0) {
+        // For piece: line_amount = fish_count * cost
+        li.line_amount = cost * fishCount;
+      } else {
+        li.line_amount = '';
+      }
     } else {
       li.line_amount = '';
     }
@@ -232,8 +247,28 @@ export default function BillsPage() {
       const response = await get(`/bill-lines/?bill=${billId}`);
       const lines = response.results || response;
       console.log('Fetched bill lines:', lines);
-      setBillLines(lines);
-      setCurrentBillLines(lines);
+      
+      // Use the backend-calculated line_amount directly without correction
+      // The backend BillLine model automatically calculates line_amount correctly
+      const processedLines = lines.map((line: any) => {
+        const lineItem = items.find(it => it.item_id === line.item);
+        const isFish = lineItem?.category === 'fish';
+        const itemUnit = lineItem?.unit || 'kg';
+        
+        // For display purposes, set qty based on item type and unit
+        if (isFish) {
+          return {
+            ...line,
+            qty: itemUnit === 'piece' ? line.fish_count : line.total_weight
+          };
+        }
+        
+        // For non-fish items, use the stored qty as-is
+        return line;
+      });
+      
+      setBillLines(processedLines);
+      setCurrentBillLines(processedLines);
     } catch (error) {
       console.error('Error fetching bill lines:', error);
       setBillLines([]);
@@ -386,10 +421,16 @@ export default function BillsPage() {
           if (line.is_item) {
             const selectedItem = items.find(it => it.item_id === line.item);
             const isFish = selectedItem?.category === 'fish';
+            const itemUnit = selectedItem?.unit || 'kg';
             billLineData.item = line.item || null;
             billLineData.description = line.description || '';
-            billLineData.qty = isFish ? (line.total_weight || 0) : (line.qty || 0);
-            billLineData.unit = isFish ? 'kg' : (line.unit || 'kg');
+            // Set qty based on item's unit
+            if (isFish) {
+              billLineData.qty = itemUnit === 'piece' ? (line.fish_count || 0) : (line.total_weight || 0);
+            } else {
+              billLineData.qty = line.qty || 0;
+            }
+            billLineData.unit = isFish ? (line.unit || 'kg') : (line.unit || 'kg');
             billLineData.packet_size = isFish ? null : (line.packet_size || null);
             billLineData.cost = line.cost || 0;
             billLineData.line_amount = line.line_amount || 0;
@@ -422,10 +463,16 @@ export default function BillsPage() {
           if (line.is_item) {
             const selectedItem = items.find(it => it.item_id === line.item);
             const isFish = selectedItem?.category === 'fish';
+            const itemUnit = selectedItem?.unit || 'kg';
             billLineData.item = line.item || null;
             billLineData.description = line.description || '';
-            billLineData.qty = isFish ? (line.total_weight || 0) : (line.qty || 0);
-            billLineData.unit = isFish ? 'kg' : (line.unit || 'kg');
+            // Set qty based on item's unit
+            if (isFish) {
+              billLineData.qty = itemUnit === 'piece' ? (line.fish_count || 0) : (line.total_weight || 0);
+            } else {
+              billLineData.qty = line.qty || 0;
+            }
+            billLineData.unit = isFish ? (line.unit || 'kg') : (line.unit || 'kg');
             billLineData.packet_size = isFish ? null : (line.packet_size || null);
             billLineData.cost = line.cost || 0;
             billLineData.line_amount = line.line_amount || 0;
@@ -493,27 +540,45 @@ export default function BillsPage() {
       const existingLines = response.results || response;
       
       // Convert existing lines to our format
-      const formattedLines = existingLines.map((line: any) => ({
-        bill_line_id: line.bill_line_id,
-        bill: line.bill, // Foreign key to bill
-        is_item: line.is_item,
-        // Item mode fields
-        item: line.item || null,
-        item_name: line.item_name || '',
-        description: line.description || '',
-        qty: line.qty || 0,
-        unit: line.unit || 'kg',
-        packet_size: line.packet_size || 0,
-        cost: line.cost || 0,
-        line_amount: line.line_amount || 0,
-        // Expense mode fields
-        expense_account: line.expense_account || null,
-        expense_account_name: line.expense_account_name || '',
-        amount: line.amount || 0,
-        line_memo: line.line_memo || '',
-        pond: line.pond || null,
-        created_at: line.created_at,
-      }));
+      const formattedLines = existingLines.map((line: any) => {
+        // Find item to check category and unit
+        const lineItem = items.find(it => it.item_id === line.item);
+        const isFish = lineItem?.category === 'fish';
+        const itemUnit = lineItem?.unit || 'kg';
+        
+        // Use backend-calculated values directly
+        // Set qty for display purposes based on item type and unit
+        let displayQty = line.qty || 0;
+        if (isFish) {
+          displayQty = itemUnit === 'piece' ? (line.fish_count || 0) : (line.total_weight || 0);
+        }
+        
+        return {
+          bill_line_id: line.bill_line_id,
+          bill: line.bill, // Foreign key to bill
+          is_item: line.is_item,
+          // Item mode fields
+          item: line.item || null,
+          item_name: line.item_name || '',
+          description: line.description || '',
+          qty: displayQty,
+          unit: line.unit || 'kg',
+          packet_size: line.packet_size || 0,
+          cost: line.cost || 0,
+          line_amount: line.line_amount || 0, // Use backend-calculated amount
+          // Fish-specific fields
+          fish_count: line.fish_count || null,
+          total_weight: line.total_weight || null,
+          line_number: line.line_number || null,
+          // Expense mode fields
+          expense_account: line.expense_account || null,
+          expense_account_name: line.expense_account_name || '',
+          amount: line.amount || 0,
+          line_memo: line.line_memo || '',
+          pond: line.pond || null,
+          created_at: line.created_at,
+        };
+      });
       
       setLineItems(formattedLines);
       

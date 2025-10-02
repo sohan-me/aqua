@@ -4090,6 +4090,9 @@ class BillLineViewSet(viewsets.ModelViewSet):
             
             if stock_entry:
                 stock_entry.delete()
+                # Update fish aggregation if this is a fish item
+                if instance.item.category == 'fish':
+                    instance.item.update_fish_aggregation()
             
             # Find and delete the corresponding inventory transaction line
             inv_txn_line = InventoryTransactionLine.objects.filter(
@@ -4117,10 +4120,17 @@ class BillLineViewSet(viewsets.ModelViewSet):
             storage_unit = bill_line.unit
             storage_quantity = bill_line.qty
             
+            # For fish items, use total_weight if available for storage quantity
+            if (bill_line.item.category == 'fish' and 
+                bill_line.total_weight is not None and 
+                bill_line.total_weight > 0):
+                storage_quantity = bill_line.total_weight
+                storage_unit = 'kg'  # Fish weight is always stored in kg
+            
             # Convert packets to kg if needed (for feed items)
-            if (bill_line.unit in ['packet', 'pack'] and 
-                bill_line.packet_size and 
-                bill_line.item.category == 'feed'):
+            elif (bill_line.unit in ['packet', 'pack'] and 
+                  bill_line.packet_size and 
+                  bill_line.item.category == 'feed'):
                 storage_unit = 'kg'
                 storage_quantity = bill_line.qty * bill_line.packet_size
             
@@ -4140,6 +4150,10 @@ class BillLineViewSet(viewsets.ModelViewSet):
                       (f" ({bill_line.qty} {bill_line.unit})" if bill_line.unit != storage_unit else ""),
                 fish_count=bill_line.fish_count if getattr(bill_line.item, 'category', None) == 'fish' else None,
             )
+            
+            # Update fish aggregation if this is a fish item
+            if bill_line.item.category == 'fish':
+                bill_line.item.update_fish_aggregation()
             
             # Also create inventory transaction for backward compatibility
             # Check if inventory transaction already exists for this bill
@@ -4230,6 +4244,9 @@ class InvoiceLineViewSet(viewsets.ModelViewSet):
             
             if stock_entry:
                 stock_entry.delete()
+                # Update fish aggregation if this is a fish item
+                if instance.item.category == 'fish':
+                    instance.item.update_fish_aggregation()
             
             # Find and delete the corresponding inventory transaction line
             inv_txn_line = InventoryTransactionLine.objects.filter(
@@ -4272,8 +4289,12 @@ class InvoiceLineViewSet(viewsets.ModelViewSet):
                 supplier=f"SOLD TO {invoice_line.invoice.customer.name}",
                 batch_number=f"INVOICE-{invoice_line.invoice.invoice_no}",
                 notes=f"Sold to {invoice_line.invoice.customer.name} via Invoice {invoice_line.invoice.invoice_no}",
-                fish_count=invoice_line.fish_count if getattr(invoice_line.item, 'category', None) == 'fish' else None,
+                fish_count=-invoice_line.fish_count if (getattr(invoice_line.item, 'category', None) == 'fish' and invoice_line.fish_count) else None,
             )
+            
+            # Update fish aggregation if this is a fish item
+            if invoice_line.item.category == 'fish':
+                invoice_line.item.update_fish_aggregation()
             
             # Also create inventory transaction for backward compatibility
             # Check if inventory transaction already exists for this invoice
@@ -4634,27 +4655,34 @@ class CustomerStockViewSet(viewsets.ModelViewSet):
                     'memo': il.description or '',
                 })
         else:
-            # Bills (receipts) - IN for non-fish items
-            from django.db.models import Q
-            bill_lines = BillLine.objects.filter(item=item, is_item=True)
+            # For non-fish items, show invoice movements instead of bill movements
+            # IN: invoices to internal customers (stock in)
+            # OUT: invoices to external customers (stock out)
             try:
-                if hasattr(BillLine, 'pond') and pond:
-                    bill_lines = bill_lines.filter(Q(pond=pond) | Q(pond__isnull=True))
+                pond_customer = pond.customers.filter(type='internal_pond').first() if pond else None
             except Exception:
-                pass
-            for bl in bill_lines.order_by('-created_at')[:200]:
-                qty_kg = float(bl.total_weight or bl.qty or 0)
+                pond_customer = None
+            
+            # IN: invoice lines whose invoice customer is internal (stock in)
+            inv_in = InvoiceLine.objects.filter(item=item)
+            if pond_customer:
+                inv_in = inv_in.filter(invoice__customer=pond_customer)
+            # For non-fish items, include invoice lines even if they don't have a specific pond
+            # This shows all invoice movements for the item, not just pond-specific ones
+            
+            for il in inv_in.order_by('-created_at')[:200]:
+                qty_kg = float(il.total_weight or il.qty or 0)
                 movements.append({
-                    'date': bl.bill.bill_date,
+                    'date': il.invoice.invoice_date,
                     'direction': 'in',
-                    'source': 'bill',
-                    'ref': bl.bill.bill_no,
+                    'source': 'invoice',
+                    'ref': il.invoice.invoice_no,
                     'qty_kg': qty_kg,
                     'fish_count': None,
                     'line_number': None,
-                    'unit_cost': float(bl.cost or 0),
-                    'amount': float(bl.line_amount or 0),
-                    'memo': bl.description or '',
+                    'unit_cost': float(il.rate or 0),
+                    'amount': float(il.amount or 0),
+                    'memo': il.description or '',
                 })
 
         # Invoices (issues) - OUT
@@ -4670,8 +4698,15 @@ class CustomerStockViewSet(viewsets.ModelViewSet):
             if pond_customer:
                 inv_lines = inv_lines.exclude(invoice__customer=pond_customer)
         else:
-            if pond:
-                inv_lines = inv_lines.filter(pond=pond)
+            # For non-fish items, OUT: invoices to external customers (stock out)
+            try:
+                pond_customer = pond.customers.filter(type='internal_pond').first() if pond else None
+            except Exception:
+                pond_customer = None
+            # For non-fish items, show all invoice movements regardless of pond
+            # Exclude internal customers for OUT movements (they are IN movements)
+            if pond_customer:
+                inv_lines = inv_lines.exclude(invoice__customer=pond_customer)
         for il in inv_lines.order_by('-created_at')[:200]:
             qty_kg = float(il.total_weight or il.qty or 0)
             fish_pcs = int(il.fish_count or 0) if getattr(item, 'category', None) == 'fish' else None

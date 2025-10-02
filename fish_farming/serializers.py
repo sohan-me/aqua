@@ -121,11 +121,12 @@ class StockEntrySerializer(serializers.ModelSerializer):
     item_name = serializers.CharField(source='item.name', read_only=True)
     kg_equivalent = serializers.SerializerMethodField()
     fish_count = serializers.SerializerMethodField()
+    calculated_weight_display = serializers.SerializerMethodField()
     
     class Meta:
         model = StockEntry
         fields = '__all__'
-        read_only_fields = ['entry_id', 'user', 'total_cost', 'created_at', 'updated_at']
+        read_only_fields = ['entry_id', 'user', 'total_cost', 'calculated_weight_kg', 'created_at', 'updated_at']
     
     def get_kg_equivalent(self, obj):
         return obj.get_kg_equivalent()
@@ -140,6 +141,12 @@ class StockEntrySerializer(serializers.ModelSerializer):
                 return int(obj.item.fish_count)
         except Exception:
             pass
+        return None
+    
+    def get_calculated_weight_display(self, obj):
+        """Get the calculated weight for display"""
+        if obj.calculated_weight_kg is not None:
+            return f"{obj.calculated_weight_kg} kg"
         return None
 
 
