@@ -535,6 +535,30 @@ export interface DailyLog {
   dissolved_oxygen: string | null;
   ammonia: string | null;
   nitrite: string | null;
+  // East side measurements
+  east_water_temp_c: string | null;
+  east_ph: string | null;
+  east_dissolved_oxygen: string | null;
+  east_ammonia: string | null;
+  east_nitrite: string | null;
+  // West side measurements
+  west_water_temp_c: string | null;
+  west_ph: string | null;
+  west_dissolved_oxygen: string | null;
+  west_ammonia: string | null;
+  west_nitrite: string | null;
+  // North side measurements
+  north_water_temp_c: string | null;
+  north_ph: string | null;
+  north_dissolved_oxygen: string | null;
+  north_ammonia: string | null;
+  north_nitrite: string | null;
+  // South side measurements
+  south_water_temp_c: string | null;
+  south_ph: string | null;
+  south_dissolved_oxygen: string | null;
+  south_ammonia: string | null;
+  south_nitrite: string | null;
   notes: string;
   created_at: string;
   pond_name: string;
@@ -835,18 +859,63 @@ export interface Employee {
   employee_id: number;
   user: number;
   name: string;
-  position: string;
-  hire_date: string;
-  salary: number;
-  status: 'active' | 'inactive';
+  position?: string;
+  hire_date?: string;
+  salary?: number | string; // Can be number or string from API
+  status: 'active' | 'inactive' | 'terminated';
   created_at: string;
   updated_at: string;
+  // Additional fields
+  employee_number?: string;
+  phone?: string;
+  email?: string;
+  notes?: string;
+}
+
+export interface PayrollLine {
+  payroll_line_id: number;
+  employee: number;
+  employee_name?: string;
+  
+  // Core Salary (Bangladesh Private Company)
+  full_salary: number;
+  
+  // Additions (Earnings)
+  overtime_hours: number;
+  overtime_pay: number;
+  harvest_incentive: number;
+  festival_bonus: number;
+  performance_bonus: number;
+  
+  // Deductions
+  absent_days: number;
+  absent_deduction: number;
+  loan_advance: number;
+  pf_employee: number;
+  tax_paye: number;
+  
+  // Employer Contributions
+  pf_employer: number;
+  gratuity: number;
+  insurance_welfare: number;
+  
+  // Calculated Fields
+  total_earnings: number;
+  total_deductions: number;
+  net_pay: number;
+  
+  // Payment Details
+  payment_account?: number;
+  payment_account_name?: string;
+  check_no?: string;
+  notes?: string;
+  created_at: string;
 }
 
 export interface PayrollRun {
   payroll_run_id: number;
   user: number;
-  run_date: string;
+  pay_date: string;  // Backend field name
   period_start: string;
   period_end: string;
   total_gross: number;
@@ -854,6 +923,13 @@ export interface PayrollRun {
   total_net: number;
   status: 'draft' | 'approved' | 'paid';
   created_at: string;
+  updated_at: string;
+  // Frontend compatibility fields
+  run_date?: string;  // Maps to pay_date
+  pay_period_start?: string;  // Maps to period_start
+  pay_period_end?: string;    // Maps to period_end
+  // Bangladesh Payroll Structure
+  lines?: PayrollLine[];
 }
 
 // API Functions
@@ -1138,5 +1214,40 @@ export const apiService = {
   updateStockEntry: (id: number, data: Partial<StockEntry>) => api.put<StockEntry>(`/stock-entries/${id}/`, data),
   deleteStockEntry: (id: number) => api.delete(`/stock-entries/${id}/`),
   getStockEntriesByItem: (itemId: number) => api.get<StockEntry[]>(`/stock-entries/by_item/?item_id=${itemId}`),
+
+  // Chart of Accounts
+  getChartAccounts: () => api.get('/accounts/'),
+  getChartAccountById: (id: number) => api.get(`/accounts/${id}/`),
+  createChartAccount: (data: any) => api.post('/accounts/', data),
+  updateChartAccount: (id: number, data: any) => api.put(`/accounts/${id}/`, data),
+  deleteChartAccount: (id: number) => api.delete(`/accounts/${id}/`),
+
+  // Journal Entries
+  getJournalEntries: (params?: PaginationParams) => api.get('/journal-entries/', { params }),
+  getJournalEntryById: (id: number) => api.get(`/journal-entries/${id}/`),
+  createJournalEntry: (data: any) => api.post('/journal-entries/', data),
+  updateJournalEntry: (id: number, data: any) => api.put(`/journal-entries/${id}/`, data),
+  deleteJournalEntry: (id: number) => api.delete(`/journal-entries/${id}/`),
+
+  // Bill Payments
+  getBillPayments: (params?: PaginationParams) => api.get('/bill-payments/', { params }),
+  getBillPaymentById: (id: number) => api.get(`/bill-payments/${id}/`),
+  createBillPayment: (data: any) => api.post('/bill-payments/', data),
+  updateBillPayment: (id: number, data: any) => api.put(`/bill-payments/${id}/`, data),
+  deleteBillPayment: (id: number) => api.delete(`/bill-payments/${id}/`),
+
+  // Customer Payments
+  getCustomerPayments: (params?: PaginationParams) => api.get('/customer-payments/', { params }),
+  getCustomerPaymentById: (id: number) => api.get(`/customer-payments/${id}/`),
+  createCustomerPayment: (data: any) => api.post('/customer-payments/', data),
+  updateCustomerPayment: (id: number, data: any) => api.put(`/customer-payments/${id}/`, data),
+  deleteCustomerPayment: (id: number) => api.delete(`/customer-payments/${id}/`),
+
+  // Deposits
+  getDeposits: (params?: PaginationParams) => api.get('/deposits/', { params }),
+  getDepositById: (id: number) => api.get(`/deposits/${id}/`),
+  createDeposit: (data: any) => api.post('/deposits/', data),
+  updateDeposit: (id: number, data: any) => api.put(`/deposits/${id}/`, data),
+  deleteDeposit: (id: number) => api.delete(`/deposits/${id}/`),
 
 };

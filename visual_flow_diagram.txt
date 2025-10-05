@@ -1,0 +1,148 @@
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                    FISH FARMING SYSTEM - INTEGRATED FLOW                        │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   EMPLOYEES     │    │   PAYROLL       │    │ CHART OF ACCOUNTS│    │ JOURNAL ENTRIES │
+│                 │    │                 │    │                 │    │                 │
+│ • Abdul Karim   │◄──►│ • Payroll Run   │◄──►│ • Salary Exp    │◄──►│ • Auto-created  │
+│ • Pond Worker   │    │ • PR-11, PR-10  │    │ • Bank Account  │    │ • Debit/Credit  │
+│ • Salary: 20K  │    │ • Status: Approved│  │ • PF Payable    │    │ • Source: PAYROLL│
+│ • Employee ID: 9│    │ • Net Pay: 20K+ │    │ • Tax Payable   │    │ • Memo: Payroll │
+└─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                       │                       │
+         │                       │                       │                       │
+         ▼                       ▼                       ▼                       ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           ACCOUNTING INTEGRATION                                │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   EXPENSE       │    │   LIABILITY     │    │   ASSET          │    │   EQUITY         │
+│   ACCOUNTS      │    │   ACCOUNTS      │    │   ACCOUNTS       │    │   ACCOUNTS       │
+│                 │    │                 │    │                  │    │                  │
+│ • Salary Exp    │    │ • PF Payable    │    │ • Bank Account   │    │ • Retained       │
+│ • Overtime Exp  │    │ • Tax Payable   │    │ • Cash Account   │    │   Earnings       │
+│ • Bonus Exp     │    │ • Loan Payable  │    │ • Petty Cash     │    │ • Owner Equity   │
+│ • Benefits Exp  │    │ • Gratuity Pay  │    │ • Investments    │    │ • Capital        │
+└─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                       │                       │
+         │                       │                       │                       │
+         ▼                       ▼                       ▼                       ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           LEDGER VIEWS                                         │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│ EMPLOYEE LEDGER │    │ ACCOUNT LEDGER │    │ PAYROLL LEDGER  │    │ JOURNAL LEDGER  │
+│                 │    │                │    │                 │    │                 │
+│ • Employee ID: 9│    │ • Account ID   │    │ • Payroll Run   │    │ • Journal Entry │
+│ • Transaction   │    │ • All Trans    │    │ • Employee Line │    │ • Debit/Credit  │
+│   History       │    │ • Running Bal  │    │ • Net Pay       │    │ • Account Link  │
+│ • Running Bal   │    │ • Date Range   │    │ • Status        │    │ • Source        │
+│ • Current Bal   │    │ • Balance      │    │ • Period        │    │ • Memo          │
+└─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           BANGLADESH PAYROLL STRUCTURE                         │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   EARNINGS      │    │   DEDUCTIONS    │    │ EMPLOYER CONTRIB │   │   NET PAY       │
+│                 │    │                 │    │                 │    │                 │
+│ • Full Salary   │    │ • Absent Deduct │    │ • PF Employer   │    │ • Final Amount  │
+│ • Overtime Pay  │    │ • Loan Advance  │    │ • Gratuity      │    │ • To Employee   │
+│ • Harvest Inc   │    │ • PF Employee   │    │ • Insurance     │    │ • Bank Transfer  │
+│ • Festival Bonus│    │ • Tax (PAYE)    │    │ • Welfare Fund  │    │ • Payment Method │
+│ • Performance   │    │ • Other Deduct  │    │ • Benefits      │    │ • Payment Date   │
+└─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           AUTOMATIC JOURNAL ENTRIES                            │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+When PayrollRun Status = 'approved' or 'paid':
+
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   DEBIT SIDE    │    │   CREDIT SIDE   │    │   ACCOUNT TYPE  │    │   AMOUNT        │
+│                 │    │                 │    │                 │    │                 │
+│ • Salary Exp    │    │ • Bank Account  │    │ • Expense        │    │ • 20,000.00     │
+│ • Overtime Exp  │    │ • PF Payable    │    │ • Asset          │    │ • 2,884.62      │
+│ • Bonus Exp     │    │ • Tax Payable   │    │ • Liability      │    │ • 1,200.00      │
+│ • Benefits Exp  │    │ • Loan Payable  │    │ • Liability      │    │ • 2,000.00      │
+│ • Employer Exp  │    │ • Gratuity Pay  │    │ • Liability      │    │ • 1,000.00      │
+└─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           DATA FLOW SEQUENCE                                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+1. CREATE EMPLOYEE
+   ├── Employee ID: 9
+   ├── Name: Abdul Karim
+   ├── Position: Pond Worker
+   ├── Salary: 20,000
+   └── Status: Active
+
+2. CREATE PAYROLL RUN
+   ├── Payroll Run ID: 11
+   ├── Period: 2025-01-01 to 2025-01-31
+   ├── Pay Date: 2025-01-15
+   └── Status: Draft → Approved
+
+3. CREATE PAYROLL LINE
+   ├── Employee: 9 (FK to Employee)
+   ├── Full Salary: 20,000.00
+   ├── Overtime Pay: 2,884.62
+   ├── Harvest Incentive: 1,200.00
+   ├── Absent Deduction: 666.67
+   ├── Loan Advance: 1,000.00
+   ├── PF Employee: 2,000.00
+   └── Net Pay: 20,417.95
+
+4. AUTO-CREATE JOURNAL ENTRY
+   ├── Source: PAYROLL
+   ├── Source ID: 11
+   ├── Date: 2025-01-15
+   ├── Memo: Payroll Run 11
+   └── Lines: Multiple debit/credit entries
+
+5. UPDATE ACCOUNT BALANCES
+   ├── Salary Expense: +20,000.00 (Debit)
+   ├── Overtime Expense: +2,884.62 (Debit)
+   ├── Harvest Incentive: +1,200.00 (Debit)
+   ├── Bank Account: -20,417.95 (Credit)
+   ├── PF Payable: +2,000.00 (Credit)
+   ├── Loan Payable: +1,000.00 (Credit)
+   └── Absent Deduction: +666.67 (Credit)
+
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           USER INTERFACE CONNECTIONS                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+EMPLOYEE PAGE                    PAYROLL PAGE                    CHART OF ACCOUNTS PAGE
+├── Employee List               ├── Payroll Run List            ├── Account List
+├── View Ledger Button         ├── Expandable Rows             ├── View Ledger Button
+├── Employee Details           ├── Employee Selection           ├── Account Details
+├── Transaction History        ├── Bangladesh Payroll Form     ├── Transaction History
+├── Running Balance           ├── Chart of Accounts Dropdown  ├── Running Balance
+└── Current Balance           ├── Auto-calculation             └── Account Balance
+                              └── Journal Entry Creation
+
+JOURNAL ENTRIES PAGE
+├── Journal Entry List
+├── Payroll Source Entries
+├── Manual Entries
+├── Account Links
+└── Transaction Details
+
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           KEY BENEFITS                                         │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+✅ AUTOMATIC ACCOUNTING     ✅ COMPLETE AUDIT TRAIL     ✅ REAL-TIME BALANCES
+✅ EMPLOYEE TRANSPARENCY    ✅ FINANCIAL REPORTING     ✅ COMPLIANCE
+✅ BANGLADESH STRUCTURE    ✅ USER-FRIENDLY UI        ✅ INTEGRATED SYSTEM
+
+This integrated system ensures that every payroll transaction is properly recorded
+in the accounting system, providing complete financial transparency and compliance.

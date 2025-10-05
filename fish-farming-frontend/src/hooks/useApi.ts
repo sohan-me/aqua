@@ -5,8 +5,23 @@ import { toast } from 'sonner';
 // Simple useApi hook for basic API operations
 export function useApi() {
   const get = async (url: string) => {
-    const response = await api.get(url);
-    return response.data;
+    try {
+      const response = await api.get(url);
+      return response.data;
+    } catch (error: any) {
+      const errorDetails = {
+        url,
+        message: error?.message || 'Unknown error',
+        status: error?.response?.status,
+        statusText: error?.response?.statusText,
+        responseData: error?.response?.data,
+        requestUrl: error?.config?.url,
+        requestMethod: error?.config?.method,
+      };
+      
+      console.error('GET Error Details:', errorDetails);
+      throw error;
+    }
   };
 
   const post = async (url: string, data: any) => {
@@ -16,20 +31,24 @@ export function useApi() {
       console.log('POST Response:', response.data);
       return response.data;
     } catch (error: any) {
-      console.error('POST Error Details:', {
+      // Create a clean error object without circular references
+      const errorDetails = {
         url,
         data,
-        error: error,
-        errorMessage: error.message,
-        errorStack: error.stack,
-        response: error.response,
-        responseStatus: error.response?.status,
-        responseStatusText: error.response?.statusText,
-        responseData: error.response?.data,
-        responseHeaders: error.response?.headers,
-        request: error.request,
-        config: error.config
-      });
+        message: error?.message || 'Unknown error',
+        status: error?.response?.status,
+        statusText: error?.response?.statusText,
+        responseData: error?.response?.data,
+        requestUrl: error?.config?.url,
+        requestMethod: error?.config?.method,
+        stack: error?.stack
+      };
+      
+      console.error('POST Error Details:', errorDetails);
+      
+      // Also log the raw error for debugging (but safely)
+      console.error('Raw error object:', error);
+      
       throw error;
     }
   };
@@ -1218,6 +1237,166 @@ export function useDeleteInventoryTransaction() {
   return useApiMutation(
     (id: number) => apiService.deleteInventoryTransaction(id),
     { invalidateQueries: [['inventory-transactions']] }
+  );
+}
+
+// Chart of Accounts hooks
+export function useChartAccounts() {
+  return useApiQuery(['chart-accounts'], () => apiService.getChartAccounts());
+}
+
+export function useChartAccount(id: number) {
+  return useApiQuery(['chart-accounts', id.toString()], () => apiService.getChartAccountById(id), {
+    enabled: !!id,
+  });
+}
+
+export function useCreateChartAccount() {
+  return useApiMutation(
+    (data: any) => apiService.createChartAccount(data),
+    { invalidateQueries: [['chart-accounts']] }
+  );
+}
+
+export function useUpdateChartAccount() {
+  return useApiMutation(
+    ({ id, data }: { id: number; data: any }) => apiService.updateChartAccount(id, data),
+    { invalidateQueries: [['chart-accounts']] }
+  );
+}
+
+export function useDeleteChartAccount() {
+  return useApiMutation(
+    (id: number) => apiService.deleteChartAccount(id),
+    { invalidateQueries: [['chart-accounts']] }
+  );
+}
+
+// Journal Entries hooks
+export function useJournalEntries(params?: PaginationParams) {
+  return useApiQuery(['journal-entries', JSON.stringify(params || {})], () => apiService.getJournalEntries(params));
+}
+
+export function useJournalEntry(id: number) {
+  return useApiQuery(['journal-entries', id.toString()], () => apiService.getJournalEntryById(id), {
+    enabled: !!id,
+  });
+}
+
+export function useCreateJournalEntry() {
+  return useApiMutation(
+    (data: any) => apiService.createJournalEntry(data),
+    { invalidateQueries: [['journal-entries'], ['chart-accounts']] }
+  );
+}
+
+export function useUpdateJournalEntry() {
+  return useApiMutation(
+    ({ id, data }: { id: number; data: any }) => apiService.updateJournalEntry(id, data),
+    { invalidateQueries: [['journal-entries'], ['chart-accounts']] }
+  );
+}
+
+export function useDeleteJournalEntry() {
+  return useApiMutation(
+    (id: number) => apiService.deleteJournalEntry(id),
+    { invalidateQueries: [['journal-entries'], ['chart-accounts']] }
+  );
+}
+
+// Bill Payments hooks
+export function useBillPayments(params?: PaginationParams) {
+  return useApiQuery(['bill-payments', JSON.stringify(params || {})], () => apiService.getBillPayments(params));
+}
+
+export function useBillPayment(id: number) {
+  return useApiQuery(['bill-payments', id.toString()], () => apiService.getBillPaymentById(id), {
+    enabled: !!id,
+  });
+}
+
+export function useCreateBillPayment() {
+  return useApiMutation(
+    (data: any) => apiService.createBillPayment(data),
+    { invalidateQueries: [['bill-payments'], ['bills'], ['chart-accounts']] }
+  );
+}
+
+export function useUpdateBillPayment() {
+  return useApiMutation(
+    ({ id, data }: { id: number; data: any }) => apiService.updateBillPayment(id, data),
+    { invalidateQueries: [['bill-payments'], ['bills'], ['chart-accounts']] }
+  );
+}
+
+export function useDeleteBillPayment() {
+  return useApiMutation(
+    (id: number) => apiService.deleteBillPayment(id),
+    { invalidateQueries: [['bill-payments'], ['bills'], ['chart-accounts']] }
+  );
+}
+
+// Customer Payments hooks
+export function useCustomerPayments(params?: PaginationParams) {
+  return useApiQuery(['customer-payments', JSON.stringify(params || {})], () => apiService.getCustomerPayments(params));
+}
+
+export function useCustomerPayment(id: number) {
+  return useApiQuery(['customer-payments', id.toString()], () => apiService.getCustomerPaymentById(id), {
+    enabled: !!id,
+  });
+}
+
+export function useCreateCustomerPayment() {
+  return useApiMutation(
+    (data: any) => apiService.createCustomerPayment(data),
+    { invalidateQueries: [['customer-payments'], ['invoices'], ['chart-accounts']] }
+  );
+}
+
+export function useUpdateCustomerPayment() {
+  return useApiMutation(
+    ({ id, data }: { id: number; data: any }) => apiService.updateCustomerPayment(id, data),
+    { invalidateQueries: [['customer-payments'], ['invoices'], ['chart-accounts']] }
+  );
+}
+
+export function useDeleteCustomerPayment() {
+  return useApiMutation(
+    (id: number) => apiService.deleteCustomerPayment(id),
+    { invalidateQueries: [['customer-payments'], ['invoices'], ['chart-accounts']] }
+  );
+}
+
+// Deposits hooks
+export function useDeposits(params?: PaginationParams) {
+  return useApiQuery(['deposits', JSON.stringify(params || {})], () => apiService.getDeposits(params));
+}
+
+export function useDeposit(id: number) {
+  return useApiQuery(['deposits', id.toString()], () => apiService.getDepositById(id), {
+    enabled: !!id,
+  });
+}
+
+export function useCreateDeposit() {
+  return useApiMutation(
+    (data: any) => apiService.createDeposit(data),
+    { invalidateQueries: [['deposits'], ['chart-accounts']] }
+  );
+}
+
+export function useUpdateDeposit() {
+  return useApiMutation(
+    ({ id, data }: { id: number; data: any }) => apiService.updateDeposit(id, data),
+    { invalidateQueries: [['deposits'], ['chart-accounts']] }
+  );
+}
+
+export function useDeleteDeposit() {
+  return useApiMutation(
+    (id: number) => apiService.deleteDeposit(id),
+    { invalidateQueries: [['deposits'], ['chart-accounts']] }
   );
 }
 

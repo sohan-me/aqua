@@ -3,7 +3,7 @@
 import { useDailyLogs, usePonds, useDeleteDailyLog } from '@/hooks/useApi';
 import { DailyLog, Pond } from '@/lib/api';
 import { formatDate, extractApiData } from '@/lib/utils';
-import { Plus, Edit, Trash2, Eye, Calendar } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, Calendar, Cloud, Thermometer } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 
@@ -79,86 +79,126 @@ export default function DailyLogsPage() {
           </div>
         </div>
       ) : (
-        <div className="bg-white shadow-sm border border-gray-200 rounded-lg overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Date
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Pond
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Weather
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Water Temp
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    pH
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    DO
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {dailyLogs.map((log) => (
-                  <tr key={log.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {formatDate(log.date)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {log.pond_name}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {log.weather || 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {log.water_temp_c ? `${log.water_temp_c}°C` : 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {log.ph || 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {log.dissolved_oxygen ? `${log.dissolved_oxygen} mg/L` : 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex space-x-2">
+        <div className="grid gap-6">
+          {dailyLogs.map((log) => {
+            // Calculate average temperature
+            const temps = [
+              log.east_water_temp_c,
+              log.west_water_temp_c,
+              log.north_water_temp_c,
+              log.south_water_temp_c
+            ].filter(temp => temp !== null && temp !== undefined);
+            
+            const avgTemp = temps.length > 0 
+              ? (temps.reduce((sum, temp) => sum + parseFloat(temp), 0) / temps.length).toFixed(1)
+              : null;
+
+            return (
+              <div key={log.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center space-x-4 mb-4">
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900">{log.pond_name}</h3>
+                        <p className="text-sm text-gray-500">{formatDate(log.date)}</p>
+                      </div>
+                      {log.weather && (
+                        <div className="flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                          <Cloud className="h-3 w-3 mr-1" />
+                          {log.weather}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Water Quality Summary */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                      <div className="bg-red-50 rounded-lg p-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-xs font-medium text-red-700 uppercase tracking-wide">East</p>
+                            <p className="text-lg font-semibold text-red-900">
+                              {log.east_water_temp_c ? `${log.east_water_temp_c}°C` : 'N/A'}
+                            </p>
+                          </div>
+                          <div className="w-2 h-2 bg-red-400 rounded-full"></div>
+                        </div>
+                      </div>
+
+                      <div className="bg-orange-50 rounded-lg p-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-xs font-medium text-orange-700 uppercase tracking-wide">West</p>
+                            <p className="text-lg font-semibold text-orange-900">
+                              {log.west_water_temp_c ? `${log.west_water_temp_c}°C` : 'N/A'}
+                            </p>
+                          </div>
+                          <div className="w-2 h-2 bg-orange-400 rounded-full"></div>
+                        </div>
+                      </div>
+
+                      <div className="bg-green-50 rounded-lg p-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-xs font-medium text-green-700 uppercase tracking-wide">North</p>
+                            <p className="text-lg font-semibold text-green-900">
+                              {log.north_water_temp_c ? `${log.north_water_temp_c}°C` : 'N/A'}
+                            </p>
+                          </div>
+                          <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                        </div>
+                      </div>
+
+                      <div className="bg-purple-50 rounded-lg p-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-xs font-medium text-purple-700 uppercase tracking-wide">South</p>
+                            <p className="text-lg font-semibold text-purple-900">
+                              {log.south_water_temp_c ? `${log.south_water_temp_c}°C` : 'N/A'}
+                            </p>
+                          </div>
+                          <div className="w-2 h-2 bg-purple-400 rounded-full"></div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {avgTemp && (
+                      <div className="flex items-center text-sm text-gray-600 mb-4">
+                        <Thermometer className="h-4 w-4 mr-1" />
+                        <span>Average Temperature: <span className="font-semibold">{avgTemp}°C</span></span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center space-x-2 ml-4">
                         <Link
                           href={`/daily-logs/${log.id}`}
-                          className="text-blue-600 hover:text-blue-900"
+                      className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                           title="View Details"
                         >
-                          <Eye className="h-4 w-4" />
+                      <Eye className="h-4 w-4 mr-1" />
+                      View
                         </Link>
                         <Link
                           href={`/daily-logs/${log.id}/edit`}
-                          className="text-green-600 hover:text-green-900"
+                      className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                           title="Edit"
                         >
-                          <Edit className="h-4 w-4" />
+                      <Edit className="h-4 w-4 mr-1" />
+                      Edit
                         </Link>
                         <button
                           onClick={() => handleDelete(log.id, log.pond_name, log.date)}
-                          className="text-red-600 hover:text-red-900"
+                      className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
                           title="Delete"
                           disabled={deleteDailyLog.isPending}
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                </div>
           </div>
+            );
+          })}
         </div>
       )}
     </div>

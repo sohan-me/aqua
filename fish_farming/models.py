@@ -463,6 +463,7 @@ class JournalEntry(models.Model):
         ('CHECK', 'Check'),
         ('INVENTORY', 'Inventory'),
         ('STOCKING_FEED_MED', 'Stocking/Feed/Medicine'),
+        ('PAYROLL', 'Payroll'),
         ('MANUAL', 'Manual Entry'),
     ]
     
@@ -1475,6 +1476,11 @@ class Employee(models.Model):
         ('inactive', 'Inactive'),
         ('terminated', 'Terminated'),
     ], default='active')
+    # Additional fields for frontend compatibility
+    employee_number = models.CharField(max_length=50, blank=True)
+    position = models.CharField(max_length=100, blank=True)
+    salary = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    # Original fields
     salary_base = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     bonus_rules = models.TextField(blank=True)
     benefits_profile = models.TextField(blank=True)
@@ -1521,7 +1527,6 @@ class PayrollRun(models.Model):
     memo = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=[
         ('draft', 'Draft'),
-        ('approved', 'Approved'),
         ('paid', 'Paid'),
     ], default='draft')
     total_gross = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -1539,14 +1544,39 @@ class PayrollRun(models.Model):
 
 
 class PayrollLine(models.Model):
-    """Payroll line items"""
+    """Payroll line items - Bangladesh Private Company Structure"""
     payroll_line_id = models.AutoField(primary_key=True)
     payroll_run = models.ForeignKey(PayrollRun, on_delete=models.CASCADE, related_name='lines')
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='payroll_lines')
-    gross_salary = models.DecimalField(max_digits=12, decimal_places=2)
-    benefits = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    deductions = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    net_pay = models.DecimalField(max_digits=12, decimal_places=2)
+    
+    # Core Salary (Full Salary - Bangladesh Private Company)
+    full_salary = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text="Fixed monthly agreed salary")
+    
+    # Additions (Earnings)
+    overtime_hours = models.DecimalField(max_digits=8, decimal_places=2, default=0, help_text="Overtime hours worked")
+    overtime_pay = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text="Overtime pay (Gross ÷ 208 × 2 × OT hours)")
+    harvest_incentive = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text="Harvest incentive (Kg × Rate)")
+    festival_bonus = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text="Festival bonus (Eid bonuses)")
+    performance_bonus = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text="Performance/Attendance bonus")
+    
+    # Deductions
+    absent_days = models.DecimalField(max_digits=5, decimal_places=2, default=0, help_text="Days absent")
+    absent_deduction = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text="Absent deduction (Gross ÷ 30 × absent days)")
+    loan_advance = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text="Loan/Advance repayment")
+    pf_employee = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text="Provident Fund (Employee contribution)")
+    tax_paye = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text="Tax (PAYE) as per NBR slab")
+    
+    # Employer Contributions (for reporting)
+    pf_employer = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text="Provident Fund (Employer contribution)")
+    gratuity = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text="Gratuity/Service benefit")
+    insurance_welfare = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text="Insurance/Welfare fund")
+    
+    # Calculated Fields
+    total_earnings = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text="Total earnings (Full salary + additions)")
+    total_deductions = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text="Total deductions")
+    net_pay = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text="Net pay to employee")
+    
+    # Payment Details
     payment_account = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, blank=True, related_name='payroll_lines')
     check_obj = models.ForeignKey(Check, on_delete=models.SET_NULL, null=True, blank=True, related_name='payroll_lines')
     notes = models.TextField(blank=True)
@@ -1560,8 +1590,38 @@ class PayrollLine(models.Model):
         return f"{self.employee.name} - {self.net_pay} ({self.payroll_run.pay_date})"
     
     def save(self, *args, **kwargs):
-        # Auto-calculate net pay
-        self.net_pay = self.gross_salary + self.benefits - self.deductions
+        # Calculate Bangladesh Private Company Payroll Structure
+        
+        # Calculate overtime pay (Gross ÷ 208 × 2 × OT hours)
+        if self.overtime_hours > 0:
+            hourly_rate = self.full_salary / 208  # 208 hours per month
+            self.overtime_pay = hourly_rate * 2 * self.overtime_hours
+        
+        # Calculate absent deduction (Gross ÷ 30 × absent days)
+        if self.absent_days > 0:
+            daily_rate = self.full_salary / 30
+            self.absent_deduction = daily_rate * self.absent_days
+        
+        # Calculate total earnings
+        self.total_earnings = (
+            self.full_salary + 
+            self.overtime_pay + 
+            self.harvest_incentive + 
+            self.festival_bonus + 
+            self.performance_bonus
+        )
+        
+        # Calculate total deductions
+        self.total_deductions = (
+            self.absent_deduction + 
+            self.loan_advance + 
+            self.pf_employee + 
+            self.tax_paye
+        )
+        
+        # Calculate net pay
+        self.net_pay = self.total_earnings - self.total_deductions
+        
         super().save(*args, **kwargs)
 
 
@@ -1693,11 +1753,43 @@ class DailyLog(models.Model):
     pond = models.ForeignKey(Pond, on_delete=models.CASCADE, related_name='daily_logs')
     date = models.DateField()
     weather = models.CharField(max_length=100, blank=True)
+    
+    # Legacy single water quality measurements (kept for backward compatibility)
     water_temp_c = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     ph = models.DecimalField(max_digits=3, decimal_places=1, null=True, blank=True)
     dissolved_oxygen = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     ammonia = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     nitrite = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    
+    # New 4-direction water quality measurements
+    # East side measurements
+    east_water_temp_c = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name="East Water Temperature (°C)")
+    east_ph = models.DecimalField(max_digits=3, decimal_places=1, null=True, blank=True, verbose_name="East pH")
+    east_dissolved_oxygen = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name="East Dissolved Oxygen (mg/L)")
+    east_ammonia = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name="East Ammonia (mg/L)")
+    east_nitrite = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name="East Nitrite (mg/L)")
+    
+    # West side measurements
+    west_water_temp_c = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name="West Water Temperature (°C)")
+    west_ph = models.DecimalField(max_digits=3, decimal_places=1, null=True, blank=True, verbose_name="West pH")
+    west_dissolved_oxygen = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name="West Dissolved Oxygen (mg/L)")
+    west_ammonia = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name="West Ammonia (mg/L)")
+    west_nitrite = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name="West Nitrite (mg/L)")
+    
+    # North side measurements
+    north_water_temp_c = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name="North Water Temperature (°C)")
+    north_ph = models.DecimalField(max_digits=3, decimal_places=1, null=True, blank=True, verbose_name="North pH")
+    north_dissolved_oxygen = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name="North Dissolved Oxygen (mg/L)")
+    north_ammonia = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name="North Ammonia (mg/L)")
+    north_nitrite = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name="North Nitrite (mg/L)")
+    
+    # South side measurements
+    south_water_temp_c = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name="South Water Temperature (°C)")
+    south_ph = models.DecimalField(max_digits=3, decimal_places=1, null=True, blank=True, verbose_name="South pH")
+    south_dissolved_oxygen = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name="South Dissolved Oxygen (mg/L)")
+    south_ammonia = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name="South Ammonia (mg/L)")
+    south_nitrite = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name="South Nitrite (mg/L)")
+    
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     
@@ -2553,7 +2645,7 @@ class MedicalDiagnostic(models.Model):
     pond = models.ForeignKey(Pond, on_delete=models.CASCADE, related_name='medical_diagnostics')
     
     # Disease information
-    disease_name = models.CharField(max_length=200, help_text="Possible Disease")
+    disease_name = models.TextField(help_text="Possible Disease")
     confidence_percentage = models.DecimalField(
         max_digits=5, 
         decimal_places=2, 

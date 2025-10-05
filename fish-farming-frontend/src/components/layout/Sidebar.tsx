@@ -83,6 +83,7 @@ const navigation = [
     icon: DollarSign,
     submenu: [
       { name: 'Chart of Accounts', href: '/chart-accounts', icon: BookOpen },
+      { name: 'Journal Entries', href: '/journal-entries', icon: FileText },
       { name: 'Fund Transfer', href: '/chart-accounts/transfer', icon: Calculator },
       { name: 'Items & Services', href: '/items', icon: Package },
       { name: 'Bills (AP)', href: '/bills', icon: Receipt },
@@ -113,8 +114,6 @@ const navigation = [
       { name: 'Daily Logs', href: '/daily-logs', icon: Calendar },
       { name: 'Fish Sampling', href: '/fish-sampling', icon: Scale },
       { name: 'Mortality', href: '/mortality', icon: TrendingDown },
-      // { name: 'Harvest', href: '/harvest', icon: TrendingUp },
-      { name: 'Water Quality', href: '/water-quality', icon: Activity },
     ]
   },
 

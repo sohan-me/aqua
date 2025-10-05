@@ -123,16 +123,32 @@ export default function ChartAccountsPage() {
       
       const entries: LedgerEntry[] = [];
       
+      // Fetch all journal lines for this account (main source of transactions)
+      const journalLinesResponse = await get(`/journal-lines/?account=${account.account_id}`);
+      const journalLines = journalLinesResponse.results || journalLinesResponse;
+      
+      // Convert journal lines to ledger entries
+      journalLines.forEach((line: any) => {
+        entries.push({
+          id: `jl-${line.jl_id}`,
+          date: line.entry_date,
+          description: line.memo || `${line.entry_source} - ${line.account_name}`,
+          reference: `JE-${line.journal_entry_id}`,
+          debit: parseFloat(line.debit || '0'),
+          credit: parseFloat(line.credit || '0'),
+          balance: 0, // Will be calculated below
+          type: line.entry_source?.toLowerCase() || 'other'
+        });
+      });
+      
       if (account.account_type === 'Bank') {
-        // Fetch deposits for this bank account
-        const [depositsResponse, billPaymentsResponse, transfersResponse] = await Promise.all([
+        // Also fetch deposits and bill payments for additional context
+        const [depositsResponse, billPaymentsResponse] = await Promise.all([
           get('/deposits/'),
           get('/bill-payments/'),
-          get(`/journal-lines/?account=${account.account_id}&source=TRANSFER`),
         ]);
         const deposits = depositsResponse.results || depositsResponse;
         const billPayments = billPaymentsResponse.results || billPaymentsResponse;
-        const transfers = transfersResponse.results || transfersResponse;
         
         deposits
           .filter((deposit: any) => deposit.bank_account === account.account_id)
@@ -165,20 +181,7 @@ export default function ChartAccountsPage() {
             });
           });
 
-        // Transfers affecting this account
-        transfers.forEach((line: any) => {
-          const isDebit = parseFloat(line.debit || '0') > 0;
-          entries.push({
-            id: `transfer-${line.journal_entry_id}-${line.jl_id || Math.random()}`,
-            date: line.entry_date,
-            description: isDebit ? 'Transfer In' : 'Transfer Out',
-            reference: `TR-${line.journal_entry_id}`,
-            debit: isDebit ? parseFloat(line.debit) : 0,
-            credit: !isDebit ? parseFloat(line.credit) : 0,
-            balance: isDebit ? parseFloat(line.debit) : -parseFloat(line.credit),
-            type: 'transfer',
-          });
-        });
+        // Note: Transfers are already included in journal lines above
       } else if (account.account_type === 'Accounts Receivable') {
         // Fetch invoices for AR
         const invoicesResponse = await get('/invoices/');
@@ -217,7 +220,17 @@ export default function ChartAccountsPage() {
         });
       }
       
-      // Sort entries by date (newest first)
+      // Sort entries by date (oldest first for proper balance calculation)
+      entries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      
+      // Calculate running balance
+      let runningBalance = 0;
+      entries.forEach(entry => {
+        runningBalance += entry.debit - entry.credit;
+        entry.balance = runningBalance;
+      });
+      
+      // Sort back to newest first for display
       entries.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       
       setLedgerEntries(entries);
@@ -603,7 +616,10 @@ export default function ChartAccountsPage() {
                   <div className="text-right">
                     <p className="text-sm text-gray-600">Current Balance</p>
                     <p className="text-2xl font-bold text-green-600">
-                      {accountBalances[selectedAccount?.account_id || 0]?.formatted_balance || '$0.00'}
+                      {ledgerEntries.length > 0 ? 
+                        `$${ledgerEntries[0].balance.toFixed(2)}` : 
+                        '$0.00'
+                      }
                     </p>
                   </div>
                 </div>

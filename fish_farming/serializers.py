@@ -255,10 +255,39 @@ class ItemPriceSerializer(serializers.ModelSerializer):
 class JournalEntrySerializer(serializers.ModelSerializer):
     user_username = serializers.CharField(source='user.username', read_only=True)
     
+    # Frontend compatibility fields
+    journal_entry_id = serializers.IntegerField(source='je_id', read_only=True)
+    entry_date = serializers.DateField(source='date', read_only=True)
+    reference = serializers.SerializerMethodField()
+    total_debit = serializers.SerializerMethodField()
+    total_credit = serializers.SerializerMethodField()
+    status = serializers.SerializerMethodField()
+    
     class Meta:
         model = JournalEntry
         fields = '__all__'
         read_only_fields = ['je_id', 'user', 'created_at', 'updated_at']
+    
+    def get_reference(self, obj):
+        return f"JE-{obj.je_id}"
+    
+    def get_total_debit(self, obj):
+        try:
+            return sum(line.debit for line in obj.lines.all())
+        except:
+            return 0
+    
+    def get_total_credit(self, obj):
+        try:
+            return sum(line.credit for line in obj.lines.all())
+        except:
+            return 0
+    
+    def get_status(self, obj):
+        # Map source to status for frontend compatibility
+        if obj.source in ['PAYROLL', 'BILL_PAYMENT', 'CUST_PAYMENT']:
+            return 'posted'
+        return 'draft'
 
 
 class JournalLineSerializer(serializers.ModelSerializer):
@@ -737,10 +766,44 @@ class OtherPondEventLineSerializer(serializers.ModelSerializer):
 class EmployeeSerializer(serializers.ModelSerializer):
     user_username = serializers.CharField(source='user.username', read_only=True)
     
+    # Frontend compatibility fields
+    first_name = serializers.CharField(write_only=True, required=False)
+    last_name = serializers.CharField(write_only=True, required=False)
+    hire_date = serializers.DateField(source='join_date', required=False)
+    
     class Meta:
         model = Employee
         fields = '__all__'
         read_only_fields = ['employee_id', 'user', 'created_at', 'updated_at']
+        extra_kwargs = {
+            'name': {'required': False},  # Make name optional since we'll construct it from first_name + last_name
+            'join_date': {'required': False},  # Make join_date optional since we'll map it from hire_date
+        }
+    
+    def create(self, validated_data):
+        # Handle name field mapping
+        first_name = validated_data.pop('first_name', '')
+        last_name = validated_data.pop('last_name', '')
+        
+        if first_name or last_name:
+            validated_data['name'] = f"{first_name} {last_name}".strip()
+        elif 'name' not in validated_data:
+            raise serializers.ValidationError({"name": "This field is required."})
+        
+        return super().create(validated_data)
+    
+    def update(self, instance, validated_data):
+        # Handle name field mapping
+        first_name = validated_data.pop('first_name', None)
+        last_name = validated_data.pop('last_name', None)
+        
+        if first_name is not None or last_name is not None:
+            # If either first_name or last_name is provided, update the name
+            current_first = first_name if first_name is not None else ''
+            current_last = last_name if last_name is not None else ''
+            validated_data['name'] = f"{current_first} {current_last}".strip()
+        
+        return super().update(instance, validated_data)
 
 
 class EmployeeDocumentSerializer(serializers.ModelSerializer):
@@ -752,24 +815,63 @@ class EmployeeDocumentSerializer(serializers.ModelSerializer):
         read_only_fields = ['employee_document_id', 'created_at']
 
 
-class PayrollRunSerializer(serializers.ModelSerializer):
-    user_username = serializers.CharField(source='user.username', read_only=True)
-    
-    class Meta:
-        model = PayrollRun
-        fields = '__all__'
-        read_only_fields = ['payroll_run_id', 'user', 'created_at', 'updated_at']
-
-
 class PayrollLineSerializer(serializers.ModelSerializer):
     employee_name = serializers.CharField(source='employee.name', read_only=True)
     payment_account_name = serializers.CharField(source='payment_account.name', read_only=True)
     check_no = serializers.CharField(source='check.check_no', read_only=True)
     
+    # Bangladesh Payroll Structure - Calculated fields
+    total_earnings = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    total_deductions = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    net_pay = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    
     class Meta:
         model = PayrollLine
         fields = '__all__'
-        read_only_fields = ['payroll_line_id', 'net_pay', 'created_at']
+        read_only_fields = [
+            'payroll_line_id', 'total_earnings', 'total_deductions', 'net_pay', 
+            'overtime_pay', 'absent_deduction', 'created_at'
+        ]
+
+
+class PayrollRunSerializer(serializers.ModelSerializer):
+    user_username = serializers.CharField(source='user.username', read_only=True)
+    
+    # Frontend compatibility fields
+    pay_period_start = serializers.DateField(write_only=True, required=False, source='period_start')
+    pay_period_end = serializers.DateField(write_only=True, required=False, source='period_end')
+    run_date = serializers.DateField(write_only=True, required=False, source='pay_date')
+    
+    # Include payroll lines with employee details
+    lines = PayrollLineSerializer(many=True, read_only=True)
+    
+    # Override status field to allow 'processed' choice
+    status = serializers.ChoiceField(
+        choices=[('draft', 'Draft'), ('approved', 'Approved'), ('paid', 'Paid'), ('processed', 'Processed')],
+        default='draft'
+    )
+    
+    class Meta:
+        model = PayrollRun
+        fields = '__all__'
+        read_only_fields = ['payroll_run_id', 'user', 'created_at', 'updated_at']
+        extra_kwargs = {
+            'period_start': {'required': False},  # Make optional since we'll map from pay_period_start
+            'period_end': {'required': False},    # Make optional since we'll map from pay_period_end
+            'pay_date': {'required': False},      # Make optional since we'll map from run_date
+        }
+    
+    def validate_status(self, value):
+        # Map 'processed' status to 'approved' for backend compatibility
+        if value == 'processed':
+            return 'approved'
+        return value
+    
+    def create(self, validated_data):
+        return super().create(validated_data)
+    
+    def update(self, instance, validated_data):
+        return super().update(instance, validated_data)
 
 
 class SpeciesSerializer(serializers.ModelSerializer):

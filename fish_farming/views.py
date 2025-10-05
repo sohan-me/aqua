@@ -3994,7 +3994,342 @@ class PayrollRunViewSet(viewsets.ModelViewSet):
         return PayrollRun.objects.filter(user=self.request.user)
     
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        payroll_run = serializer.save(user=self.request.user)
+        # Only create journal entries if status is paid on creation
+        if payroll_run.status == 'paid':
+            self._create_payroll_journal_entries(payroll_run)
+    
+    def perform_update(self, serializer):
+        print("DEBUG: perform_update called")
+        # Get the original status before update
+        original_status = self.get_object().status
+        payroll_run = serializer.save()
+        
+        # Handle status transitions
+        print(f"DEBUG: Status transition from {original_status} to {payroll_run.status}")
+        if original_status == 'draft' and payroll_run.status == 'paid':
+            # Draft -> Paid: Create journal entries for chart of accounts
+            print("DEBUG: Draft -> Paid transition")
+            self._create_payroll_journal_entries(payroll_run)
+    
+    def _create_payroll_journal_entries(self, payroll_run):
+        """Create journal entries for payroll run (paid status - affects chart of accounts)"""
+        from .models import JournalEntry, JournalLine
+        from decimal import Decimal
+        
+        # Only create journal entries for paid payroll
+        if payroll_run.status != 'paid':
+            print(f"DEBUG: Not creating journal entries for status: {payroll_run.status}")
+            return
+        
+        # Check if journal entry already exists for this payroll run
+        existing_je = JournalEntry.objects.filter(
+            source='PAYROLL',
+            source_id=payroll_run.payroll_run_id
+        ).first()
+        
+        if existing_je:
+            # Journal entry already exists, don't create duplicate
+            return
+        
+        # Create journal entry
+        je = JournalEntry.objects.create(
+            user=payroll_run.user,
+            date=payroll_run.pay_date,
+            memo=f"Payroll Payment - Payroll Run {payroll_run.payroll_run_id} - {payroll_run.period_start} to {payroll_run.period_end}",
+            source='PAYROLL',
+            source_id=payroll_run.payroll_run_id,
+        )
+        
+        # Get or create payroll expense account
+        payroll_expense_account = self._get_or_create_payroll_expense_account(payroll_run.user)
+        
+        # Note: Employee payable clearing is handled in the expense section below
+        
+        # STEP 2: Then create all the expense and liability entries
+        for line in payroll_run.lines.all():
+            if line.employee:
+                employee_expense_account = self._get_or_create_employee_expense_account(
+                    payroll_run.user, line.employee
+                )
+                
+                # Debit: Employee Expense (full salary)
+                JournalLine.objects.create(
+                    journal_entry=je,
+                    account=employee_expense_account,
+                    debit=line.full_salary,
+                    credit=Decimal('0.00'),
+                    memo=f"Salary - {line.employee.name}"
+                )
+                
+                # Debit: Overtime Pay
+                if line.overtime_pay > 0:
+                    overtime_account = self._get_or_create_overtime_account(payroll_run.user)
+                    JournalLine.objects.create(
+                        journal_entry=je,
+                        account=overtime_account,
+                        debit=line.overtime_pay,
+                        credit=Decimal('0.00'),
+                        memo=f"Overtime Pay - {line.employee.name}"
+                    )
+                
+                # Debit: Harvest Incentive
+                if line.harvest_incentive > 0:
+                    harvest_incentive_account = self._get_or_create_harvest_incentive_account(payroll_run.user)
+                    JournalLine.objects.create(
+                        journal_entry=je,
+                        account=harvest_incentive_account,
+                        debit=line.harvest_incentive,
+                        credit=Decimal('0.00'),
+                        memo=f"Harvest Incentive - {line.employee.name}"
+                    )
+                
+                # Debit: Festival Bonus
+                if line.festival_bonus > 0:
+                    festival_bonus_account = self._get_or_create_festival_bonus_account(payroll_run.user)
+                    JournalLine.objects.create(
+                        journal_entry=je,
+                        account=festival_bonus_account,
+                        debit=line.festival_bonus,
+                        credit=Decimal('0.00'),
+                        memo=f"Festival Bonus - {line.employee.name}"
+                    )
+                
+                # Debit: Performance Bonus
+                if line.performance_bonus > 0:
+                    performance_bonus_account = self._get_or_create_performance_bonus_account(payroll_run.user)
+                    JournalLine.objects.create(
+                        journal_entry=je,
+                        account=performance_bonus_account,
+                        debit=line.performance_bonus,
+                        credit=Decimal('0.00'),
+                        memo=f"Performance Bonus - {line.employee.name}"
+                    )
+                
+                # Credit: Loan/Advance Repayment (reduces employee liability)
+                if line.loan_advance > 0:
+                    loan_account = self._get_or_create_employee_loan_account(payroll_run.user)
+                    JournalLine.objects.create(
+                        journal_entry=je,
+                        account=loan_account,
+                        debit=Decimal('0.00'),
+                        credit=line.loan_advance,
+                        memo=f"Loan Repayment - {line.employee.name}"
+                    )
+
+                # Credit: PF Employee Contribution (increases PF liability)
+                if line.pf_employee > 0:
+                    pf_employee_liability_account = self._get_or_create_pf_employee_liability_account(payroll_run.user)
+                    JournalLine.objects.create(
+                        journal_entry=je,
+                        account=pf_employee_liability_account,
+                        debit=Decimal('0.00'),
+                        credit=line.pf_employee,
+                        memo=f"PF Employee Contribution - {line.employee.name}"
+                    )
+
+                # Credit: Tax (PAYE) (increases Tax Payable liability)
+                if line.tax_paye > 0:
+                    tax_liability_account = self._get_or_create_tax_liability_account(payroll_run.user)
+                    JournalLine.objects.create(
+                        journal_entry=je,
+                        account=tax_liability_account,
+                        debit=Decimal('0.00'),
+                        credit=line.tax_paye,
+                        memo=f"Tax (PAYE) - {line.employee.name}"
+                    )
+
+                # Credit: Absent Deduction (increases Absent Deduction liability)
+                if line.absent_deduction > 0:
+                    absent_deduction_account = self._get_or_create_absent_deduction_account(payroll_run.user)
+                    JournalLine.objects.create(
+                        journal_entry=je,
+                        account=absent_deduction_account,
+                        debit=Decimal('0.00'),
+                        credit=line.absent_deduction,
+                        memo=f"Absent Deduction - {line.employee.name}"
+                    )
+        
+        # Credit: Bank Account (total net pay)
+        if payroll_run.lines.exists():
+            total_net = sum(line.net_pay for line in payroll_run.lines.all())
+            bank_account = self._get_bank_account(payroll_run.user)
+            if bank_account:
+                JournalLine.objects.create(
+                    journal_entry=je,
+                    account=bank_account,
+                    debit=Decimal('0.00'),
+                    credit=total_net,
+                    memo=f"Payroll payment - {payroll_run.pay_date}"
+                )
+    
+    def _get_or_create_payroll_expense_account(self, user):
+        """Get or create main payroll expense account"""
+        from .models import Account
+        
+        account, created = Account.objects.get_or_create(
+            user=user,
+            name='Payroll Expenses',
+            account_type='Expense',
+            defaults={
+                'code': '6000',
+                'description': 'Employee salary and wage expenses'
+            }
+        )
+        return account
+    
+    def _get_or_create_employee_expense_account(self, user, employee):
+        """Get or create individual employee expense account"""
+        from .models import Account
+        
+        account_name = f"{employee.name} - Salary"
+        account, created = Account.objects.get_or_create(
+            user=user,
+            name=account_name,
+            account_type='Expense',
+            defaults={
+                'code': f'6001-{employee.employee_id}',
+                'description': f'Salary expense for {employee.name}'
+            }
+        )
+        return account
+    
+    def _get_or_create_employee_payable_account(self, user, employee):
+        """Get or create individual employee payable account"""
+        from .models import Account
+        
+        account_name = f"{employee.name} - Payable"
+        account, created = Account.objects.get_or_create(
+            user=user,
+            name=account_name,
+            account_type='Other Current Liability',
+            defaults={
+                'code': f'2100-{employee.employee_id}',
+                'description': f'Amount owed to {employee.name}'
+            }
+        )
+        return account
+    
+    def _get_or_create_benefits_account(self, user):
+        """Get or create employee benefits account"""
+        from .models import Account
+        
+        account, created = Account.objects.get_or_create(
+            user=user,
+            name='Employee Benefits',
+            account_type='Expense',
+            defaults={
+                'code': '6002',
+                'description': 'Employee benefits and allowances'
+            }
+        )
+        return account
+    
+    def _get_or_create_payroll_tax_account(self, user):
+        """Get or create payroll tax account"""
+        from .models import Account
+        
+        account, created = Account.objects.get_or_create(
+            user=user,
+            name='Payroll Taxes',
+            account_type='Expense',
+            defaults={
+                'code': '6003',
+                'description': 'Payroll tax expenses'
+            }
+        )
+        return account
+    
+    def _get_or_create_overtime_account(self, user):
+        """Get or create overtime expense account"""
+        from .models import Account
+        account, created = Account.objects.get_or_create(
+            user=user, name='Overtime Expense', account_type='Expense',
+            defaults={'code': '6004', 'description': 'Overtime payments to employees'}
+        )
+        return account
+
+    def _get_or_create_harvest_incentive_account(self, user):
+        """Get or create harvest incentive expense account"""
+        from .models import Account
+        account, created = Account.objects.get_or_create(
+            user=user, name='Harvest Incentive Expense', account_type='Expense',
+            defaults={'code': '6005', 'description': 'Incentives paid for fish harvest'}
+        )
+        return account
+
+    def _get_or_create_festival_bonus_account(self, user):
+        """Get or create festival bonus expense account"""
+        from .models import Account
+        account, created = Account.objects.get_or_create(
+            user=user, name='Festival Bonus Expense', account_type='Expense',
+            defaults={'code': '6006', 'description': 'Festival bonuses paid to employees'}
+        )
+        return account
+
+    def _get_or_create_performance_bonus_account(self, user):
+        """Get or create performance bonus expense account"""
+        from .models import Account
+        account, created = Account.objects.get_or_create(
+            user=user, name='Performance Bonus Expense', account_type='Expense',
+            defaults={'code': '6007', 'description': 'Performance and attendance bonuses'}
+        )
+        return account
+
+    def _get_or_create_employee_loan_account(self, user):
+        """Get or create employee loan/advance liability account"""
+        from .models import Account
+        account, created = Account.objects.get_or_create(
+            user=user, name='Employee Loans Payable', account_type='Other Current Liability',
+            defaults={'code': '2100', 'description': 'Loans and advances owed by employees'}
+        )
+        return account
+
+    def _get_or_create_pf_employee_liability_account(self, user):
+        """Get or create PF Employee Contribution Liability account"""
+        from .models import Account
+        account, created = Account.objects.get_or_create(
+            user=user, name='PF Employee Contribution Payable', account_type='Other Current Liability',
+            defaults={'code': '2101', 'description': 'Provident Fund contributions withheld from employees'}
+        )
+        return account
+
+    def _get_or_create_tax_liability_account(self, user):
+        """Get or create Tax (PAYE) Liability account"""
+        from .models import Account
+        account, created = Account.objects.get_or_create(
+            user=user, name='Tax (PAYE) Payable', account_type='Other Current Liability',
+            defaults={'code': '2102', 'description': 'PAYE tax withheld from employee salaries'}
+        )
+        return account
+    
+    def _get_or_create_absent_deduction_account(self, user):
+        """Get or create Absent Deduction Liability account"""
+        from .models import Account
+        account, created = Account.objects.get_or_create(
+            user=user, name='Absent Deduction Payable', account_type='Other Current Liability',
+            defaults={'code': '2103', 'description': 'Absent deduction payable to company'}
+        )
+        return account
+    
+    def _get_bank_account(self, user):
+        """Get primary bank account for payments"""
+        from .models import Account
+        
+        # Try to find UCB Bank first, then any bank account
+        bank_account = Account.objects.filter(
+            user=user,
+            name='UCB Bank',
+            account_type='Bank'
+        ).first()
+        
+        if not bank_account:
+            bank_account = Account.objects.filter(
+                user=user,
+                account_type='Bank'
+            ).first()
+        
+        return bank_account
 
 
 class ItemSalesViewSet(viewsets.ModelViewSet):
@@ -4980,6 +5315,9 @@ class JournalLineViewSet(viewsets.ModelViewSet):
         source = self.request.query_params.get('source')
         if source:
             qs = qs.filter(journal_entry__source=source)
+        journal_entry_id = self.request.query_params.get('journal_entry')
+        if journal_entry_id:
+            qs = qs.filter(journal_entry__je_id=journal_entry_id)
         return qs
     
     def perform_create(self, serializer):
@@ -5064,3 +5402,25 @@ class StockLevelViewSet(viewsets.ViewSet):
         
         print(f"DEBUG: Returning {len(stock_levels)} stock levels")
         return Response(stock_levels)
+
+
+class PayrollLineViewSet(viewsets.ModelViewSet):
+    """ViewSet for payroll line management"""
+    queryset = PayrollLine.objects.all()
+    serializer_class = PayrollLineSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return PayrollLine.objects.filter(payroll_run__user=self.request.user)
+    
+    def perform_create(self, serializer):
+        # Get the payroll run ID from the request data
+        payroll_run_id = self.request.data.get('payroll_run')
+        if payroll_run_id:
+            try:
+                payroll_run = PayrollRun.objects.get(payroll_run_id=payroll_run_id, user=self.request.user)
+                serializer.save(payroll_run=payroll_run)
+            except PayrollRun.DoesNotExist:
+                raise serializers.ValidationError("Payroll run not found")
+        else:
+            raise serializers.ValidationError("Payroll run ID is required")

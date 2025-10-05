@@ -59,6 +59,7 @@ router.register(r'stock-levels', views.StockLevelViewSet, basename='stock-levels
 router.register(r'other-pond-events', views.OtherPondEventViewSet)
 router.register(r'employees', views.EmployeeViewSet)
 router.register(r'payroll-runs', views.PayrollRunViewSet)
+router.register(r'payroll-lines', views.PayrollLineViewSet)
 router.register(r'journal-entries', views.JournalEntryViewSet)
 router.register(r'journal-lines', views.JournalLineViewSet)
 
