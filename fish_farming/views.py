@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 
 from .models import (
-    Pond, Species, Stocking, DailyLog, FeedType, Feed, SampleType, Sampling, 
+    Pond, Stocking, DailyLog, FeedType, Feed, SampleType, Sampling, 
     Mortality, Harvest, Expense, Income,
     InventoryFeed, Treatment, Alert, Setting, FeedingBand, 
     EnvAdjustment, KPIDashboard, FishSampling, FeedingAdvice, SurvivalRate,
@@ -23,7 +23,7 @@ from .models import (
 )
 from .serializers import (
     PondSerializer, PondDetailSerializer, PondSummarySerializer,
-    SpeciesSerializer, StockingSerializer, DailyLogSerializer,
+    StockingSerializer, DailyLogSerializer,
     FeedTypeSerializer, FeedSerializer, SampleTypeSerializer, SamplingSerializer,
     MortalitySerializer, HarvestSerializer, ExpenseSerializer, IncomeSerializer,
     InventoryFeedSerializer, TreatmentSerializer, AlertSerializer,
@@ -132,28 +132,7 @@ class PondViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
-class SpeciesViewSet(viewsets.ModelViewSet):
-    """ViewSet for fish species with hierarchical structure"""
-    queryset = Species.objects.none()  # Will be overridden by get_queryset
-    serializer_class = SpeciesSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def get_queryset(self):
-        return Species.objects.filter(user=self.request.user)
-    
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
-    
-    def list(self, request, *args, **kwargs):
-        """Override list to return tree structure"""
-        if request.query_params.get('tree', '').lower() == 'true':
-            # Return tree structure (root nodes with children)
-            queryset = self.get_queryset().filter(parent=None)
-            serializer = self.get_serializer(queryset, many=True)
-            return Response(serializer.data)
-        else:
-            # Return flat list
-            return super().list(request, *args, **kwargs)
+# SpeciesViewSet removed - using Items instead
 
 
 class StockingViewSet(viewsets.ModelViewSet):
@@ -672,7 +651,7 @@ class FishSamplingViewSet(viewsets.ModelViewSet):
         try:
             # Get filter parameters
             pond_id = request.query_params.get('pond')
-            species_id = request.query_params.get('species')
+            item_id = request.query_params.get('item')  # Changed from species to item
             start_date = request.query_params.get('start_date')
             end_date = request.query_params.get('end_date')
             
@@ -682,15 +661,14 @@ class FishSamplingViewSet(viewsets.ModelViewSet):
             # Apply filters
             if pond_id:
                 queryset = queryset.filter(pond_id=pond_id)
-            if species_id:
-                queryset = queryset.filter(species_id=species_id)
+            # Note: item filtering will be handled differently since we're using items instead of species
             if start_date:
                 queryset = queryset.filter(date__gte=start_date)
             if end_date:
                 queryset = queryset.filter(date__lte=end_date)
             
             # Order by date for proper analysis
-            samplings = queryset.order_by('pond', 'species', 'date')
+            samplings = queryset.order_by('pond', 'date')
             
             # Calculate biomass metrics
             total_biomass_gain = 0
@@ -707,7 +685,7 @@ class FishSamplingViewSet(viewsets.ModelViewSet):
                     biomass_changes.append({
                         'id': sampling.id,
                         'pond_name': sampling.pond.name,
-                        'species_name': sampling.species.name if sampling.species else 'Mixed',
+                        'species_name': 'Fish Item',  # Using generic name since species is no longer used
                         'date': sampling.date,
                         'biomass_difference_kg': float(sampling.biomass_difference_kg),
                         'growth_rate_kg_per_day': float(sampling.growth_rate_kg_per_day) if sampling.growth_rate_kg_per_day else None,
@@ -724,7 +702,7 @@ class FishSamplingViewSet(viewsets.ModelViewSet):
             
             for sampling in samplings:
                 pond_name = sampling.pond.name
-                species_name = sampling.species.name if sampling.species else 'Mixed'
+                species_name = 'Fish Item'  # Using generic name since species is no longer used
                 
                 # Pond summary
                 if pond_name not in pond_summary:
@@ -744,7 +722,7 @@ class FishSamplingViewSet(viewsets.ModelViewSet):
                 pond_summary[pond_name]['sampling_count'] += 1
                 pond_summary[pond_name]['net_change'] = pond_summary[pond_name]['total_gain'] - pond_summary[pond_name]['total_loss']
                 
-                # Species summary
+                # Item summary (replacing species)
                 if species_name not in species_summary:
                     species_summary[species_name] = {
                         'total_gain': 0,
@@ -768,56 +746,43 @@ class FishSamplingViewSet(viewsets.ModelViewSet):
             total_area_sqm = 0
             pond_load_analysis = {}
             
-            # Get all unique pond/species combinations from STOCKING data (not just samplings)
-            # This ensures we include all stocked fish, even if they don't have sampling data yet
-            stocking_combinations = Stocking.objects.filter(pond__user=request.user).values('pond', 'species').distinct()
+            # Get all unique ponds from fish samplings and calculate current biomass
+            # This ensures we include all ponds with fish sampling data
+            pond_combinations = FishSampling.objects.filter(pond__user=request.user).values('pond').distinct()
             
-            # Apply filters to stocking combinations
+            # Apply filters to pond combinations
             if pond_id:
-                stocking_combinations = stocking_combinations.filter(pond_id=pond_id)
-            if species_id:
-                stocking_combinations = stocking_combinations.filter(species_id=species_id)
+                pond_combinations = pond_combinations.filter(pond_id=pond_id)
             
-            for combo in stocking_combinations:
+            for combo in pond_combinations:
                 pond_id = combo['pond']
-                species_id = combo['species']
                 
-                # Get pond and species objects
-                pond = Pond.objects.get(id=pond_id)
-                species = Species.objects.get(id=species_id) if species_id else None
+                # Get pond object
+                pond = Pond.objects.get(pond_id=pond_id)
                 
-                # Get latest stocking for this pond/species
-                if species:
-                    latest_stocking = Stocking.objects.filter(
-                        pond=pond, species=species
-                    ).order_by('-date').first()
-                else:
-                    latest_stocking = Stocking.objects.filter(
-                        pond=pond
-                    ).order_by('-date').first()
+                # Calculate cumulative biomass change from ALL samplings for this pond
+                cumulative_biomass_change = 0
+                pond_samplings = FishSampling.objects.filter(
+                    pond=pond
+                ).order_by('date')
                 
-                if latest_stocking:
-                    # Calculate cumulative biomass change from ALL samplings (not just filtered ones)
-                    cumulative_biomass_change = 0
-                    combo_samplings = FishSampling.objects.filter(
-                        pond=pond, species=species
-                    ).order_by('date')
-                    
-                    for sampling in combo_samplings:
-                        if sampling.biomass_difference_kg:
-                            cumulative_biomass_change += float(sampling.biomass_difference_kg)
-                    
-                    # Current biomass = Initial stocking + Cumulative growth
-                    initial_biomass = float(latest_stocking.total_weight_kg)
-                    current_biomass = initial_biomass + cumulative_biomass_change
+                for sampling in pond_samplings:
+                    if sampling.biomass_difference_kg:
+                        cumulative_biomass_change += float(sampling.biomass_difference_kg)
+                
+                # Get latest sampling to determine current biomass
+                latest_sampling = pond_samplings.last()
+                if latest_sampling:
+                    # Current biomass = Latest sampling total weight + any subsequent growth
+                    current_biomass = float(latest_sampling.total_weight_kg)
                     
                     total_current_biomass += current_biomass
                     
                     # Calculate pond area (only count once per pond)
-                    pond_area_sqm = float(pond.area_sqm)
-                    if pond.id not in pond_load_analysis:
+                    pond_area_sqm = float(pond.water_area_decimal) * 40.46  # Convert decimal to m²
+                    if pond.pond_id not in pond_load_analysis:
                         total_area_sqm += pond_area_sqm
-                        pond_load_analysis[pond.id] = {
+                        pond_load_analysis[pond.pond_id] = {
                             'pond_name': pond.name,
                             'area_sqm': pond_area_sqm,
                             'area_decimal': float(pond.water_area_decimal),
@@ -826,12 +791,12 @@ class FishSamplingViewSet(viewsets.ModelViewSet):
                         }
                     
                     # Add biomass to pond total
-                    pond_load_analysis[pond.id]['total_biomass_kg'] += current_biomass
+                    pond_load_analysis[pond.pond_id]['total_biomass_kg'] += current_biomass
                     
                     # Store for detailed breakdown
-                    key = f"{pond.name} - {species.name if species else 'Mixed'}"
+                    key = f"{pond.name} - Fish Item"
                     pond_species_biomass[key] = {
-                        'initial_biomass': initial_biomass,
+                        'initial_biomass': 0,  # No initial stocking data available
                         'growth_biomass': cumulative_biomass_change,
                         'current_biomass': current_biomass
                     }
@@ -866,7 +831,7 @@ class FishSamplingViewSet(viewsets.ModelViewSet):
                 'pond_species_biomass': pond_species_biomass,
                 'filters_applied': {
                     'pond_id': pond_id,
-                    'species_id': species_id,
+                    'item_id': item_id,  # Changed from species_id to item_id
                     'start_date': start_date,
                     'end_date': end_date
                 }
@@ -886,7 +851,7 @@ class FishSamplingViewSet(viewsets.ModelViewSet):
         try:
             # Get query parameters
             pond_id = request.GET.get('pond')
-            species_id = request.GET.get('species')
+            item_id = request.GET.get('item')  # Changed from species to item
             start_date = request.GET.get('start_date')
             end_date = request.GET.get('end_date')
             
@@ -918,15 +883,12 @@ class FishSamplingViewSet(viewsets.ModelViewSet):
             if pond_id:
                 feeds = feeds.filter(pond_id=pond_id)
                 samplings = samplings.filter(pond_id=pond_id)
-            if species_id:
-                samplings = samplings.filter(species_id=species_id)
+            # Note: item filtering will be handled differently since we're using items instead of species
             
-            # Get all pond/species combinations - use set to ensure uniqueness
-            combinations_raw = samplings.values('pond', 'species')
-            combinations_set = set()
-            for combo in combinations_raw:
-                combinations_set.add((combo['pond'], combo['species']))
-            combinations = [{'pond': p, 'species': s} for p, s in combinations_set]
+            # Get all pond combinations - use set to ensure uniqueness
+            # Since we're no longer using species, we'll work with ponds only
+            combinations_raw = samplings.values('pond').distinct()
+            combinations = [{'pond': combo['pond']} for combo in combinations_raw]
             
             fcr_data = []
             total_feed = 0
@@ -934,13 +896,11 @@ class FishSamplingViewSet(viewsets.ModelViewSet):
             
             for combo in combinations:
                 pond_id = combo['pond']
-                species_id = combo['species']
                 
-                # Get pond and species names
+                # Get pond name
                 try:
-                    pond = Pond.objects.get(id=pond_id, user=request.user)
-                    species = Species.objects.get(id=species_id)
-                except (Pond.DoesNotExist, Species.DoesNotExist):
+                    pond = Pond.objects.get(pond_id=pond_id, user=request.user)
+                except Pond.DoesNotExist:
                     continue
                 
                 # Calculate total feed for this combination
@@ -948,7 +908,7 @@ class FishSamplingViewSet(viewsets.ModelViewSet):
                 total_feed_kg = float(combo_feeds.aggregate(total=Sum('amount_kg'))['total'] or 0)
                 
                 # Calculate weight gain from samplings
-                combo_samplings = samplings.filter(pond_id=pond_id, species_id=species_id).order_by('date')
+                combo_samplings = samplings.filter(pond_id=pond_id).order_by('date')
                 
                 if combo_samplings.count() < 2:
                     continue
@@ -966,7 +926,7 @@ class FishSamplingViewSet(viewsets.ModelViewSet):
                 if final_weight < initial_weight * 0.5:
                     # Look for harvest data around the same time period to get realistic final weight
                     harvest = Harvest.objects.filter(
-                        pond_id=pond_id, species_id=species_id, pond__user=request.user,
+                        pond_id=pond_id, pond__user=request.user,
                         date__gte=latest_sampling.date - timedelta(days=7),
                         date__lte=latest_sampling.date + timedelta(days=7)
                     ).first()
@@ -986,7 +946,7 @@ class FishSamplingViewSet(viewsets.ModelViewSet):
                 # Estimate fish count from stocking data (most reliable source)
                 estimated_fish_count = 0
                 stocking = Stocking.objects.filter(
-                    pond_id=pond_id, species_id=species_id, pond__user=request.user
+                    pond_id=pond_id, pond__user=request.user
                 ).first()
                 
                 if stocking:
@@ -995,12 +955,12 @@ class FishSamplingViewSet(viewsets.ModelViewSet):
                     
                     # Adjust for mortality if available
                     mortality_count = float(Mortality.objects.filter(
-                        pond_id=pond_id, species_id=species_id, pond__user=request.user
+                        pond_id=pond_id, pond__user=request.user
                     ).aggregate(total=Sum('count'))['total'] or 0)
                     
                     # Adjust for harvest if available
                     harvest_count = float(Harvest.objects.filter(
-                        pond_id=pond_id, species_id=species_id, pond__user=request.user
+                        pond_id=pond_id, pond__user=request.user
                     ).aggregate(total=Sum('total_count'))['total'] or 0)
                     
                     # Calculate current estimated fish count
@@ -1029,8 +989,6 @@ class FishSamplingViewSet(viewsets.ModelViewSet):
                 fcr_data.append({
                     'pond_id': pond_id,
                     'pond_name': pond.name,
-                    'species_id': species_id,
-                    'species_name': species.name,
                     'start_date': earliest_sampling.date.isoformat(),
                     'end_date': latest_sampling_date.isoformat(),
                     'days': days,
@@ -1092,10 +1050,10 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
         if pond_id:
             queryset = queryset.filter(pond_id=pond_id)
         
-        # Filter by species
-        species_id = self.request.query_params.get('species')
-        if species_id:
-            queryset = queryset.filter(species_id=species_id)
+        # Filter by item (replacing species)
+        item_id = self.request.query_params.get('item')
+        if item_id:
+            queryset = queryset.filter(species_id=item_id)  # Note: species field still exists but will be null
         
         return queryset
     
@@ -1181,7 +1139,7 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
             # Create feeding advice
             feeding_advice = FeedingAdvice.objects.create(
                 pond=pond,
-                species=latest_stocking.species,
+                species=None,  # No longer using species
                 user=request.user,
                 date=timezone.now().date(),
                 estimated_fish_count=estimated_fish_count,
@@ -1189,7 +1147,7 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
                 water_temp_c=water_temp,
                 season=season,
                 feed_cost_per_kg=feed_cost,
-                notes=f"Auto-generated using Google Sheets feeding rules. Based on {latest_stocking.species.name if latest_stocking.species else 'Mixed'} fish."
+                notes=f"Auto-generated using Google Sheets feeding rules. Based on fish items."
             )
             
             # The save() method will automatically calculate all derived fields using feeding bands
@@ -1231,111 +1189,119 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
         
         pond = get_object_or_404(Pond, pond_id=pond_id, user=request.user)
         
-        # Get all species in this pond
-        species_in_pond = Species.objects.filter(
-            stockings__pond=pond
-        ).distinct()
+        # Get fish items for this specific pond from customer stock
+        # Note: We include items with 0 stock as they represent fish that were stocked but may have been harvested/sold
+        fish_items_in_pond = CustomerStock.objects.filter(
+            pond=pond,
+            item__category='fish'
+        ).select_related('item').distinct()
         
-        if not species_in_pond.exists():
-            return Response({'error': 'No species found in this pond. Please add stocking data first.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not fish_items_in_pond.exists():
+            return Response({'error': 'No fish items found in this pond. Please add fish items to the pond first.'}, status=status.HTTP_400_BAD_REQUEST)
         
         generated_advice = []
-        failed_species = []
-        species_without_sampling = []
+        failed_items = []
+        items_without_sampling = []
         
-        # Generate advice for each species in the pond
-        for species in species_in_pond:
+        # Generate advice for each fish item in the pond
+        for customer_stock in fish_items_in_pond:
+            item = customer_stock.item
             try:
-                # Check if species has fish sampling data (for informational purposes)
+                # Check if item has fish sampling data (for informational purposes)
                 has_sampling = FishSampling.objects.filter(
-                    pond=pond, species=species
+                    pond=pond
                 ).exists()
                 
                 if not has_sampling:
-                    species_without_sampling.append(species.name)
+                    items_without_sampling.append(item.name)
                 
-                # Use the existing generate_advice logic but with species parameter
+                # Use the existing generate_advice logic but with item parameter
                 # This now works with both sampling data and stocking data
-                advice_data = self._generate_advice_for_species(pond, species, request)
+                advice_data = self._generate_advice_for_item(pond, item, request)
                 if advice_data:
                     serializer = self.get_serializer(data=advice_data)
                     if serializer.is_valid():
                         advice = serializer.save(user=request.user)
                         generated_advice.append(serializer.data)
                     else:
-                        failed_species.append(f"{species.name} (validation error)")
+                        failed_items.append(f"{item.name} (validation error)")
                 else:
-                    failed_species.append(f"{species.name} (no data)")
+                    failed_items.append(f"{item.name} (no data)")
             except Exception as e:
-                failed_species.append(f"{species.name} (error: {str(e)})")
+                failed_items.append(f"{item.name} (error: {str(e)})")
                 continue
         
         # Provide detailed error messages
         if not generated_advice:
             error_message = "Unable to generate feeding advice. "
-            if failed_species:
-                error_message += f"Failed to generate advice for: {', '.join(failed_species)}. "
-            if species_without_sampling:
-                error_message += f"Note: Some species ({', '.join(species_without_sampling)}) are using stocking data instead of fish sampling data for more accurate results."
+            if failed_items:
+                error_message += f"Failed to generate advice for: {', '.join(failed_items)}. "
+            if items_without_sampling:
+                error_message += f"Note: Some items ({', '.join(items_without_sampling)}) are using stocking data instead of fish sampling data for more accurate results."
             
             return Response({
                 'error': error_message,
                 'details': {
-                    'species_without_sampling': species_without_sampling,
-                    'failed_species': failed_species,
-                    'total_species_checked': len(species_in_pond)
+                    'items_without_sampling': items_without_sampling,
+                    'failed_items': failed_items,
+                    'total_items_checked': len(fish_items_in_pond)
                 }
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Success response with warnings if some species failed
+        # Success response with warnings if some items failed
         response_data = {
-            'message': f'Generated feeding advice for {len(generated_advice)} species',
+            'message': f'Generated feeding advice for {len(generated_advice)} items',
             'advice': generated_advice
         }
         
-        if species_without_sampling or failed_species:
+        if items_without_sampling or failed_items:
             response_data['warnings'] = {
-                'species_using_stocking_data': species_without_sampling,
-                'failed_species': failed_species
+                'items_using_stocking_data': items_without_sampling,
+                'failed_items': failed_items
             }
             
-            if species_without_sampling:
-                response_data['message'] += f' (Note: {len(species_without_sampling)} species using stocking data instead of fish sampling)'
+            if items_without_sampling:
+                response_data['message'] += f' (Note: {len(items_without_sampling)} items using stocking data instead of fish sampling)'
         
         return Response(response_data, status=status.HTTP_201_CREATED)
     
-    def _generate_advice_for_species(self, pond, species, request):
+    def _generate_advice_for_item(self, pond, item, request):
         """Comprehensive feeding advice generation based on all available data"""
         from django.db.models import Sum, Avg, Count, Max, Min
         from datetime import timedelta
         
         # 1. Get latest fish sampling data
         latest_sampling = FishSampling.objects.filter(
-            pond=pond, species=species
+            pond=pond
         ).order_by('-date').first()
         
         # 2. If no sampling data, try to work with stocking data
         if not latest_sampling:
-            return self._generate_advice_from_stocking_data(pond, species, request)
+            return self._generate_advice_from_stocking_data(pond, item, request)
+        
+        # 3. Validate sampling data has required fields
+        if not latest_sampling.average_weight_kg or latest_sampling.average_weight_kg <= 0:
+            # Fallback to stocking data if sampling data is invalid
+            return self._generate_advice_from_stocking_data(pond, item, request)
         
         # 2. Calculate current fish count with detailed analysis
-        fish_count_analysis = self._analyze_fish_population(pond, species)
+        fish_count_analysis = self._analyze_fish_population(pond, item)
         estimated_fish_count = fish_count_analysis['current_count']
         
         # 3. Comprehensive water quality analysis
         water_quality_analysis = self._analyze_water_quality(pond)
         
         # 4. Mortality pattern analysis
-        mortality_analysis = self._analyze_mortality_patterns(pond, species)
+        mortality_analysis = self._analyze_mortality_patterns(pond, item)
         
         # 5. Feeding pattern analysis
-        feeding_analysis = self._analyze_feeding_patterns(pond, species)
+        feeding_analysis = self._analyze_feeding_patterns(pond, item)
         
         # 6. Environmental and seasonal analysis
         environmental_analysis = self._analyze_environmental_factors(pond)
         
         # 7. Growth rate analysis
-        growth_analysis = self._analyze_growth_patterns(pond, species)
+        growth_analysis = self._analyze_growth_patterns(pond, item)
         
         # 8. Medical diagnostic analysis
         medical_analysis = self._analyze_medical_conditions(pond)
@@ -1353,19 +1319,19 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
         )
         
         # 9. Enhanced feed type and cost analysis
-        feed_analysis = self._analyze_feeding_history(pond, species)
+        feed_analysis = self._analyze_feeding_history(pond, item)
         if feed_analysis:
             feeding_recommendations.update(feed_analysis)
         
         # 10. Add learning from previously applied advice
-        advice_learning = self._analyze_applied_advice_history(pond, species, feeding_recommendations['base_rate'])
+        advice_learning = self._analyze_applied_advice_history(pond, item, feeding_recommendations['base_rate'])
         if advice_learning:
             feeding_recommendations.update(advice_learning)
         
         # 11. Create comprehensive feeding advice
         advice_data = {
-            'pond': pond.id,
-            'species': species.id,
+            'pond': pond.pond_id,
+            'species': None,  # No longer using species
             'date': timezone.now().date(),
             'estimated_fish_count': estimated_fish_count,
             'average_fish_weight_kg': latest_sampling.average_weight_kg,
@@ -1378,7 +1344,7 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
             'medical_considerations': self._generate_medical_considerations(medical_analysis),
             'medical_warnings': medical_analysis.get('medical_warnings', []),
             'notes': self._generate_comprehensive_notes(
-                pond, species, fish_count_analysis, water_quality_analysis,
+                pond, item, fish_count_analysis, water_quality_analysis,
                 mortality_analysis, feeding_analysis, environmental_analysis,
                 growth_analysis, feeding_recommendations, medical_analysis
             )
@@ -1404,36 +1370,38 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
         
         return advice_data
     
-    def _generate_advice_from_stocking_data(self, pond, species, request):
+    def _generate_advice_from_stocking_data(self, pond, item, request):
         """Generate feeding advice based on stocking data when fish sampling is not available"""
         from django.db.models import Sum, Avg, Count, Max, Min
         from datetime import timedelta
         from decimal import Decimal
         
-        # 1. Get latest stocking data
-        latest_stocking = Stocking.objects.filter(
-            pond=pond, species=species
-        ).order_by('-date').first()
+        # 1. Get current fish count from CustomerStock for this specific item
+        try:
+            customer_stock = CustomerStock.objects.get(pond=pond, item=item)
+            current_fish_count = customer_stock.fish_count or 0
+            current_weight_kg = customer_stock.current_stock or 0
+        except CustomerStock.DoesNotExist:
+            return None
         
-        if not latest_stocking:
+        if current_fish_count <= 0:
             return None
         
         # 2. Calculate current fish count with detailed analysis
-        fish_count_analysis = self._analyze_fish_population(pond, species)
+        fish_count_analysis = self._analyze_fish_population(pond, item)
         estimated_fish_count = fish_count_analysis['current_count']
         
         if estimated_fish_count <= 0:
             return None
         
-        # 3. Calculate average fish weight from stocking data
-        # Use pieces_per_kg from stocking to estimate average weight
-        if latest_stocking.pieces_per_kg and latest_stocking.pieces_per_kg > 0:
-            average_fish_weight_kg = Decimal('1.0') / latest_stocking.pieces_per_kg
+        # 3. Calculate average fish weight from current stock data
+        if current_fish_count > 0 and current_weight_kg > 0:
+            # Calculate average weight from current stock
+            average_fish_weight_kg = Decimal(str(current_weight_kg)) / Decimal(str(current_fish_count))
         else:
-            # Fallback: estimate based on species and time since stocking
-            days_since_stocking = (timezone.now().date() - latest_stocking.date).days
-            # Assume initial weight of 0.0025 kg (2.5g) and growth rate of 0.0001 kg/day
-            average_fish_weight_kg = Decimal('0.0025') + (Decimal('0.0001') * days_since_stocking)
+            # Fallback: estimate based on typical fingerling weight
+            # Assume average weight of 0.01 kg (10g) for fingerlings
+            average_fish_weight_kg = Decimal('0.01')
         
         # 4. Calculate total biomass
         total_biomass_kg = estimated_fish_count * average_fish_weight_kg
@@ -1442,16 +1410,16 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
         water_quality_analysis = self._analyze_water_quality(pond)
         
         # 6. Mortality pattern analysis
-        mortality_analysis = self._analyze_mortality_patterns(pond, species)
+        mortality_analysis = self._analyze_mortality_patterns(pond, item)
         
         # 7. Feeding pattern analysis
-        feeding_analysis = self._analyze_feeding_patterns(pond, species)
+        feeding_analysis = self._analyze_feeding_patterns(pond, item)
         
         # 8. Environmental and seasonal analysis
         environmental_analysis = self._analyze_environmental_factors(pond)
         
         # 9. Growth rate analysis (simplified for stocking-based advice)
-        growth_analysis = self._analyze_growth_patterns_from_stocking(pond, species, latest_stocking)
+        growth_analysis = self._analyze_growth_patterns_from_stocking(pond, item)
         
         # 10. Medical diagnostic analysis
         medical_analysis = self._analyze_medical_conditions(pond)
@@ -1470,19 +1438,19 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
         )
         
         # 12. Enhanced feed type and cost analysis
-        feed_analysis = self._analyze_feeding_history(pond, species)
+        feed_analysis = self._analyze_feeding_history(pond, item)
         if feed_analysis:
             feeding_recommendations.update(feed_analysis)
         
         # 13. Add learning from previously applied advice
-        advice_learning = self._analyze_applied_advice_history(pond, species, feeding_recommendations['base_rate'])
+        advice_learning = self._analyze_applied_advice_history(pond, item, feeding_recommendations['base_rate'])
         if advice_learning:
             feeding_recommendations.update(advice_learning)
         
         # 14. Create comprehensive feeding advice
         advice_data = {
-            'pond': pond.id,
-            'species': species.id,
+            'pond': pond.pond_id,
+            'species': None,  # No longer using species
             'date': timezone.now().date(),
             'estimated_fish_count': estimated_fish_count,
             'average_fish_weight_kg': average_fish_weight_kg,
@@ -1495,10 +1463,10 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
             'medical_considerations': self._generate_medical_considerations(medical_analysis),
             'medical_warnings': medical_analysis.get('medical_warnings', []),
             'notes': self._generate_stocking_based_notes(
-                pond, species, fish_count_analysis, water_quality_analysis,
+                pond, item, fish_count_analysis, water_quality_analysis,
                 mortality_analysis, feeding_analysis, environmental_analysis,
                 growth_analysis, feeding_recommendations, medical_analysis,
-                latest_stocking
+                estimated_fish_count, total_biomass_kg
             )
         }
         
@@ -1523,21 +1491,24 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
         
         return advice_data
     
-    def _analyze_growth_patterns_from_stocking(self, pond, species, latest_stocking):
+    def _analyze_growth_patterns_from_stocking(self, pond, item):
         """Simplified growth analysis based on stocking data"""
         from datetime import timedelta
         from decimal import Decimal
         
-        days_since_stocking = (timezone.now().date() - latest_stocking.date).days
+        # Estimate days since stocking (use a reasonable default)
+        days_since_stocking = 30  # Default to 30 days
         
-        # Estimate growth based on time since stocking
-        if latest_stocking.pieces_per_kg and latest_stocking.pieces_per_kg > 0:
-            initial_weight = Decimal('1.0') / latest_stocking.pieces_per_kg
+        # Estimate growth based on current stock data
+        if current_fish_count > 0 and current_weight_kg > 0:
+            # Calculate current average weight from stock data
+            estimated_current_weight = Decimal(str(current_weight_kg)) / Decimal(str(current_fish_count))
+            # Estimate initial weight (assume 50% growth since stocking)
+            initial_weight = estimated_current_weight * Decimal('0.67')  # Rough estimate
         else:
+            # Fallback estimates
             initial_weight = Decimal('0.0025')  # 2.5g default
-        
-        # Estimate current weight (simplified growth model)
-        estimated_current_weight = initial_weight + (Decimal('0.0001') * days_since_stocking)
+            estimated_current_weight = Decimal('0.01')  # 10g default
         
         # Calculate daily growth rate
         daily_growth_rate = Decimal('0.0001')  # 0.1g per day
@@ -1604,15 +1575,16 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
             'data_source': 'stocking_based'
         }
     
-    def _generate_stocking_based_notes(self, pond, species, fish_count_analysis, water_quality_analysis,
+    def _generate_stocking_based_notes(self, pond, item, fish_count_analysis, water_quality_analysis,
                                      mortality_analysis, feeding_analysis, environmental_analysis,
-                                     growth_analysis, feeding_recommendations, medical_analysis, latest_stocking):
+                                     growth_analysis, feeding_recommendations, medical_analysis, 
+                                     estimated_fish_count, total_biomass_kg):
         """Generate comprehensive notes for stocking-based feeding advice"""
         notes = []
         
         # Data source note
-        notes.append("⚠️ This feeding advice is based on stocking data as fish sampling data is not available.")
-        notes.append(f"📊 Based on stocking from {latest_stocking.date} with {latest_stocking.pcs} pieces.")
+        notes.append("⚠️ This feeding advice is based on current stock data as fish sampling data is not available.")
+        notes.append(f"📊 Based on current stock: {estimated_fish_count} fish with {total_biomass_kg:.2f} kg total biomass.")
         
         # Fish count analysis
         if fish_count_analysis.get('survival_rate'):
@@ -1644,7 +1616,7 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
         
         return "\n".join(notes)
     
-    def _analyze_feeding_history(self, pond, species):
+    def _analyze_feeding_history(self, pond, item):
         """Analyze feeding history to recommend optimal feed type and cost"""
         from django.db.models import Avg, Count, Q
         from datetime import timedelta
@@ -1718,15 +1690,14 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
         
         return result
     
-    def _analyze_applied_advice_history(self, pond, species, current_base_rate):
+    def _analyze_applied_advice_history(self, pond, item, current_base_rate):
         """Analyze previously applied advice to improve recommendations"""
         from django.db.models import Avg, Count
         from datetime import timedelta
         
-        # Get previously applied advice for this pond/species
+        # Get previously applied advice for this pond (species field is now null, using pond-level advice)
         applied_advice = FeedingAdvice.objects.filter(
             pond=pond,
-            species=species,
             is_applied=True
         ).order_by('-applied_date')[:5]  # Last 5 applied advice
         
@@ -1738,10 +1709,9 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
         feed_adjustments = []
         
         for advice in applied_advice:
-            # Get fish sampling data after this advice was applied
+            # Get fish sampling data after this advice was applied (pond-level)
             post_advice_samplings = FishSampling.objects.filter(
                 pond=pond,
-                species=species,
                 date__gt=advice.applied_date
             ).order_by('date')[:3]  # Next 3 samplings after advice
             
@@ -1792,50 +1762,57 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
         
         return None
     
-    def _analyze_fish_population(self, pond, species):
-        """Comprehensive fish population analysis"""
+    def _analyze_fish_population(self, pond, item):
+        """Comprehensive fish population analysis using CustomerStock data"""
         from django.db.models import Sum, Count, Avg
         from datetime import timedelta
         
-        # Get all stocking records
-        stockings = Stocking.objects.filter(pond=pond, species=species).order_by('date')
-        total_stocked = stockings.aggregate(total=Sum('pcs'))['total'] or 0
+        # Get current fish count from CustomerStock for this specific item
+        try:
+            customer_stock = CustomerStock.objects.get(pond=pond, item=item)
+            current_count = customer_stock.fish_count or 0
+        except CustomerStock.DoesNotExist:
+            current_count = 0
         
-        # Get mortality data with time analysis
+        # Get mortality data with time analysis (pond-level)
         recent_mortality = Mortality.objects.filter(
-            pond=pond, species=species,
+            pond=pond,
             date__gte=timezone.now().date() - timedelta(days=30)
         ).aggregate(total=Sum('count'))['total'] or 0
         
         total_mortality = Mortality.objects.filter(
-            pond=pond, species=species
+            pond=pond
         ).aggregate(total=Sum('count'))['total'] or 0
         
-        # Get harvest data
+        # Get harvest data (pond-level)
         total_harvested = Harvest.objects.filter(
-            pond=pond, species=species
+            pond=pond
         ).aggregate(total=Sum('total_count'))['total'] or 0
         
-        # Calculate survival rate
+        # Calculate survival rate (use current count as baseline)
         survival_rate = 0
-        if total_stocked > 0:
-            survival_rate = ((total_stocked - total_mortality - total_harvested) / total_stocked) * 100
+        if current_count > 0:
+            # Estimate original stocked count by adding back mortalities and harvests
+            estimated_original = current_count + total_mortality + total_harvested
+            if estimated_original > 0:
+                survival_rate = (current_count / estimated_original) * 100
         
         # Analyze mortality trends
         mortality_trend = 'stable'
         if recent_mortality > 0:
             avg_daily_mortality = recent_mortality / 30
-            if avg_daily_mortality > (total_stocked * 0.001):  # More than 0.1% daily
-                mortality_trend = 'high'
-            elif avg_daily_mortality < (total_stocked * 0.0001):  # Less than 0.01% daily
-                mortality_trend = 'low'
+            if current_count > 0:
+                if avg_daily_mortality > (current_count * 0.001):  # More than 0.1% daily
+                    mortality_trend = 'high'
+                elif avg_daily_mortality < (current_count * 0.0001):  # Less than 0.01% daily
+                    mortality_trend = 'low'
         
         return {
-            'total_stocked': total_stocked,
+            'total_stocked': current_count + total_mortality + total_harvested,  # Estimated original
             'total_mortality': total_mortality,
             'recent_mortality_30d': recent_mortality,
             'total_harvested': total_harvested,
-            'current_count': max(0, total_stocked - total_mortality - total_harvested),
+            'current_count': current_count,  # Use actual current count from CustomerStock
             'survival_rate': survival_rate,
             'mortality_trend': mortality_trend
         }
@@ -1927,14 +1904,14 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
         
         return water_quality
     
-    def _analyze_mortality_patterns(self, pond, species):
+    def _analyze_mortality_patterns(self, pond, item):
         """Analyze mortality patterns and causes"""
         from django.db.models import Sum, Count, Avg
         from datetime import timedelta
         
-        # Get recent mortality data
+        # Get recent mortality data (pond-level)
         recent_mortality = Mortality.objects.filter(
-            pond=pond, species=species,
+            pond=pond,
             date__gte=timezone.now().date() - timedelta(days=30)
         )
         
@@ -1976,7 +1953,7 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
         
         return mortality_analysis
     
-    def _analyze_feeding_patterns(self, pond, species):
+    def _analyze_feeding_patterns(self, pond, item):
         """Analyze historical feeding patterns and success rates"""
         from django.db.models import Sum, Avg, Count, StdDev
         from datetime import timedelta
@@ -2077,14 +2054,14 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
         
         return environmental_analysis
     
-    def _analyze_growth_patterns(self, pond, species):
+    def _analyze_growth_patterns(self, pond, item):
         """Analyze fish growth patterns and trends"""
         from django.db.models import Avg, Count
         from datetime import timedelta
         
-        # Get recent fish sampling data
+        # Get recent fish sampling data (pond-level)
         recent_samplings = FishSampling.objects.filter(
-            pond=pond, species=species,
+            pond=pond,
             date__gte=timezone.now().date() - timedelta(days=90)
         ).order_by('date')
         
@@ -2735,12 +2712,12 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
             'base_daily_feed_kg': round(base_daily_feed_kg, 2)
         }
     
-    def _generate_comprehensive_notes(self, pond, species, fish_analysis, water_quality, 
+    def _generate_comprehensive_notes(self, pond, item, fish_analysis, water_quality, 
                                     mortality, feeding, environmental, growth, recommendations, medical=None):
         """Generate detailed notes explaining the recommendations"""
         
         notes = [
-            f"=== SCIENTIFIC FEEDING ADVICE FOR {species.name.upper()} IN {pond.name.upper()} ===",
+            f"=== SCIENTIFIC FEEDING ADVICE FOR FISH IN {pond.name.upper()} ===",
             f"Generated on: {timezone.now().strftime('%Y-%m-%d %H:%M')}",
             "",
             "📊 SCIENTIFIC FEEDING STAGE ANALYSIS:",
@@ -3001,18 +2978,17 @@ class TargetBiomassViewSet(viewsets.ViewSet):
                     'error': 'Target biomass must be greater than 0'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Get pond and species
+            # Get pond
             pond = get_object_or_404(Pond, pond_id=pond_id, user=request.user)
-            species = get_object_or_404(Species, id=species_id)
             
             # Calculate current biomass from latest fish sampling data
             latest_sampling = FishSampling.objects.filter(
-                pond=pond, species=species
+                pond=pond
             ).order_by('-date').first()
             
             if not latest_sampling:
                 return Response({
-                    'error': 'No fish sampling data available for this pond and species. Please add fish sampling data first.'
+                    'error': 'No fish sampling data available for this pond. Please add fish sampling data first.'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
             # Calculate current biomass using the same method as biomass analysis
@@ -5064,7 +5040,7 @@ class CustomerStockViewSet(viewsets.ModelViewSet):
         # Mortality (issues) - OUT for fish items linked by pond and species
         try:
             if getattr(item, 'category', None) == 'fish' and pond:
-                from .models import Mortality, Species
+                from .models import Mortality
                 # Attempt to link by species via recent invoice/bill lines species for this item
                 species_ids = set()
                 try:

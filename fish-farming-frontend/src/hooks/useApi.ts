@@ -157,57 +157,9 @@ export function usePondFinancialSummary(id: number) {
   });
 }
 
-export function useSpecies(params?: PaginationParams) {
-  return useApiQuery(['species', JSON.stringify(params || {})], () => apiService.getSpecies(params));
-}
+// Species hooks removed - using Items instead
 
-export function useSpeciesTree() {
-  return useApiQuery(['species', 'tree'], () => apiService.getSpeciesTree());
-}
-
-export function useSpeciesById(id: number) {
-  return useApiQuery(
-    ['species', id.toString()],
-    () => apiService.getSpeciesById(id),
-    { enabled: !!id }
-  );
-}
-
-export function useCreateSpecies() {
-  return useApiMutation(
-    (data: any) => apiService.createSpecies(data),
-    {
-      onSuccess: () => {
-        toast.success('Species created successfully');
-      },
-      invalidateQueries: [['species']],
-    }
-  );
-}
-
-export function useUpdateSpecies() {
-  return useApiMutation(
-    ({ id, data }: { id: number; data: any }) => apiService.updateSpecies(id, data),
-    {
-      onSuccess: () => {
-        toast.success('Species updated successfully');
-      },
-      invalidateQueries: [['species']],
-    }
-  );
-}
-
-export function useDeleteSpecies() {
-  return useApiMutation(
-    (id: number) => apiService.deleteSpecies(id),
-    {
-      onSuccess: () => {
-        toast.success('Species deleted successfully');
-      },
-      invalidateQueries: [['species']],
-    }
-  );
-}
+// Species mutation hooks removed - using Items instead
 
 export function useStocking(params?: PaginationParams) {
   return useApiQuery(['stocking', JSON.stringify(params || {})], () => apiService.getStocking(params));

@@ -11,7 +11,6 @@ import {
   useJournalEntries,
   usePayrollRuns,
   useCustomers,
-  useSpecies,
   useItems
 } from '@/hooks/useApi';
 import { 
@@ -61,7 +60,6 @@ export default function ReportsPage() {
   const { data: journalEntriesData } = useJournalEntries();
   const { data: payrollRunsData } = usePayrollRuns();
   const { data: customersData } = useCustomers();
-  const { data: speciesData } = useSpecies();
   const { data: itemsData } = useItems();
 
   const ponds = extractApiData<Pond>(pondsData?.data);
@@ -73,7 +71,6 @@ export default function ReportsPage() {
   const journalEntries = extractApiData<any>(journalEntriesData?.data);
   const payrollRuns = extractApiData<PayrollRun>(payrollRunsData?.data);
   const customers = extractApiData<any>(customersData?.data);
-  const species = extractApiData<any>(speciesData?.data);
   const items = extractApiData<any>(itemsData?.data);
 
   const [filters, setFilters] = useState<ReportFilters>({

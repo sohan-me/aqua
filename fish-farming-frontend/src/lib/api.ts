@@ -957,13 +957,7 @@ export const apiService = {
     return response.data;
   },
 
-  // Species
-  getSpecies: (params?: PaginationParams) => api.get<PaginatedResponse<Species>>('/species/', { params }),
-  getSpeciesTree: () => api.get<Species[]>('/species/?tree=true'),
-  getSpeciesById: (id: number) => api.get<Species>(`/species/${id}/`),
-  createSpecies: (data: Partial<Species>) => api.post<Species>('/species/', data),
-  updateSpecies: (id: number, data: Partial<Species>) => api.put<Species>(`/species/${id}/`, data),
-  deleteSpecies: (id: number) => api.delete(`/species/${id}/`),
+  // Species endpoints removed - using Items instead
 
   // Ponds
   getPonds: (params?: PaginationParams) => api.get<PaginatedResponse<Pond>>('/ponds/', { params }),

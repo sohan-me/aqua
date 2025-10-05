@@ -108,13 +108,6 @@ interface Pond {
   is_active: boolean;
 }
 
-interface Species {
-  species_id?: number;
-  id?: number;
-  name: string;
-  scientific_name?: string;
-  description?: string;
-}
 
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -122,7 +115,6 @@ export default function InvoicesPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [ponds, setPonds] = useState<Pond[]>([]);
-  const [species, setSpecies] = useState<Species[]>([]);
   // Cache of pond -> customer stock list
   const [pondStockByPond, setPondStockByPond] = useState<Record<number, any[]>>({});
   const [loading, setLoading] = useState(true);
@@ -433,12 +425,11 @@ export default function InvoicesPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [invoicesResponse, customersResponse, itemsResponse, pondsResponse, speciesResponse] = await Promise.all([
+      const [invoicesResponse, customersResponse, itemsResponse, pondsResponse] = await Promise.all([
         get('/invoices/'),
         get('/customers/'),
         get('/items/'),
         get('/ponds/'),
-        get('/species/'),
       ]);
       
       console.log('Items data from API:', itemsResponse.results || itemsResponse);
@@ -448,7 +439,6 @@ export default function InvoicesPage() {
       setCustomers(customersResponse.results || customersResponse);
       setItems(itemsResponse.results || itemsResponse);
       setPonds(pondsResponse.results || pondsResponse);
-      setSpecies(speciesResponse.results || speciesResponse);
     } catch (error) {
       console.error('Error fetching data:', error);
       toast.error('Failed to fetch data');
@@ -1097,7 +1087,7 @@ console.log("ponds", ponds);
                                     return (
                                       <SelectItem key={item.item_id} value={item.item_id.toString()}>
                                         {item.name} ({item.category || 'No Category'}) - Stock: {stockDisplay}
-                                        {item.selling_price && ` - $${item.selling_price}/${item.uom}`}
+                                        {item.selling_price && ` - $${item.selling_price}/${item.unit}`}
                                       </SelectItem>
                                     );
                                   }

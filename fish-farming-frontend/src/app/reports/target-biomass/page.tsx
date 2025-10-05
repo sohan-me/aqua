@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { usePonds, useSpecies } from '@/hooks/useApi';
-import { Pond, Species } from '@/lib/api';
+import { usePonds, useItems } from '@/hooks/useApi';
+import { Pond, Item } from '@/lib/api';
 import { extractApiData } from '@/lib/utils';
 import { 
   Target, 
@@ -19,7 +19,7 @@ import { toast } from 'sonner';
 
 interface TargetBiomassForm {
   pondId: string;
-  speciesId: string;
+  itemId: string;
   targetBiomass: number;
   currentDate: string;
 }
@@ -40,14 +40,14 @@ interface TargetBiomassResult {
 
 export default function TargetBiomassPage() {
   const { data: pondsData } = usePonds();
-  const { data: speciesData } = useSpecies();
+  const { data: itemsData } = useItems();
   
   const ponds = extractApiData<Pond>(pondsData?.data);
-  const species = extractApiData<Species>(speciesData?.data);
+  const fishItems = extractApiData<Item>(itemsData?.data).filter(item => item.category === 'fish');
   
   const [form, setForm] = useState<TargetBiomassForm>({
     pondId: '',
-    speciesId: '',
+    itemId: '',
     targetBiomass: 0,
     currentDate: new Date().toISOString().split('T')[0],
   });
@@ -56,14 +56,14 @@ export default function TargetBiomassPage() {
   const [isLoading, setIsLoading] = useState(false);
 
   const calculateTargetBiomass = async () => {
-    if (!form.pondId || !form.speciesId || form.targetBiomass <= 0) {
+    if (!form.pondId || !form.itemId || form.targetBiomass <= 0) {
       toast.error('Please fill in all required fields with valid values');
       return;
     }
 
     setIsLoading(true);
     try {
-      const response = await fetch('http://localhost:8000/api/fish-farming/target-biomass/calculate/', {
+      const response = await fetch('https://apipremium.sascorporationbd.com/api/fish-farming/target-biomass/calculate/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -71,7 +71,7 @@ export default function TargetBiomassPage() {
         },
         body: JSON.stringify({
           pond_id: parseInt(form.pondId),
-          species_id: parseInt(form.speciesId),
+          species_id: parseInt(form.itemId),
           target_biomass_kg: form.targetBiomass,
           current_date: form.currentDate,
         }),
@@ -100,7 +100,7 @@ export default function TargetBiomassPage() {
   const resetForm = () => {
     setForm({
       pondId: '',
-      speciesId: '',
+      itemId: '',
       targetBiomass: 0,
       currentDate: new Date().toISOString().split('T')[0],
     });
@@ -147,22 +147,22 @@ export default function TargetBiomassPage() {
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Species *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Fish Item *</label>
               <select
-                value={form.speciesId}
-                onChange={(e) => handleFormChange('speciesId', e.target.value)}
+                value={form.itemId}
+                onChange={(e) => handleFormChange('itemId', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="">Select a species</option>
-                {species.map((spec) => (
-                  <option key={spec.id} value={spec.id.toString()}>
-                    {spec.name}
+                <option value="">Select a fish item</option>
+                {fishItems.map((item) => (
+                  <option key={item.item_id} value={item.item_id.toString()}>
+                    {item.name}
                   </option>
                 ))}
               </select>
             </div>
             
-            {form.pondId && form.speciesId && result && (
+            {form.pondId && form.itemId && result && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Current Biomass (kg)</label>
                 <div className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-700">

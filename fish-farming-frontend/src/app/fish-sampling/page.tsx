@@ -1,7 +1,7 @@
 'use client';
 
-import { useFishSampling, useDeleteFishSampling, useSpecies, usePonds } from '@/hooks/useApi';
-import { Pond, Species } from '@/lib/api';
+import { useFishSampling, useDeleteFishSampling, useItems, usePonds } from '@/hooks/useApi';
+import { Pond, Item } from '@/lib/api';
 import { formatDate, extractApiData } from '@/lib/utils';
 import { Scale, Plus, Eye, Edit, Trash2, Calendar, X } from 'lucide-react';
 import Link from 'next/link';
@@ -18,7 +18,7 @@ export default function FishSamplingPage() {
   // Call API without parameters since it returns all data
   const { data: samplingData, isLoading } = useFishSampling();
   console.log(samplingData);
-  const { data: speciesData } = useSpecies();
+  const { data: itemsData } = useItems();
   const { data: pondsData } = usePonds();
   const deleteSampling = useDeleteFishSampling();
   
@@ -41,7 +41,7 @@ export default function FishSamplingPage() {
   
   const totalItems = filteredSamplings.length;
   const totalPages = Math.ceil(totalItems / pageSize);
-  const species = extractApiData<Species>(speciesData?.data);
+  const fishItems = extractApiData<Item>(itemsData?.data).filter(item => item.category === 'fish');
   const ponds = extractApiData<Pond>(pondsData?.data);
   
   // Reset to first page when filters change
@@ -111,10 +111,10 @@ export default function FishSamplingPage() {
                 onChange={(e) => setFilterSpecies(e.target.value)}
                 className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
-                <option value="all">All Species</option>
-                {species.map(speciesItem => (
-                  <option key={speciesItem.id} value={speciesItem.id}>
-                    {speciesItem.name}
+                <option value="all">All Fish Items</option>
+                {fishItems.map(item => (
+                  <option key={item.item_id} value={item.item_id}>
+                    {item.name}
                   </option>
                 ))}
               </select>
@@ -148,7 +148,7 @@ export default function FishSamplingPage() {
               )}
               {filterSpecies !== 'all' && (
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                  Species: {species.find(s => s.id.toString() === filterSpecies)?.name}
+                  Fish Item: {fishItems.find(item => item.item_id.toString() === filterSpecies)?.name}
                 </span>
               )}
             </div>
@@ -189,7 +189,7 @@ export default function FishSamplingPage() {
                     </h3>
                     {sampling.species_name && (
                       <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                        {sampling.species_name}
+                        {sampling.species_name || 'Fish Item'}
                       </span>
                     )}
                     <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">

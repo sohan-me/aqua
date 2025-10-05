@@ -41,7 +41,7 @@ export function formatCurrency(amount: number | string | null | undefined): stri
   
   if (isNaN(numAmount)) return '৳0';
   
-  return new Intl.NumberFormat('bn-BD', {
+  return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'BDT',
     minimumFractionDigits: 2,

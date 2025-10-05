@@ -136,10 +136,7 @@ const navigation = [
     icon: PieChart,
     submenu: [
       { name: 'Financial Reports', href: '/reports', icon: DollarSign },
-      { name: 'FCR Analysis', href: '/reports/fcr', icon: Scale },
-      { name: 'Biomass Analysis', href: '/reports/biomass', icon: BarChart3 },
-      { name: 'Profit & Loss', href: '/reports/pnl', icon: TrendingUpIcon },
-      { name: 'Balance Sheet', href: '/reports/balance-sheet', icon: FileText },
+      { name: 'Balance Sheet', href: '/balance-sheet', icon: FileText },
     ]
   },
 
@@ -149,6 +146,8 @@ const navigation = [
     href: '/tools',
     icon: Wrench,
     submenu: [
+      { name: 'FCR Analysis', href: '/reports/fcr', icon: Scale },
+      { name: 'Biomass Analysis', href: '/reports/biomass', icon: BarChart3 },
       { name: 'Feeding Advice', href: '/feeding-advice', icon: Lightbulb },
       { name: 'Target Biomass', href: '/reports/target-biomass', icon: Target },
       { name: 'Asset Calculator', href: '/asset-calculator', icon: Calculator },

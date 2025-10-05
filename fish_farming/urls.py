@@ -5,7 +5,7 @@ from . import views
 router = DefaultRouter()
 # Core Aquaculture APIs
 router.register(r'ponds', views.PondViewSet)
-router.register(r'species', views.SpeciesViewSet)
+# SpeciesViewSet removed - using Items instead
 router.register(r'stocking', views.StockingViewSet)
 router.register(r'daily-logs', views.DailyLogViewSet)
 router.register(r'feed-types', views.FeedTypeViewSet)

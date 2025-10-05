@@ -3,8 +3,8 @@
 import { useState } from 'react';
 import { useFcrAnalysis } from '@/hooks/useApi';
 import { usePonds } from '@/hooks/useApi';
-import { useSpecies } from '@/hooks/useApi';
-import { Pond, Species } from '@/lib/api';
+import { useItems } from '@/hooks/useApi';
+import { Pond, Item } from '@/lib/api';
 import { formatDate, extractApiData } from '@/lib/utils';
 import { 
   TrendingUp, 
@@ -21,7 +21,7 @@ import {
 export default function FcrReportPage() {
   const [filters, setFilters] = useState({
     pond: '',
-    species: '',
+    item: '',
     start_date: '',
     end_date: ''
   });
@@ -33,10 +33,10 @@ export default function FcrReportPage() {
   
   const { data: fcrData, isLoading, error } = useFcrAnalysis(fcrFilters);
   const { data: pondsData } = usePonds();
-  const { data: speciesData } = useSpecies();
+  const { data: itemsData } = useItems();
   
   const ponds = extractApiData<Pond>(pondsData?.data);
-  const species = extractApiData<Species>(speciesData?.data);
+  const fishItems = extractApiData<Item>(itemsData?.data).filter(item => item.category === 'fish');
 
   // Safe data access helpers - FCR analysis data is wrapped in 'data' property by useApiQuery
   const fcrSummary = fcrData?.data?.summary || {
@@ -138,16 +138,16 @@ export default function FcrReportPage() {
           </div>
           
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Species</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Fish Item</label>
             <select
-              value={filters.species}
-              onChange={(e) => handleFilterChange('species', e.target.value)}
+              value={filters.item}
+              onChange={(e) => handleFilterChange('item', e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">All Species</option>
-              {species?.map((spec) => (
-                <option key={spec.id} value={spec.id}>
-                  {spec.name}
+              <option value="">All Fish Items</option>
+              {fishItems?.map((item) => (
+                <option key={item.item_id} value={item.item_id}>
+                  {item.name}
                 </option>
               ))}
             </select>
@@ -252,7 +252,7 @@ export default function FcrReportPage() {
       {fcrData && fcrDataArray.length > 0 && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200">
           <div className="px-6 py-4 border-b border-gray-200">
-            <h3 className="text-lg font-medium text-gray-900">FCR Analysis by Pond & Species</h3>
+            <h3 className="text-lg font-medium text-gray-900">FCR Analysis by Pond & Fish Item</h3>
             <p className="text-sm text-gray-500 mt-1">
               Date range: {formatDate(fcrSummary.date_range?.start_date || '')} - {formatDate(fcrSummary.date_range?.end_date || '')}
             </p>
@@ -263,7 +263,7 @@ export default function FcrReportPage() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Pond & Species
+                    Pond & Fish Item
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Period
@@ -297,7 +297,7 @@ export default function FcrReportPage() {
                           {item.pond_name}
                         </div>
                         <div className="text-sm text-gray-500">
-                          {item.species_name}
+                          {item.species_name || 'Fish Item'}
                         </div>
                       </div>
                     </td>

@@ -53,18 +53,6 @@ export default function EmployeesPage() {
   const [ledgerEntries, setLedgerEntries] = useState<EmployeeLedgerEntry[]>([]);
   const [loadingLedger, setLoadingLedger] = useState(false);
 
-  // Helper functions to extract first and last names from combined name field
-  const getFirstName = (name: string) => {
-    if (!name) return '';
-    const parts = name.split(' ', 1);
-    return parts[0] || '';
-  };
-
-  const getLastName = (name: string) => {
-    if (!name) return '';
-    const parts = name.split(' ', 2);
-    return parts.length > 1 ? parts[1] : '';
-  };
 
   // Helper function to safely format salary
   const formatSalary = (salary: any) => {
@@ -146,8 +134,8 @@ export default function EmployeesPage() {
     setEditingEmployee(employee);
     setFormData({
       employee_number: employee.employee_number || '',
-      first_name: getFirstName(employee.name),
-      last_name: getLastName(employee.name),
+      first_name: employee.first_name || '',
+      last_name: employee.last_name || '',
       email: employee.email || '',
       phone: employee.phone || '',
       position: employee.position || '',
@@ -366,9 +354,9 @@ export default function EmployeesPage() {
   };
 
   const filteredEmployees = employees.filter(employee =>
-    employee.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    getFirstName(employee.name).toLowerCase().includes(searchTerm.toLowerCase()) ||
-    getLastName(employee.name).toLowerCase().includes(searchTerm.toLowerCase()) ||
+    `${employee.first_name} ${employee.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    employee.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    employee.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (employee.employee_number && employee.employee_number.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (employee.position && employee.position.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (employee.email && employee.email.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -568,7 +556,7 @@ export default function EmployeesPage() {
               {filteredEmployees.map((employee) => (
                 <TableRow key={employee.employee_id}>
                   <TableCell className="font-medium">{employee.employee_number}</TableCell>
-                  <TableCell>{employee.name}</TableCell>
+                  <TableCell>{`${employee.first_name} ${employee.last_name}`}</TableCell>
                   <TableCell>{employee.position}</TableCell>
                   <TableCell>{employee.email}</TableCell>
                   <TableCell>{employee.phone}</TableCell>
@@ -635,10 +623,10 @@ export default function EmployeesPage() {
         <DialogContent className="w-[95vw] max-w-6xl max-h-[95vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              Employee Ledger - {selectedEmployee?.name}
+              Employee Ledger - {selectedEmployee ? `${selectedEmployee.first_name} ${selectedEmployee.last_name}` : ''}
             </DialogTitle>
             <DialogDescription>
-              Transaction history for {selectedEmployee?.name} - {selectedEmployee?.position}
+              Transaction history for {selectedEmployee ? `${selectedEmployee.first_name} ${selectedEmployee.last_name}` : ''} - {selectedEmployee?.position}
             </DialogDescription>
           </DialogHeader>
           
@@ -655,7 +643,7 @@ export default function EmployeesPage() {
               <div className="bg-gray-50 p-4 rounded-lg">
                 <div className="flex justify-between items-center">
                   <div>
-                    <h3 className="font-semibold text-lg">{selectedEmployee?.name}</h3>
+                    <h3 className="font-semibold text-lg">{selectedEmployee ? `${selectedEmployee.first_name} ${selectedEmployee.last_name}` : ''}</h3>
                     <p className="text-sm text-gray-600">{selectedEmployee?.position}</p>
                     <p className="text-sm text-gray-600">Employee ID: {selectedEmployee?.employee_number}</p>
                   </div>
@@ -724,7 +712,7 @@ export default function EmployeesPage() {
                   <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                   <h3 className="text-lg font-medium text-gray-900 mb-2">No transactions found</h3>
                   <p className="text-gray-600">
-                    No payroll transactions found for {selectedEmployee?.name}.
+                    No payroll transactions found for {selectedEmployee ? `${selectedEmployee.first_name} ${selectedEmployee.last_name}` : ''}.
                   </p>
                 </div>
               )}

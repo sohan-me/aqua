@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { usePonds, useSpecies } from '@/hooks/useApi';
-import { Pond, Species } from '@/lib/api';
+import { usePonds, useItems } from '@/hooks/useApi';
+import { Pond, Item } from '@/lib/api';
 import { extractApiData } from '@/lib/utils';
 import { 
   BarChart3, 
@@ -18,7 +18,7 @@ import { toast } from 'sonner';
 
 interface BiomassFilters {
   pondId: string;
-  speciesId: string;
+  itemId: string;
   startDate: string;
   endDate: string;
 }
@@ -80,14 +80,14 @@ interface BiomassData {
 
 export default function BiomassReportPage() {
   const { data: pondsData } = usePonds();
-  const { data: speciesData } = useSpecies();
+  const { data: itemsData } = useItems();
   
   const ponds = extractApiData<Pond>(pondsData?.data);
-  const species = extractApiData<Species>(speciesData?.data);
+  const fishItems = extractApiData<Item>(itemsData?.data).filter(item => item.category === 'fish');
   
   const [filters, setFilters] = useState<BiomassFilters>({
     pondId: 'all',
-    speciesId: 'all',
+    itemId: 'all',
     startDate: new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0],
   });
@@ -100,11 +100,11 @@ export default function BiomassReportPage() {
     try {
       const params = new URLSearchParams();
       if (filters.pondId !== 'all') params.append('pond', filters.pondId);
-      if (filters.speciesId !== 'all') params.append('species', filters.speciesId);
+      if (filters.itemId !== 'all') params.append('item', filters.itemId);
       if (filters.startDate) params.append('start_date', filters.startDate);
       if (filters.endDate) params.append('end_date', filters.endDate);
 
-      const response = await fetch(`http://localhost:8000/api/fish-farming/fish-sampling/biomass_analysis/?${params}`, {
+      const response = await fetch(`https://apipremium.sascorporationbd.com/api/fish-farming/fish-sampling/biomass_analysis/?${params}`, {
         headers: {
           'Authorization': `Token ${localStorage.getItem('authToken')}`,
         },
@@ -209,16 +209,16 @@ export default function BiomassReportPage() {
           </div>
           
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Species</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Fish Item</label>
             <select
-              value={filters.speciesId}
-              onChange={(e) => handleFilterChange('speciesId', e.target.value)}
+              value={filters.itemId}
+              onChange={(e) => handleFilterChange('itemId', e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="all">All Species</option>
-              {species.map((spec) => (
-                <option key={spec.id} value={spec.id.toString()}>
-                  {spec.name}
+              <option value="all">All Fish Items</option>
+              {fishItems.map((item) => (
+                <option key={item.item_id} value={item.item_id.toString()}>
+                  {item.name}
                 </option>
               ))}
             </select>

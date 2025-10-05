@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useCreateMortality, usePonds, useSpecies, useCustomerStocks } from '@/hooks/useApi';
+import { useCreateMortality, usePonds, useItems, useCustomerStocks } from '@/hooks/useApi';
 import { extractApiData } from '@/lib/utils';
-import { Pond, Species, CustomerStock } from '@/lib/api';
+import { Pond, Item, CustomerStock } from '@/lib/api';
 import { ArrowLeft, Save, X, Fish, TrendingDown, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -12,11 +12,11 @@ export default function NewMortalityPage() {
   const router = useRouter();
   const createMortality = useCreateMortality();
   const { data: pondsData } = usePonds();
-  const { data: speciesData } = useSpecies();
+  const { data: itemsData } = useItems();
   const { data: customerStocksData } = useCustomerStocks();
   
   const ponds = extractApiData<Pond>(pondsData?.data);
-  const species = extractApiData<Species>(speciesData?.data);
+  const fishItems = extractApiData<Item>(itemsData?.data).filter(item => item.category === 'fish');
   const allCustomerStocks = extractApiData<CustomerStock>(customerStocksData?.data);
 
   const [formData, setFormData] = useState({

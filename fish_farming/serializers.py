@@ -1331,29 +1331,16 @@ class CustomerStockSerializer(serializers.ModelSerializer):
                 inv_out_qs = inv_out_qs.none()
             total_out = sum(infer_pcs(il) for il in inv_out_qs)
 
-            # Infer species linked to this stock via recent lines
-            species_ids = set()
-            try:
-                species_ids.update(
-                    InvoiceLine.objects.filter(item=obj.item, pond=obj.pond, species__isnull=False)
-                    .values_list('species_id', flat=True)[:5]
-                )
-                species_ids.update(
-                    BillLine.objects.filter(item=obj.item, pond=obj.pond, species__isnull=False)
-                    .values_list('species_id', flat=True)[:5]
-                )
-            except Exception:
-                pass
+            # Calculate mortalities and harvests for this fish item in this pond
             m_count = 0
             h_count = 0
             if obj.pond:
-                if species_ids:
-                    m_count = int(Mortality.objects.filter(pond=obj.pond, species_id__in=list(species_ids)).aggregate(Sum('count'))['count__sum'] or 0)
-                    h_count = int(Harvest.objects.filter(pond=obj.pond, species_id__in=list(species_ids)).aggregate(Sum('total_count'))['total_count__sum'] or 0)
-                else:
-                    # If we cannot infer species linkage, at least subtract pond-level mortalities explicitly recorded without species
-                    m_count = int(Mortality.objects.filter(pond=obj.pond, species__isnull=True).aggregate(Sum('count'))['count__sum'] or 0)
+                # Since we're now using Items instead of Species, we use pond-level mortalities and harvests
+                # This is a simplified approach - in a real system you might want to track mortalities per fish item
+                m_count = int(Mortality.objects.filter(pond=obj.pond).aggregate(Sum('count'))['count__sum'] or 0)
+                h_count = int(Harvest.objects.filter(pond=obj.pond).aggregate(Sum('total_count'))['total_count__sum'] or 0)
             result = total_in - total_out - m_count - h_count
-            return int(result if result > 0 else 0)
+            # Return the actual result, even if negative (indicates over-sales)
+            return int(result)
         except Exception:
             return None
