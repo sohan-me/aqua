@@ -2,6 +2,7 @@ from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
+from django.db import models
 from django.db.models import Q, Sum, Count, Avg
 from django.utils import timezone
 from datetime import datetime, timedelta
@@ -19,7 +20,7 @@ from .models import (
     InventoryTransaction, InventoryTransactionLine, ItemSales, ItemSalesLine,
     StockingEvent, StockingLine, FeedingEvent, FeedingLine, MedicineEvent, MedicineLine, 
     OtherPondEvent, OtherPondEventLine, Employee, EmployeeDocument, PayrollRun, PayrollLine,
-    CustomerStock
+    CustomerStock, Species
 )
 from .serializers import (
     PondSerializer, PondDetailSerializer, PondSummarySerializer,
@@ -28,6 +29,7 @@ from .serializers import (
     MortalitySerializer, HarvestSerializer, ExpenseSerializer, IncomeSerializer,
     InventoryFeedSerializer, TreatmentSerializer, AlertSerializer,
     SettingSerializer, FeedingBandSerializer, EnvAdjustmentSerializer,
+    CustomerStockSerializer,
     KPIDashboardSerializer, FinancialSummarySerializer,
     FishSamplingSerializer, FeedingAdviceSerializer, SurvivalRateSerializer,
     MedicalDiagnosticSerializer, PaymentTermsSerializer, CustomerSerializer,
@@ -270,16 +272,8 @@ class MortalityViewSet(viewsets.ModelViewSet):
                         cs.current_stock = (cs.current_stock or 0) - total_weight
                         if cs.current_stock < 0:
                             cs.current_stock = Decimal('0')
-                # Update fish_count if present or initialize from current state if None
-                try:
-                    cnt = int(self.request.data.get('count') or mortality.count or 0)
-                except Exception:
-                    cnt = 0
-                if cnt:
-                    # Initialize fish_count if missing using current derived count if available
-                    if getattr(cs, 'fish_count', None) is None:
-                        cs.fish_count = cnt  # initialize then subtract below to avoid None math
-                    cs.fish_count = max(0, int(cs.fish_count) - cnt)
+                # Note: fish_count is calculated dynamically from movements, mortalities, and harvests
+                # No need to manually update it as it's derived from the data
                 cs.save()
         except Exception as e:
             # Log but do not prevent mortality creation
@@ -1196,8 +1190,28 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
             item__category='fish'
         ).select_related('item').distinct()
         
+        # If no CustomerStock records exist, try to work with traditional Stocking data
         if not fish_items_in_pond.exists():
-            return Response({'error': 'No fish items found in this pond. Please add fish items to the pond first.'}, status=status.HTTP_400_BAD_REQUEST)
+            # Check if there are any stocking records for this pond
+            stocking_records = Stocking.objects.filter(pond=pond).select_related('species').distinct()
+            if stocking_records.exists():
+                # Convert stocking records to a format that can be processed
+                fish_items_in_pond = []
+                for stocking in stocking_records:
+                    # Create a mock customer stock object for processing
+                    mock_customer_stock = type('MockCustomerStock', (), {
+                        'item': type('MockItem', (), {
+                            'name': stocking.species.name,
+                            'category': 'fish',
+                            'item_id': f"species_{stocking.species.species_id}"
+                        })(),
+                        'pond': pond,
+                        'current_stock': stocking.total_weight_kg or 0,
+                        'customer_stock_id': f"stocking_{stocking.stocking_id}"
+                    })()
+                    fish_items_in_pond.append(mock_customer_stock)
+            else:
+                return Response({'error': 'No fish items found in this pond. Please add fish items to the pond first.'}, status=status.HTTP_400_BAD_REQUEST)
         
         generated_advice = []
         failed_items = []
@@ -1224,7 +1238,11 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
                         advice = serializer.save(user=request.user)
                         generated_advice.append(serializer.data)
                     else:
-                        failed_items.append(f"{item.name} (validation error)")
+                        # Add detailed validation error information
+                        validation_errors = []
+                        for field, errors in serializer.errors.items():
+                            validation_errors.append(f"{field}: {', '.join(errors)}")
+                        failed_items.append(f"{item.name} (validation error: {'; '.join(validation_errors)})")
                 else:
                     failed_items.append(f"{item.name} (no data)")
             except Exception as e:
@@ -1376,13 +1394,34 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
         from datetime import timedelta
         from decimal import Decimal
         
-        # 1. Get current fish count from CustomerStock for this specific item
+        # 1. Try to get data from CustomerStock first, then fallback to Stocking data
+        current_fish_count = 0
+        current_weight_kg = 0
+        
         try:
             customer_stock = CustomerStock.objects.get(pond=pond, item=item)
-            current_fish_count = customer_stock.fish_count or 0
+            # Calculate fish count using the same logic as the serializer
+            serializer = CustomerStockSerializer(customer_stock)
+            current_fish_count = serializer.get_fish_count(customer_stock) or 0
             current_weight_kg = customer_stock.current_stock or 0
         except CustomerStock.DoesNotExist:
-            return None
+            # Fallback to traditional Stocking data
+            try:
+                # If item is a mock item from stocking data, get the species
+                if hasattr(item, 'item_id') and str(item.item_id).startswith('species_'):
+                    species_id = int(str(item.item_id).replace('species_', ''))
+                    stocking = Stocking.objects.filter(pond=pond, species_id=species_id).order_by('-date').first()
+                else:
+                    # Try to find stocking by species name
+                    stocking = Stocking.objects.filter(pond=pond, species__name=item.name).order_by('-date').first()
+                
+                if stocking:
+                    current_fish_count = stocking.pcs or 0
+                    current_weight_kg = stocking.total_weight_kg or 0
+                else:
+                    return None
+            except Exception:
+                return None
         
         if current_fish_count <= 0:
             return None
@@ -1495,6 +1534,16 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
         """Simplified growth analysis based on stocking data"""
         from datetime import timedelta
         from decimal import Decimal
+        
+        # Get current fish count and weight from CustomerStock
+        try:
+            customer_stock = CustomerStock.objects.get(pond=pond, item=item)
+            serializer = CustomerStockSerializer(customer_stock)
+            current_fish_count = serializer.get_fish_count(customer_stock) or 0
+            current_weight_kg = customer_stock.current_stock or 0
+        except CustomerStock.DoesNotExist:
+            current_fish_count = 0
+            current_weight_kg = 0
         
         # Estimate days since stocking (use a reasonable default)
         days_since_stocking = 30  # Default to 30 days
@@ -1770,7 +1819,9 @@ class FeedingAdviceViewSet(viewsets.ModelViewSet):
         # Get current fish count from CustomerStock for this specific item
         try:
             customer_stock = CustomerStock.objects.get(pond=pond, item=item)
-            current_count = customer_stock.fish_count or 0
+            # Calculate fish count using the same logic as the serializer
+            serializer = CustomerStockSerializer(customer_stock)
+            current_count = serializer.get_fish_count(customer_stock) or 0
         except CustomerStock.DoesNotExist:
             current_count = 0
         
@@ -2948,20 +2999,179 @@ class TargetBiomassViewSet(viewsets.ViewSet):
     """ViewSet for target biomass calculations"""
     permission_classes = [permissions.IsAuthenticated]
     
+    def _get_biomass_from_stocking(self, pond, fish_name):
+        """Get biomass data from traditional Stocking records"""
+        try:
+            # Try to find species by name
+            species = Species.objects.filter(name__icontains=fish_name).first()
+            if not species:
+                return 0, "no_data"
+            
+            # Get latest stocking data
+            latest_stocking = Stocking.objects.filter(
+                pond=pond, species=species
+            ).order_by('-date').first()
+            
+            if not latest_stocking:
+                return 0, "no_stocking"
+            
+            # Calculate cumulative biomass change from all samplings
+            cumulative_biomass_change = 0
+            all_samplings = FishSampling.objects.filter(
+                pond=pond, species=species
+            ).order_by('date')
+            
+            for sampling in all_samplings:
+                if sampling.biomass_difference_kg:
+                    cumulative_biomass_change += float(sampling.biomass_difference_kg)
+            
+            # Current biomass = Initial stocking + Cumulative growth
+            initial_biomass_kg = float(latest_stocking.total_weight_kg)
+            current_biomass_kg = initial_biomass_kg + cumulative_biomass_change
+            
+            return current_biomass_kg, "stocking_data"
+            
+        except Exception:
+            return 0, "error"
+    
+    def _get_growth_rate_from_sampling(self, pond, fish_name):
+        """Get growth rate from fish sampling data for CustomerStock items"""
+        try:
+            # Try to find fish sampling data for this pond
+            # First try to match by species name if available
+            samplings = FishSampling.objects.filter(pond=pond).order_by('date')
+            
+            if not samplings.exists():
+                return 0, "no_sampling_data"
+            
+            # Calculate growth rate from sampling intervals
+            growth_rates = []
+            
+            for i in range(1, len(samplings)):
+                current_sampling = samplings[i]
+                previous_sampling = samplings[i-1]
+                
+                days_diff = (current_sampling.date - previous_sampling.date).days
+                if days_diff > 0 and current_sampling.average_weight_kg and previous_sampling.average_weight_kg:
+                    weight_gain_per_fish = float(current_sampling.average_weight_kg) - float(previous_sampling.average_weight_kg)
+                    if weight_gain_per_fish > 0:  # Only positive growth
+                        period_growth_rate = weight_gain_per_fish / days_diff
+                        growth_rates.append(period_growth_rate)
+            
+            if growth_rates:
+                # Use average of recent growth rates (last 3 periods)
+                recent_growth_rates = growth_rates[-3:] if len(growth_rates) >= 3 else growth_rates
+                avg_growth_rate = sum(recent_growth_rates) / len(recent_growth_rates)
+                
+                # Ensure realistic bounds (1g to 200g per day)
+                avg_growth_rate = max(avg_growth_rate, 0.001)  # Minimum 1g per day
+                avg_growth_rate = min(avg_growth_rate, 0.2)    # Maximum 200g per day
+                
+                return avg_growth_rate, f"sampling_data_{len(growth_rates)}_periods"
+            else:
+                return 0, "no_positive_growth"
+                
+        except Exception:
+            return 0, "error"
+    
+    def _calculate_growth_rate_from_stocking(self, pond, fish_name):
+        """Calculate growth rate from traditional Stocking and FishSampling data"""
+        try:
+            # Find species by name
+            species = Species.objects.filter(name__icontains=fish_name).first()
+            if not species:
+                return 0.005, "no_species"
+            
+            # Get latest stocking data
+            latest_stocking = Stocking.objects.filter(
+                pond=pond, species=species
+            ).order_by('-date').first()
+            
+            if not latest_stocking:
+                return 0.005, "no_stocking"
+            
+            # Get all samplings for growth calculation
+            all_samplings_for_growth = FishSampling.objects.filter(
+                pond=pond, species=species
+            ).order_by('date')
+            
+            growth_rate_kg_per_day = 0.005  # Default
+            growth_calculation_method = "default"
+            
+            if all_samplings_for_growth.count() >= 1:
+                latest_sampling = all_samplings_for_growth.last()
+                
+                # Calculate total growth period from stocking to latest sampling
+                total_days = (latest_sampling.date - latest_stocking.date).days
+                
+                if total_days > 0:
+                    # Calculate per-fish growth rate from stocking to latest sampling
+                    initial_avg_weight = float(latest_stocking.total_weight_kg) / float(latest_stocking.pcs)
+                    current_avg_weight = float(latest_sampling.average_weight_kg)
+                    weight_gain_per_fish = current_avg_weight - initial_avg_weight
+                    
+                    # Growth rate per fish per day
+                    growth_rate_kg_per_day = weight_gain_per_fish / total_days
+                    growth_calculation_method = "stocking_to_latest"
+                    
+                    # Ensure realistic growth rate
+                    growth_rate_kg_per_day = max(growth_rate_kg_per_day, 0.001)
+                    growth_rate_kg_per_day = min(growth_rate_kg_per_day, 0.1)
+                
+                # If we have multiple samplings, calculate from sampling intervals
+                if all_samplings_for_growth.count() >= 2:
+                    sampling_growth_rates = []
+                    
+                    for i in range(1, len(all_samplings_for_growth)):
+                        current_sampling = all_samplings_for_growth[i]
+                        previous_sampling = all_samplings_for_growth[i-1]
+                        
+                        days_diff = (current_sampling.date - previous_sampling.date).days
+                        if days_diff > 0:
+                            weight_gain_per_fish = float(current_sampling.average_weight_kg) - float(previous_sampling.average_weight_kg)
+                            if weight_gain_per_fish > 0:
+                                period_growth_rate = weight_gain_per_fish / days_diff
+                                sampling_growth_rates.append(period_growth_rate)
+                    
+                    # Use weighted average if available
+                    if sampling_growth_rates:
+                        if len(sampling_growth_rates) >= 2:
+                            recent_growth_rate = sum(sampling_growth_rates[-2:]) / len(sampling_growth_rates[-2:])
+                            growth_rate_kg_per_day = (recent_growth_rate * 0.7) + (growth_rate_kg_per_day * 0.3)
+                            growth_calculation_method = "blended_recent_and_overall"
+                        else:
+                            growth_rate_kg_per_day = sampling_growth_rates[0]
+                            growth_calculation_method = "single_sampling_period"
+                        
+                        # Ensure realistic bounds
+                        growth_rate_kg_per_day = max(growth_rate_kg_per_day, 0.001)
+                        growth_rate_kg_per_day = min(growth_rate_kg_per_day, 0.1)
+            
+            return growth_rate_kg_per_day, growth_calculation_method
+            
+        except Exception:
+            return 0.005, "error"
+    
     @action(detail=False, methods=['post'])
     def calculate(self, request):
         """Calculate target biomass requirements and feeding recommendations"""
         try:
-            # Get input parameters
+            # Get input parameters - now supports both item_id and species_id for backward compatibility
             pond_id = request.data.get('pond_id')
-            species_id = request.data.get('species_id')
+            item_id = request.data.get('item_id')  # New Item-based approach
+            species_id = request.data.get('species_id')  # Legacy Species approach
             target_biomass_kg = request.data.get('target_biomass_kg')
             current_date = request.data.get('current_date')
             
-            # Validate required fields
-            if not all([pond_id, species_id, target_biomass_kg, current_date]):
+            # Validate required fields - either item_id or species_id must be provided
+            if not pond_id or not target_biomass_kg or not current_date:
                 return Response({
-                    'error': 'Missing required fields: pond_id, species_id, target_biomass_kg, current_date'
+                    'error': 'Missing required fields: pond_id, target_biomass_kg, current_date'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            if not item_id and not species_id:
+                return Response({
+                    'error': 'Either item_id (new system) or species_id (legacy system) must be provided'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
             # Validate numeric values
@@ -2981,43 +3191,55 @@ class TargetBiomassViewSet(viewsets.ViewSet):
             # Get pond
             pond = get_object_or_404(Pond, pond_id=pond_id, user=request.user)
             
-            # Calculate current biomass from latest fish sampling data
-            latest_sampling = FishSampling.objects.filter(
-                pond=pond
-            ).order_by('-date').first()
+            # Determine data source and get current biomass
+            current_biomass_kg = 0
+            fish_item_name = "Unknown"
+            data_source = "unknown"
             
-            if not latest_sampling:
+            # Try new Item-based approach first (CustomerStock)
+            if item_id:
+                try:
+                    item = Item.objects.get(item_id=item_id, category='fish')
+                    fish_item_name = item.name
+                    
+                    # Try to get CustomerStock data
+                    try:
+                        customer_stock = CustomerStock.objects.get(pond=pond, item=item)
+                        serializer = CustomerStockSerializer(customer_stock)
+                        current_fish_count = serializer.get_fish_count(customer_stock) or 0
+                        current_weight_kg = customer_stock.current_stock or 0
+                        
+                        if current_fish_count > 0 and current_weight_kg > 0:
+                            current_biomass_kg = float(current_weight_kg)
+                            data_source = "customer_stock"
+                        else:
+                            # Fallback to Stocking data
+                            current_biomass_kg, data_source = self._get_biomass_from_stocking(pond, item.name)
+                    except CustomerStock.DoesNotExist:
+                        # Fallback to Stocking data
+                        current_biomass_kg, data_source = self._get_biomass_from_stocking(pond, item.name)
+                        
+                except Item.DoesNotExist:
+                    return Response({
+                        'error': f'Item with ID {item_id} not found or not a fish item'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Try legacy Species-based approach
+            elif species_id:
+                try:
+                    species = Species.objects.get(species_id=species_id)
+                    fish_item_name = species.name
+                    current_biomass_kg, data_source = self._get_biomass_from_stocking(pond, species.name)
+                except Species.DoesNotExist:
+                    return Response({
+                        'error': f'Species with ID {species_id} not found'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Validate that we have current biomass data
+            if current_biomass_kg <= 0:
                 return Response({
-                    'error': 'No fish sampling data available for this pond. Please add fish sampling data first.'
+                    'error': f'No current biomass data available for {fish_item_name} in this pond. Please add fish sampling or stocking data first.'
                 }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Calculate current biomass using the same method as biomass analysis
-            # This should show TOTAL current biomass (initial + growth), not just growth
-            # This ensures consistency with the biomass analysis report
-            
-            # Get latest stocking data
-            latest_stocking = Stocking.objects.filter(
-                pond=pond, species=species
-            ).order_by('-date').first()
-            
-            if not latest_stocking:
-                return Response({
-                    'error': 'No stocking data available for this pond and species.'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Calculate cumulative biomass change from all samplings
-            cumulative_biomass_change = 0
-            all_samplings = FishSampling.objects.filter(
-                pond=pond, species=species
-            ).order_by('date')
-            
-            for sampling in all_samplings:
-                if sampling.biomass_difference_kg:
-                    cumulative_biomass_change += float(sampling.biomass_difference_kg)
-            
-            # Current biomass = Initial stocking + Cumulative growth (same as biomass analysis)
-            initial_biomass_kg = float(latest_stocking.total_weight_kg)
-            current_biomass_kg = initial_biomass_kg + cumulative_biomass_change
             
             # Validate that target biomass is greater than current biomass
             if target_biomass_kg <= current_biomass_kg:
@@ -3028,274 +3250,220 @@ class TargetBiomassViewSet(viewsets.ViewSet):
             # Calculate biomass gap
             biomass_gap_kg = target_biomass_kg - current_biomass_kg
             
-            # Calculate actual growth rate from fish sampling data and stocking
-            # This provides a more accurate and dynamic growth rate calculation
-            all_samplings_for_growth = FishSampling.objects.filter(
-                pond=pond, species=species
-            ).order_by('date')
-            
+            # Calculate growth rate based on data source
             growth_rate_kg_per_day = 0.005  # Default conservative growth rate
             growth_calculation_method = "default"
             
-            if all_samplings_for_growth.count() >= 1:
-                # Method 1: Calculate from first sampling to latest sampling (includes stocking comparison)
-                first_sampling = all_samplings_for_growth.first()
-                latest_sampling = all_samplings_for_growth.last()
+            if data_source == "customer_stock":
+                # For CustomerStock data, try to use actual fish sampling data first
+                growth_rate_kg_per_day, growth_calculation_method = self._get_growth_rate_from_sampling(pond, fish_item_name)
                 
-                # Calculate total growth period from stocking to latest sampling
-                total_days = (latest_sampling.date - latest_stocking.date).days
+                # If no sampling data available, use realistic default
+                if growth_rate_kg_per_day <= 0:
+                    growth_rate_kg_per_day = 0.015  # 15g per day per fish (realistic for good growth)
+                    growth_calculation_method = "customer_stock_default"
                 
-                if total_days > 0:
-                    # Calculate per-fish growth rate from stocking to latest sampling
-                    initial_avg_weight = float(latest_stocking.total_weight_kg) / float(latest_stocking.pcs)
-                    current_avg_weight = float(latest_sampling.average_weight_kg)
-                    weight_gain_per_fish = current_avg_weight - initial_avg_weight
-                    
-                    # Growth rate per fish per day
-                    growth_rate_kg_per_day = weight_gain_per_fish / total_days
-                    growth_calculation_method = "stocking_to_latest"
-                    
-                    # Ensure realistic growth rate (not too high or too low)
-                    growth_rate_kg_per_day = max(growth_rate_kg_per_day, 0.001)  # Minimum 0.001 kg/day per fish
-                    growth_rate_kg_per_day = min(growth_rate_kg_per_day, 0.1)    # Maximum 0.1 kg/day per fish
-                
-                # Method 2: If we have multiple samplings, also calculate from sampling intervals
-                if all_samplings_for_growth.count() >= 2:
-                    sampling_growth_rates = []
-                    
-                    for i in range(1, len(all_samplings_for_growth)):
-                        current_sampling = all_samplings_for_growth[i]
-                        previous_sampling = all_samplings_for_growth[i-1]
-                        
-                        days_diff = (current_sampling.date - previous_sampling.date).days
-                        if days_diff > 0:
-                            # Calculate per-fish growth rate between samplings
-                            weight_gain_per_fish = float(current_sampling.average_weight_kg) - float(previous_sampling.average_weight_kg)
-                            if weight_gain_per_fish > 0:  # Only consider positive growth
-                                period_growth_rate = weight_gain_per_fish / days_diff
-                                sampling_growth_rates.append(period_growth_rate)
-                    
-                    # If we have sampling-based growth rates, use weighted average
-                    if sampling_growth_rates:
-                        # Weight recent growth rates more heavily
-                        if len(sampling_growth_rates) >= 2:
-                            # Use average of recent growth rates
-                            recent_growth_rate = sum(sampling_growth_rates[-2:]) / len(sampling_growth_rates[-2:])
-                            # Blend with overall growth rate (70% recent, 30% overall)
-                            growth_rate_kg_per_day = (recent_growth_rate * 0.7) + (growth_rate_kg_per_day * 0.3)
-                            growth_calculation_method = "blended_recent_and_overall"
-                        else:
-                            # Use the single sampling growth rate
-                            growth_rate_kg_per_day = sampling_growth_rates[0]
-                            growth_calculation_method = "single_sampling_period"
-                        
-                        # Ensure realistic bounds
-                        growth_rate_kg_per_day = max(growth_rate_kg_per_day, 0.001)
-                        growth_rate_kg_per_day = min(growth_rate_kg_per_day, 0.1)
+            elif data_source == "stocking_data":
+                # Use existing sophisticated growth calculation from stocking data
+                growth_rate_kg_per_day, growth_calculation_method = self._calculate_growth_rate_from_stocking(
+                    pond, fish_item_name
+                )
             
-            # Calculate feed conversion ratio from feeding logs and biomass data
+            # Calculate time to reach target biomass
+            if growth_rate_kg_per_day > 0:
+                days_to_target = biomass_gap_kg / growth_rate_kg_per_day
+                target_date = timezone.now().date() + timedelta(days=int(days_to_target))
+            else:
+                days_to_target = None
+                target_date = None
+            
+            # Calculate feed conversion ratio and feeding requirements
             feed_conversion_ratio = 1.5  # Default FCR
             fcr_calculation_method = "default"
             feeding_analysis = {}
             
-            # Get all feeding data for this pond and species
-            all_feeding = Feed.objects.filter(pond=pond).order_by('date')
-            feeding_analysis['total_feeding_records'] = all_feeding.count()
+            # Calculate total feed required to reach target biomass
+            total_feed_required_kg = biomass_gap_kg * feed_conversion_ratio
             
-            if all_feeding.exists():
-                # Calculate FCR from stocking to latest sampling
-                feeding_from_stocking = all_feeding.filter(date__gte=latest_stocking.date)
-                total_feed_consumed = feeding_from_stocking.aggregate(total=Sum('amount_kg'))['total'] or 0
-                
-                # Total biomass gain from stocking to latest sampling
-                total_biomass_gain = cumulative_biomass_change
-                
-                if total_biomass_gain > 0 and total_feed_consumed > 0:
-                    feed_conversion_ratio = float(total_feed_consumed) / total_biomass_gain
-                    fcr_calculation_method = "stocking_to_latest"
-                    feeding_analysis['fcr_from_stocking'] = feed_conversion_ratio
-                    feeding_analysis['total_feed_consumed'] = float(total_feed_consumed)
-                    feeding_analysis['total_biomass_gain'] = total_biomass_gain
-                
-                # If we have multiple samplings, calculate FCR for each period
-                if all_samplings_for_growth.count() >= 2:
-                    period_fcrs = []
-                    
-                    for i in range(1, len(all_samplings_for_growth)):
-                        current_sampling = all_samplings_for_growth[i]
-                        previous_sampling = all_samplings_for_growth[i-1]
-                        
-                        # Get feeding data for this period
-                        period_feeding = all_feeding.filter(
-                            date__gt=previous_sampling.date,
-                            date__lte=current_sampling.date
-                        ).aggregate(total=Sum('amount_kg'))['total'] or 0
-                        
-                        # Get biomass gain for this period
-                        if current_sampling.biomass_difference_kg:
-                            period_biomass_gain = float(current_sampling.biomass_difference_kg)
-                            
-                            if period_biomass_gain > 0 and period_feeding > 0:
-                                period_fcr = float(period_feeding) / period_biomass_gain
-                                period_fcrs.append(period_fcr)
-                    
-                    # Use average of period FCRs if available
-                    if period_fcrs:
-                        avg_period_fcr = sum(period_fcrs) / len(period_fcrs)
-                        # Weight recent FCRs more heavily
-                        if len(period_fcrs) >= 2:
-                            recent_fcr = sum(period_fcrs[-2:]) / len(period_fcrs[-2:])
-                            feed_conversion_ratio = (recent_fcr * 0.7) + (avg_period_fcr * 0.3)
-                            fcr_calculation_method = "weighted_recent_periods"
-                        else:
-                            feed_conversion_ratio = avg_period_fcr
-                            fcr_calculation_method = "single_period"
-                        
-                        feeding_analysis['period_fcrs'] = period_fcrs
-                        feeding_analysis['avg_period_fcr'] = avg_period_fcr
-                
-                # Get recent feeding patterns (last 30 days)
-                from datetime import timedelta
-                recent_cutoff = latest_sampling.date - timedelta(days=30)
-                recent_feeding = all_feeding.filter(date__gte=recent_cutoff)
-                feeding_analysis['recent_feeding_records'] = recent_feeding.count()
-                recent_total_feed = recent_feeding.aggregate(total=Sum('amount_kg'))['total'] or 0
-                feeding_analysis['recent_total_feed'] = float(recent_total_feed)
-                
-                # Calculate daily feeding rate
-                if recent_feeding.exists():
-                    days_span = (latest_sampling.date - recent_cutoff).days
-                    if days_span > 0:
-                        daily_feeding_rate = float(recent_total_feed) / days_span
-                        feeding_analysis['daily_feeding_rate'] = daily_feeding_rate
-                
-                # Ensure realistic FCR bounds
-                feed_conversion_ratio = max(feed_conversion_ratio, 0.8)  # Minimum FCR
-                feed_conversion_ratio = min(feed_conversion_ratio, 3.0)  # Maximum FCR
-            
-            # Calculate estimated days to reach target
-            # Convert per-fish growth rate to total biomass growth rate
-            current_fish_count = latest_stocking.pcs  # Use initial stocking count as current count
-            total_biomass_growth_rate = growth_rate_kg_per_day * current_fish_count
-            estimated_days = int(biomass_gap_kg / total_biomass_growth_rate) if total_biomass_growth_rate > 0 else 365
-            
-            # Calculate feed requirements
-            estimated_feed_kg = biomass_gap_kg * feed_conversion_ratio
-            daily_feed_kg = estimated_feed_kg / estimated_days if estimated_days > 0 else 0
-            
-            # Calculate target date
-            from datetime import datetime, timedelta
-            current_date_obj = datetime.strptime(current_date, '%Y-%m-%d').date()
-            target_date = current_date_obj + timedelta(days=estimated_days)
-            
-            # Generate recommendations
-            recommendations = []
-            warnings = []
-            
-            # Growth rate recommendations
-            if growth_rate_kg_per_day < 0.003:
-                recommendations.append("Consider increasing feeding frequency or improving feed quality to boost growth rate")
-                warnings.append("Current growth rate is below optimal levels")
-            elif growth_rate_kg_per_day > 0.01:
-                recommendations.append("Excellent growth rate! Maintain current feeding practices")
-            
-            # Feed conversion ratio recommendations
-            if feed_conversion_ratio > 2.0:
-                recommendations.append("Feed conversion ratio is high. Consider optimizing feeding practices or feed quality")
-                warnings.append("High feed conversion ratio may indicate inefficient feeding")
-            elif feed_conversion_ratio < 1.2:
-                recommendations.append("Excellent feed conversion ratio! Very efficient feeding")
-            
-            # Timeline recommendations
-            if estimated_days > 365:
-                recommendations.append("Target timeline is over 1 year. Consider setting more realistic short-term targets")
-                warnings.append("Long timeline may indicate unrealistic target or poor growth conditions")
-            elif estimated_days < 30:
-                recommendations.append("Very aggressive timeline. Monitor fish health closely during rapid growth")
-                warnings.append("Rapid growth may stress fish and affect quality")
-            
-            # Feeding recommendations
-            if daily_feed_kg > current_biomass_kg * 0.05:  # More than 5% of biomass per day
-                recommendations.append("High daily feed requirement. Consider splitting into multiple feedings per day")
-                warnings.append("High feeding rate may cause water quality issues")
-            
-            # Environmental recommendations
-            recommendations.append("Monitor water quality parameters (pH, temperature, dissolved oxygen) regularly")
-            recommendations.append("Consider seasonal adjustments to feeding rates")
-            
-            # Cost considerations
-            recent_feed_cost = Feed.objects.filter(pond=pond).order_by('-date').first()
-            if recent_feed_cost and recent_feed_cost.cost_per_packet:
-                estimated_feed_cost = (float(estimated_feed_kg) / 25) * float(recent_feed_cost.cost_per_packet)
-                recommendations.append(f"Estimated feed cost: ₹{estimated_feed_cost:.2f} (based on recent feed prices)")
-            
-            # Add current biomass information to recommendations
-            recommendations.append(f"Current total biomass: {current_biomass_kg:.1f}kg (Initial: {initial_biomass_kg:.1f}kg + Growth: {cumulative_biomass_change:.1f}kg)")
-            recommendations.append(f"Average fish weight: {float(latest_sampling.average_weight_kg):.3f} kg")
-            
-            # Add growth rate information with calculation method
-            if growth_calculation_method == "stocking_to_latest":
-                recommendations.append(f"Per-fish growth rate: {growth_rate_kg_per_day:.4f} kg/day per fish")
-                recommendations.append(f"Total biomass growth rate: {total_biomass_growth_rate:.1f} kg/day (for {current_fish_count} fish)")
-            elif growth_calculation_method == "blended_recent_and_overall":
-                recommendations.append(f"Per-fish growth rate (weighted): {growth_rate_kg_per_day:.4f} kg/day per fish")
-                recommendations.append(f"Total biomass growth rate: {total_biomass_growth_rate:.1f} kg/day (for {current_fish_count} fish)")
-            elif growth_calculation_method == "single_sampling_period":
-                recommendations.append(f"Per-fish growth rate: {growth_rate_kg_per_day:.4f} kg/day per fish")
-                recommendations.append(f"Total biomass growth rate: {total_biomass_growth_rate:.1f} kg/day (for {current_fish_count} fish)")
+            # Calculate daily feed requirements
+            if days_to_target and days_to_target > 0:
+                daily_feed_kg = total_feed_required_kg / days_to_target
             else:
-                recommendations.append(f"Using default growth rate: {growth_rate_kg_per_day:.4f} kg/day per fish (insufficient sampling data)")
-                recommendations.append(f"Total biomass growth rate: {total_biomass_growth_rate:.1f} kg/day (for {current_fish_count} fish)")
+                daily_feed_kg = total_feed_required_kg * 0.01  # Assume 1% of gap per day
             
-            # Add growth period information
-            if all_samplings_for_growth.count() >= 1:
-                total_growth_days = (latest_sampling.date - latest_stocking.date).days
-                recommendations.append(f"Growth period analyzed: {total_growth_days} days from stocking to latest sampling")
+            # Calculate feeding recommendations based on current biomass
+            feeding_rate_percent = 3.0  # Default 3% of biomass per day
+            if current_biomass_kg > 0:
+                feeding_rate_percent = (daily_feed_kg / current_biomass_kg) * 100
             
-            # Add feeding analysis information
-            if fcr_calculation_method == "stocking_to_latest":
-                recommendations.append(f"Feed Conversion Ratio: {feed_conversion_ratio:.2f} (calculated from {feeding_analysis.get('total_feeding_records', 0)} feeding records)")
-                recommendations.append(f"Total feed consumed: {feeding_analysis.get('total_feed_consumed', 0):.1f}kg for {feeding_analysis.get('total_biomass_gain', 0):.1f}kg biomass gain")
-            elif fcr_calculation_method == "weighted_recent_periods":
-                recommendations.append(f"Feed Conversion Ratio: {feed_conversion_ratio:.2f} (weighted average from {len(feeding_analysis.get('period_fcrs', []))} sampling periods)")
-                recommendations.append(f"Average period FCR: {feeding_analysis.get('avg_period_fcr', 0):.2f}")
-            elif fcr_calculation_method == "single_period":
-                recommendations.append(f"Feed Conversion Ratio: {feed_conversion_ratio:.2f} (from single sampling period)")
+            # Ensure realistic feeding rate (1-8% of biomass)
+            feeding_rate_percent = max(feeding_rate_percent, 1.0)
+            feeding_rate_percent = min(feeding_rate_percent, 8.0)
+            
+            # Calculate feeding frequency based on fish size (estimated)
+            estimated_avg_weight_kg = current_biomass_kg / 1000  # Assume 1000 fish
+            if estimated_avg_weight_kg < 0.01:  # Less than 10g
+                feeding_frequency = 3
+            elif estimated_avg_weight_kg > 0.5:  # More than 500g
+                feeding_frequency = 1
             else:
-                recommendations.append(f"Feed Conversion Ratio: {feed_conversion_ratio:.2f} (default - no feeding data available)")
+                feeding_frequency = 2
             
-            # Add feeding pattern information
-            if feeding_analysis.get('recent_feeding_records', 0) > 0:
-                recommendations.append(f"Recent feeding: {feeding_analysis.get('recent_feeding_records', 0)} records in last 30 days")
-                if feeding_analysis.get('daily_feeding_rate'):
-                    recommendations.append(f"Daily feeding rate: {feeding_analysis.get('daily_feeding_rate', 0):.1f}kg/day")
-            
-            # Add feeding efficiency recommendations
-            if feed_conversion_ratio < 1.2:
-                recommendations.append("Excellent feed conversion! Maintain current feeding practices")
-            elif feed_conversion_ratio < 1.8:
-                recommendations.append("Good feed conversion. Consider optimizing feeding times and amounts")
-            else:
-                recommendations.append("Feed conversion could be improved. Review feeding schedule and water quality")
-                warnings.append("High FCR may indicate overfeeding or poor water quality")
-            
-            return Response({
-                'current_biomass_kg': current_biomass_kg,
+            # Prepare comprehensive response
+            response_data = {
+                'fish_item': fish_item_name,
+                'data_source': data_source,
+                'current_biomass_kg': round(current_biomass_kg, 2),
                 'target_biomass_kg': target_biomass_kg,
-                'biomass_gap_kg': biomass_gap_kg,
-                'estimated_days': estimated_days,
-                'estimated_feed_kg': round(estimated_feed_kg, 2),
+                'biomass_gap_kg': round(biomass_gap_kg, 2),
+                'growth_rate_kg_per_day': round(growth_rate_kg_per_day, 6),
+                'growth_calculation_method': growth_calculation_method,
+                'days_to_target': int(days_to_target) if days_to_target else None,
+                'target_date': target_date.isoformat() if target_date else None,
+                'feed_conversion_ratio': feed_conversion_ratio,
+                'fcr_calculation_method': fcr_calculation_method,
+                'total_feed_required_kg': round(total_feed_required_kg, 2),
                 'daily_feed_kg': round(daily_feed_kg, 2),
-                'growth_rate_kg_per_day': round(growth_rate_kg_per_day, 4),
-                'feed_conversion_ratio': round(feed_conversion_ratio, 2),
-                'target_date': target_date.strftime('%Y-%m-%d'),
-                'recommendations': recommendations,
-                'warnings': warnings
-            }, status=status.HTTP_200_OK)
+                'feeding_rate_percent': round(feeding_rate_percent, 2),
+                'feeding_frequency': feeding_frequency,
+                'feeding_analysis': feeding_analysis,
+                'pond_name': pond.name,
+                'pond_area_decimal': float(pond.water_area_decimal),
+                'pond_area_sqm': float(pond.water_area_decimal) * 40.46,
+                'calculation_date': timezone.now().date().isoformat(),
+                'notes': f"Biomass calculation for {fish_item_name} using {data_source} data source. Growth rate calculated using {growth_calculation_method} method."
+            }
+            
+            return Response(response_data, status=status.HTTP_200_OK)
             
         except Exception as e:
             return Response({
-                'error': f'Failed to calculate target biomass: {str(e)}'
+                'error': f'Error calculating target biomass: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+class AssetCalculatorViewSet(viewsets.ViewSet):
+    """ViewSet for pond-wise asset calculations"""
+    permission_classes = [permissions.IsAuthenticated]
+    
+    @action(detail=False, methods=['post'])
+    def calculate(self, request):
+        """Calculate total assets for a specific pond"""
+        try:
+            pond_id = request.data.get('pond_id')
+            
+            if not pond_id:
+                return Response({
+                    'error': 'pond_id is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Get pond
+            pond = get_object_or_404(Pond, pond_id=pond_id, user=request.user)
+            
+            # Calculate fish biomass value from CustomerStock
+            fish_biomass_value = 0
+            fish_items = CustomerStock.objects.filter(
+                pond=pond, 
+                item__category='fish'
+            ).select_related('item')
+            
+            for customer_stock in fish_items:
+                serializer = CustomerStockSerializer(customer_stock)
+                fish_count = serializer.get_fish_count(customer_stock) or 0
+                if fish_count > 0 and customer_stock.item.selling_price:
+                    # Estimate biomass value based on fish count and selling price
+                    estimated_weight_per_fish = 0.5  # kg - this could be calculated from sampling data
+                    total_weight = fish_count * estimated_weight_per_fish
+                    fish_biomass_value += float(total_weight * customer_stock.item.selling_price)
+            
+            # Calculate feed inventory value
+            feed_inventory_value = 0
+            feed_items = CustomerStock.objects.filter(
+                pond=pond, 
+                item__category='feed'
+            ).select_related('item')
+            
+            for customer_stock in feed_items:
+                if customer_stock.current_stock and customer_stock.unit_cost:
+                    feed_inventory_value += float(customer_stock.current_stock * customer_stock.unit_cost)
+            
+            # Calculate medicine inventory value
+            medicine_inventory_value = 0
+            medicine_items = CustomerStock.objects.filter(
+                pond=pond, 
+                item__category='medicine'
+            ).select_related('item')
+            
+            for customer_stock in medicine_items:
+                if customer_stock.current_stock and customer_stock.unit_cost:
+                    medicine_inventory_value += float(customer_stock.current_stock * customer_stock.unit_cost)
+            
+            # Calculate equipment value (shared equipment - proportional to pond area)
+            equipment_value = 0
+            equipment_items = Item.objects.filter(category='equipment')
+            
+            total_pond_area = Pond.objects.filter(user=request.user).aggregate(
+                total_area=models.Sum('water_area_decimal')
+            )['total_area'] or 1
+            
+            for equipment in equipment_items:
+                if equipment.cost_price and equipment.current_stock:
+                    # Proportional allocation based on pond area
+                    pond_proportion = float(pond.water_area_decimal) / float(total_pond_area)
+                    equipment_value += float(equipment.current_stock * equipment.cost_price * pond_proportion)
+            
+            # Calculate total assets
+            total_assets = fish_biomass_value + feed_inventory_value + medicine_inventory_value + equipment_value
+            
+            # Generate recommendations and warnings
+            recommendations = []
+            warnings = []
+            
+            # Recommendations based on asset distribution
+            if fish_biomass_value > total_assets * 0.7:
+                recommendations.append("High fish biomass value indicates good production potential")
+            
+            if feed_inventory_value < total_assets * 0.1:
+                warnings.append("Low feed inventory - consider restocking to avoid production delays")
+            
+            if medicine_inventory_value < total_assets * 0.05:
+                warnings.append("Low medicine inventory - ensure adequate health management supplies")
+            
+            if equipment_value < total_assets * 0.1:
+                recommendations.append("Consider investing in additional equipment for better efficiency")
+            
+            # Asset per square meter analysis
+            asset_per_sqm = total_assets / float(pond.area_sqm) if pond.area_sqm > 0 else 0
+            
+            if asset_per_sqm < 10:
+                recommendations.append("Low asset density - consider increasing stocking or improving infrastructure")
+            elif asset_per_sqm > 50:
+                warnings.append("High asset density - monitor water quality and fish health closely")
+            
+            response_data = {
+                'pond_name': pond.name,
+                'pond_area_decimal': float(pond.water_area_decimal),
+                'pond_area_sqm': float(pond.area_sqm),
+                'fish_biomass_value': round(fish_biomass_value, 2),
+                'feed_inventory_value': round(feed_inventory_value, 2),
+                'medicine_inventory_value': round(medicine_inventory_value, 2),
+                'equipment_value': round(equipment_value, 2),
+                'total_assets': round(total_assets, 2),
+                'asset_per_sqm': round(asset_per_sqm, 2),
+                'asset_breakdown': {
+                    'fish_biomass': round(fish_biomass_value, 2),
+                    'feed_stock': round(feed_inventory_value, 2),
+                    'medicine_stock': round(medicine_inventory_value, 2),
+                    'equipment': round(equipment_value, 2),
+                },
+                'recommendations': recommendations,
+                'warnings': warnings,
+                'calculation_date': timezone.now().date().isoformat(),
+            }
+            
+            return Response(response_data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response({
+                'error': f'Error calculating assets: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 

@@ -28,6 +28,7 @@ router.register(r'feeding-advice', views.FeedingAdviceViewSet)
 router.register(r'survival-rates', views.SurvivalRateViewSet)
 router.register(r'medical-diagnostics', views.MedicalDiagnosticViewSet)
 router.register(r'target-biomass', views.TargetBiomassViewSet, basename='target-biomass')
+router.register(r'asset-calculator', views.AssetCalculatorViewSet, basename='asset-calculator')
 
 # Business Management APIs
 router.register(r'payment-terms', views.PaymentTermsViewSet)

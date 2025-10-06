@@ -1191,7 +1191,7 @@ class FeedingAdviceSerializer(serializers.ModelSerializer):
     class Meta:
         model = FeedingAdvice
         fields = '__all__'
-        read_only_fields = ['company', 'total_biomass_kg', 'recommended_feed_kg', 'feeding_rate_percent', 'daily_feed_cost', 'created_at', 'updated_at']
+        read_only_fields = ['user', 'company', 'total_biomass_kg', 'recommended_feed_kg', 'feeding_rate_percent', 'daily_feed_cost', 'created_at', 'updated_at']
     
     def get_medical_diagnostics_data(self, obj):
         """Get related medical diagnostics data"""

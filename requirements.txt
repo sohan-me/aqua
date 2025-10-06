@@ -2,10 +2,10 @@ asgiref==3.9.1
 attrs==25.3.0
 Django==5.2.6
 django-cors-headers==4.7.0
+django-mptt==0.18.0
 djangorestframework==3.16.1
-drf-spectacular==0.28.0
-django-mptt==0.16.0
 djangorestframework-recursive==0.1.2
+drf-spectacular==0.28.0
 inflection==0.5.1
 jsonschema==4.25.1
 jsonschema-specifications==2025.9.1
